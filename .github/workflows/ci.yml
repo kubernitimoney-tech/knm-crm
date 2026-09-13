@@ -1,5 +1,13 @@
 name: CI/CD
 
+# Promotion path (PRs, not auto-merge):
+#   development → testing → staging → production
+#
+# Deploys after CI passes on a push (merged PR):
+#   testing    → test VPS    (test / api-test / dev / staging / api-staging)
+#   staging    → test VPS    (same box, staging branch)
+#   production → production VPS (app / api / kubernitimoney.com)
+
 on:
   push:
     branches: [development, testing, staging, production, main, master]
@@ -9,6 +17,13 @@ on:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  GIT_REPO: https://github.com/kubernitimoney-tech/knm-crm.git
 
 jobs:
   backend-lint:
@@ -153,9 +168,34 @@ jobs:
           VITE_API_URL: http://localhost:8000/api/v1
 
   # ---------------------------------------------------------------------------
-  # CD — deploy the `testing` branch to the test VPS (test.kubernitimoney.com).
-  # Runs only on a push to `testing` (i.e. after a PR is merged), and only once
-  # every check above has passed.
+  # Promote: open (or reuse) a PR to the next branch. Branch protection still
+  # requires review — this job does not merge.
+  # ---------------------------------------------------------------------------
+  promote-development-to-testing:
+    name: Promote — development → testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
+    needs:
+      - backend-lint
+      - backend-test
+      - frontend-build
+      - marketing-site-build
+    steps:
+      - name: Open promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base testing \
+            --head development \
+            --title "Promote development → testing" \
+            --body "CI passed on \`development\`. Review and merge to deploy the test VPS." \
+            || echo "Promotion PR already open."
+
+  # ---------------------------------------------------------------------------
+  # Deploy testing → test VPS
+  # Secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT
   # ---------------------------------------------------------------------------
   deploy-test:
     name: Deploy — Test (test.kubernitimoney.com)
@@ -166,6 +206,9 @@ jobs:
       - backend-test
       - frontend-build
       - marketing-site-build
+    concurrency:
+      group: vps-testing-staging
+      cancel-in-progress: false
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -179,11 +222,129 @@ jobs:
           script: |
             set -e
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            cd ~/lms
+            export VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
+            export VITE_SITE_URL=https://dev.kubernitimoney.com
+            REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch testing "$REPO_URL" /knm-crm
+            fi
+            cd /knm-crm
+            git remote set-url origin "$REPO_URL"
             git fetch origin testing
             git checkout testing
             git reset --hard origin/testing
-            # Build once per app (backend image shared by django/celery/celery-beat).
+            docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
+
+      - name: Open promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base staging \
+            --head testing \
+            --title "Promote testing → staging" \
+            --body "Test VPS deploy succeeded. Review and merge to roll this build onto the staging hostnames." \
+            || echo "Promotion PR already open."
+
+  # ---------------------------------------------------------------------------
+  # Deploy staging → same test/staging VPS (201.18.192.131)
+  # Secrets: same VPS_* as testing
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: Deploy — Staging (staging.kubernitimoney.com)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    needs:
+      - backend-lint
+      - backend-test
+      - frontend-build
+      - marketing-site-build
+    concurrency:
+      group: vps-testing-staging
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 30m
+          script_stop: true
+          script: |
+            set -e
+            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+            export VITE_API_URL=https://api-staging.kubernitimoney.com/api/v1
+            export VITE_SITE_URL=https://dev.kubernitimoney.com
+            REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch staging "$REPO_URL" /knm-crm
+            fi
+            cd /knm-crm
+            git remote set-url origin "$REPO_URL"
+            git fetch origin staging
+            git checkout staging
+            git reset --hard origin/staging
+            docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
+
+      - name: Open promotion PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base production \
+            --head staging \
+            --title "Promote staging → production" \
+            --body "Staging deploy succeeded. Review and merge to deploy the production VPS." \
+            || echo "Promotion PR already open."
+
+  # ---------------------------------------------------------------------------
+  # Deploy production → production VPS
+  # Secrets: PROD_VPS_HOST, PROD_VPS_USER, PROD_VPS_SSH_KEY, PROD_VPS_PORT
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy — Production (app.kubernitimoney.com)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    needs:
+      - backend-lint
+      - backend-test
+      - frontend-build
+      - marketing-site-build
+    concurrency:
+      group: vps-production
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_VPS_HOST }}
+          username: ${{ secrets.PROD_VPS_USER }}
+          key: ${{ secrets.PROD_VPS_SSH_KEY }}
+          port: ${{ secrets.PROD_VPS_PORT }}
+          command_timeout: 30m
+          script_stop: true
+          script: |
+            set -e
+            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+            export VITE_API_URL=https://api.kubernitimoney.com/api/v1
+            export VITE_SITE_URL=https://kubernitimoney.com
+            REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch production "$REPO_URL" /knm-crm
+            fi
+            cd /knm-crm
+            git remote set-url origin "$REPO_URL"
+            git fetch origin production
+            git checkout production
+            git reset --hard origin/production
             docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f

@@ -219,7 +219,7 @@ Domain mapping (test environment):
 ### 5A.1 First-time setup on the server
 
 ```bash
-git clone git@github.com:<org>/<repo>.git lms
+git clone https://github.com/kubernitimoney-tech/knm-crm.git lms
 cd lms
 
 # Create the production env file (secrets injected automatically)
