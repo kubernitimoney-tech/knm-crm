@@ -225,10 +225,10 @@ jobs:
             export VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d ~/lms/.git ]; then
-              git clone --branch testing "$REPO_URL" ~/lms
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch testing "$REPO_URL" /knm-crm
             fi
-            cd ~/lms
+            cd /knm-crm
             git remote set-url origin "$REPO_URL"
             git fetch origin testing
             git checkout testing
@@ -281,10 +281,10 @@ jobs:
             export VITE_API_URL=https://api-staging.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d ~/lms/.git ]; then
-              git clone --branch staging "$REPO_URL" ~/lms
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch staging "$REPO_URL" /knm-crm
             fi
-            cd ~/lms
+            cd /knm-crm
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git checkout staging
@@ -337,10 +337,10 @@ jobs:
             export VITE_API_URL=https://api.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d ~/lms/.git ]; then
-              git clone --branch production "$REPO_URL" ~/lms
+            if [ ! -d /knm-crm/.git ]; then
+              git clone --branch production "$REPO_URL" /knm-crm
             fi
-            cd ~/lms
+            cd /knm-crm
             git remote set-url origin "$REPO_URL"
             git fetch origin production
             git checkout production
