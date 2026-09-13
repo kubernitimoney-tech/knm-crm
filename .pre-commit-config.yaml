@@ -1,0 +1,42 @@
+# See https://pre-commit.com for usage.
+# Install: pip install pre-commit && pre-commit install
+# Run all hooks: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.(png|jpe?g|gif|webp|ico|svg|pdf|woff2?|ttf|eot|zip|gz)$'
+      - id: end-of-file-fixer
+        exclude: '\.(png|jpe?g|gif|webp|ico|svg|pdf|woff2?|ttf|eot|zip|gz)$'
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
+    hooks:
+      - id: ruff
+        name: ruff check (backend)
+        files: ^backend/
+        args: [--config=backend/pyproject.toml]
+      - id: ruff-format
+        name: ruff format (backend)
+        files: ^backend/
+        args: [--config=backend/pyproject.toml]
+
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: eslint (frontend)
+        entry: npm run lint:eslint --prefix frontend
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+      - id: eslint-marketing-site
+        name: eslint (marketing-site)
+        entry: npm run lint:eslint --prefix marketing-site
+        language: system
+        files: ^marketing-site/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false

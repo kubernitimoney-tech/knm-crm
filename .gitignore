@@ -1,0 +1,74 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & secrets
+.env
+.env_backup
+.env.*
+!.env.example
+!**/.env.example
+!.env.production.example
+!**/.env.production.example
+!.env.testing.example
+!**/.env.testing.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.sqlite3
+celerybeat-schedule
+celerybeat.pid
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Django
+media/
+staticfiles/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Docker (local overrides)
+docker-compose.override.yml
+
+# Misc
+.cache/
+tmp/
+temp/
+
+
+github-actions-deploy
+github-actions-deploy.pub

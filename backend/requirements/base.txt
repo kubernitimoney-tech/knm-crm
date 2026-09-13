@@ -1,0 +1,26 @@
+# Django LTS (5.2) + DRF stack
+Django>=5.2,<5.3
+djangorestframework>=3.15,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+django-environ>=0.11,<1.0
+django-filter>=24.0,<25.0
+django-cors-headers>=4.3,<5.0
+whitenoise>=6.6,<7.0
+
+# Database & cache
+psycopg[binary]>=3.1,<4.0
+redis>=5.0,<6.0
+django-redis>=5.4,<6.0
+
+# Async tasks
+celery>=5.4,<6.0
+django-celery-beat>=2.6,<3.0
+
+# Auth & security
+PyJWT>=2.8,<3.0
+cryptography>=42,<46
+
+# Files & utilities
+Pillow>=10.0,<12.0
+python-dateutil>=2.9,<3.0
+openpyxl>=3.1,<4.0
