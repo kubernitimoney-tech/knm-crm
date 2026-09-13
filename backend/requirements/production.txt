@@ -1,0 +1,3 @@
+-r staging.txt
+
+sentry-sdk>=2.0,<3.0

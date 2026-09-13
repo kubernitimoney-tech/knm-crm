@@ -1,0 +1,25 @@
+# Production build for the marketing site. All VITE_* values are baked in at
+# build time, so they must be passed as build args.
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG VITE_API_URL
+ARG VITE_BRAND_NAME
+ARG VITE_SUPPORT_EMAIL
+ARG VITE_SUPPORT_PHONE
+ARG VITE_SITE_URL
+ARG VITE_WHATSAPP_NUMBER
+ENV VITE_API_URL=$VITE_API_URL \
+    VITE_BRAND_NAME=$VITE_BRAND_NAME \
+    VITE_SUPPORT_EMAIL=$VITE_SUPPORT_EMAIL \
+    VITE_SUPPORT_PHONE=$VITE_SUPPORT_PHONE \
+    VITE_SITE_URL=$VITE_SITE_URL \
+    VITE_WHATSAPP_NUMBER=$VITE_WHATSAPP_NUMBER
+RUN npm run build
+
+FROM caddy:2-alpine
+COPY --from=build /app/dist /srv
+RUN printf ':80 {\n\troot * /srv\n\tencode gzip\n\theader {\n\t\tStrict-Transport-Security "max-age=31536000; includeSubDomains; preload"\n\t\tX-Content-Type-Options "nosniff"\n\t\tX-Frame-Options "DENY"\n\t\tReferrer-Policy "strict-origin-when-cross-origin"\n\t\tPermissions-Policy "camera=(), microphone=(), geolocation=()"\n\t}\n\ttry_files {path} {path}/index.html /index.html\n\tfile_server\n}\n' > /etc/caddy/Caddyfile
+EXPOSE 80
