@@ -17,6 +17,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES=(int, 30),
     JWT_REFRESH_TOKEN_LIFETIME_DAYS=(int, 7),
+    CORS_ALLOW_CREDENTIALS=(bool, True),
 )
 
 # overwrite=True: a mounted .env wins over stale empty EMAIL_* vars baked into
@@ -194,8 +195,20 @@ SIMPLE_JWT = {
 RBAC_PERMISSION_CACHE_PREFIX = "user"
 RBAC_PERMISSION_CACHE_TTL = 3600  # 1 hour
 
-# CORS
+# CORS — browser origins allowed to call the API (CRM + marketing).
+# Set CORS_ALLOWED_ORIGINS per environment; do not use "*".
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=True)
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
 # Loan workflow default slug
 DEFAULT_LOAN_WORKFLOW_SLUG = "loan-lifecycle"
@@ -218,7 +231,8 @@ if EMAIL_HOST:
     )
     EMAIL_PORT = env.int("EMAIL_PORT", default=587)
     EMAIL_HOST_USER = _env_str("EMAIL_HOST_USER")
-    EMAIL_HOST_PASSWORD = _env_str("EMAIL_HOST_PASSWORD")
+    # Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are display-only.
+    EMAIL_HOST_PASSWORD = "".join(_env_str("EMAIL_HOST_PASSWORD").split())
     EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
     EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
     EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=30)
