@@ -1,0 +1,40 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps", "config"]
+extend-exclude = [
+    "staticfiles",
+    "media",
+    "**/migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "DJ",  # flake8-django
+]
+ignore = [
+    "E501",   # line length — handled pragmatically via line-length
+    "DJ008",  # __str__ on all models — adopt incrementally
+    "DJ012",  # Django class member ordering — adopt incrementally
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["S101", "F841", "B017"]
+"apps/**/tests/**/*.py" = ["S101", "F841", "B017"]
+"scripts/**/*.py" = ["E402"]
+"apps/leads/serializers/lead_detail_serializers.py" = ["E402"]
+"apps/accounts/tests/test_user_password_reset.py" = ["E402"]
+"config/settings/*.py" = ["F403", "F405"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

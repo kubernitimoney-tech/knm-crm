@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+media/
+staticfiles/
+*.log
+.idea/
+.vscode/
+*.sqlite3
+celerybeat-schedule
+celerybeat.pid
+
+# Pytest file uploads (MEDIA_ROOT in test settings)
+media-test/
