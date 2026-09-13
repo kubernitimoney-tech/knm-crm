@@ -5,11 +5,14 @@ Desktop.ini
 
 # Environment & secrets
 .env
+.env_backup
 .env.*
 !.env.example
 !**/.env.example
 !.env.production.example
 !**/.env.production.example
+!.env.testing.example
+!**/.env.testing.example
 
 # Python
 __pycache__/
