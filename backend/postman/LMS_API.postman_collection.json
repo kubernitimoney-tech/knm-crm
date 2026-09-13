@@ -1,0 +1,775 @@
+{
+  "info": {
+    "name": "LMS API",
+    "description": "Loan Management System API v1.\n\nEnvironments:\n- LMS Local → postman/LMS_Local.postman_environment.json (http://localhost:8000/api/v1)\n- LMS Test → postman/LMS_Test.postman_environment.json (https://api-test.kubernitimoney.com/api/v1)\n\nRun Auth → Login first (or Public Lead Intake without login). For Senior Credit Manager lead-create testing, set scm_email/scm_password in the Test environment and use Auth → Login with those credentials after granting lead.create in the permission matrix.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"password\": \"{{admin_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  if (res.data && res.data.tokens) {",
+                  "    pm.environment.set('access_token', res.data.tokens.access);",
+                  "    pm.environment.set('refresh_token', res.data.tokens.refresh);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (Senior Credit Manager)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{scm_email}}\",\n  \"password\": \"{{scm_password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login/",
+            "description": "Use after granting lead.create to senior-credit-manager in the permission matrix. Set scm_email and scm_password in the active environment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  if (res.data && res.data.tokens) {",
+                  "    pm.environment.set('access_token', res.data.tokens.access);",
+                  "    pm.environment.set('refresh_token', res.data.tokens.refresh);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/refresh/"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me/"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/logout/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": "{{base_url}}/health/"
+      }
+    },
+    {
+      "name": "Core",
+      "item": [
+        {
+          "name": "List Branches",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/core/branches/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/accounts/users/"
+          }
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/accounts/users/{{user_id}}/"
+          }
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/accounts/roles/"
+          }
+        },
+        {
+          "name": "Permission Matrix",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/accounts/permissions/matrix/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "List Customers",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/customers/"
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Amit\",\n  \"last_name\": \"Kumar\",\n  \"email\": \"amit@example.com\",\n  \"mobile_number\": \"9876501234\",\n  \"gender\": \"male\",\n  \"dob\": \"1990-05-15\",\n  \"pan_no\": \"ABCDE1234F\"\n}"
+            },
+            "url": "{{base_url}}/customers/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) pm.environment.set('customer_id', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Customer",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/customers/{{customer_id}}/"
+          }
+        },
+        {
+          "name": "Customer Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/customers/{{customer_id}}/profile/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public Lead Intake (no auth)",
+      "description": "Website, social media, and ads lead forms. No JWT — requests use No Auth (override collection Bearer).",
+      "item": [
+        {
+          "name": "List Intake Sources",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{base_url}}/leads/intake/sources/"
+          }
+        },
+        {
+          "name": "Submit Lead - Website",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Asha\",\n  \"last_name\": \"Verma\",\n  \"email\": \"asha@example.com\",\n  \"mobile_number\": \"9876501234\",\n  \"dob\": \"1992-03-10\",\n  \"gender\": \"Female\",\n  \"pan_no\": \"ABCPV1234A\",\n  \"aadhaar_no\": \"123456789012\",\n  \"required_amount\": \"25000.00\",\n  \"loan_purpose\": \"Personal\",\n  \"source_slug\": \"website\",\n  \"employment\": {\n    \"employer_name\": \"Infosys Ltd\",\n    \"designation\": \"Software Engineer\",\n    \"employment_type\": \"salaried\",\n    \"monthly_salary\": \"60000.00\"\n  },\n  \"address\": {\n    \"address_type\": \"own\",\n    \"line1\": \"45 Residency Road\",\n    \"line2\": \"Near Central Mall\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560025\",\n    \"country\": \"India\"\n  }\n}"
+            },
+            "url": "{{base_url}}/leads/intake/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) {",
+                  "    pm.environment.set('lead_id', data.id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Lead - Social Media",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Priya\",\n  \"last_name\": \"Nair\",\n  \"email\": \"priya@example.com\",\n  \"mobile_number\": \"9876505678\",\n  \"dob\": \"1994-07-22\",\n  \"gender\": \"Female\",\n  \"pan_no\": \"ABCPN5678B\",\n  \"aadhaar_no\": \"234567890123\",\n  \"required_amount\": \"30000.00\",\n  \"loan_purpose\": \"Medical emergency\",\n  \"source_slug\": \"social-media\",\n  \"employment\": {\n    \"employer_name\": \"Wipro Ltd\",\n    \"designation\": \"Business Analyst\",\n    \"employment_type\": \"salaried\",\n    \"monthly_salary\": \"65000.00\"\n  },\n  \"address\": {\n    \"address_type\": \"own\",\n    \"line1\": \"78 Marine Drive\",\n    \"line2\": \"Flat 3B\",\n    \"city\": \"Kochi\",\n    \"state\": \"Kerala\",\n    \"pincode\": \"682001\",\n    \"country\": \"India\"\n  }\n}"
+            },
+            "url": "{{base_url}}/leads/intake/"
+          }
+        },
+        {
+          "name": "Submit Lead - Ads",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Karan\",\n  \"last_name\": \"Mehta\",\n  \"email\": \"karan@example.com\",\n  \"mobile_number\": \"9876509012\",\n  \"dob\": \"1989-11-05\",\n  \"gender\": \"Male\",\n  \"pan_no\": \"ABCPM9012C\",\n  \"aadhaar_no\": \"345678901234\",\n  \"required_amount\": \"40000.00\",\n  \"loan_purpose\": \"Wedding\",\n  \"source_slug\": \"ads\",\n  \"employment\": {\n    \"employer_name\": \"Tata Consultancy Services\",\n    \"designation\": \"Senior Consultant\",\n    \"employment_type\": \"self_employed\",\n    \"monthly_salary\": \"85000.00\"\n  },\n  \"address\": {\n    \"address_type\": \"own\",\n    \"line1\": \"22 Linking Road\",\n    \"line2\": \"Bandra West\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pincode\": \"400050\",\n    \"country\": \"India\"\n  }\n}"
+            },
+            "url": "{{base_url}}/leads/intake/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "List Leads",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/leads/?page=1&page_size=20",
+              "host": ["{{base_url}}"],
+              "path": ["leads", ""],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "page_size", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "status", "value": "pending_contact", "disabled": true },
+                { "key": "category", "value": "fresh", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leads Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/leads/summary/"
+          }
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Ravi\",\n  \"last_name\": \"Sharma\",\n  \"email\": \"ravi@example.com\",\n  \"mobile_number\": \"9876512345\",\n  \"dob\": \"1990-05-15\",\n  \"gender\": \"male\",\n  \"pan_no\": \"FGHIJ5678K\",\n  \"required_amount\": \"50000.00\",\n  \"loan_purpose\": \"Personal\",\n  \"employment\": {\n    \"employment_type\": \"salaried\",\n    \"employer_name\": \"Acme Pvt Ltd\",\n    \"monthly_salary\": \"55000.00\"\n  },\n  \"address\": {\n    \"line1\": \"12 MG Road\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560001\"\n  }\n}"
+            },
+            "url": "{{base_url}}/leads/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) {",
+                  "    pm.environment.set('lead_id', data.id);",
+                  "    if (data.customer) pm.environment.set('customer_id', data.customer);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Lead",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/leads/{{lead_id}}/"
+          }
+        },
+        {
+          "name": "Lead Sources",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/leads/sources/"
+          }
+        },
+        {
+          "name": "Lead Pipeline",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/leads/pipeline/"
+          }
+        },
+        {
+          "name": "Customer Lookup",
+          "request": {
+            "description": "Pre-check before Create Lead. Requires any of: customer.view, lead.view, or lead.create.",
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/leads/customer-lookup/?mobile_number=9876512345",
+              "host": ["{{base_url}}"],
+              "path": ["leads", "customer-lookup", ""],
+              "query": [{ "key": "mobile_number", "value": "9876512345" }]
+            }
+          }
+        },
+        {
+          "name": "Log Call",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disposition\": \"interested\",\n  \"remarks\": \"Customer interested in payday loan\"\n}"
+            },
+            "url": "{{base_url}}/leads/{{lead_id}}/call-logs/"
+          }
+        },
+        {
+          "name": "Log Call - Loan Running",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"disposition\": \"loan_running\",\n  \"remarks\": \"Customer has an active loan\"\n}"
+            },
+            "url": "{{base_url}}/leads/{{lead_id}}/call-logs/"
+          }
+        },
+        {
+          "name": "Convert Lead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"requested_amount\": \"50000.00\",\n  \"tenure_value\": 1\n}"
+            },
+            "url": "{{base_url}}/leads/{{lead_id}}/convert/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.converted_application) {",
+                  "    pm.environment.set('application_id', data.converted_application);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/applications/products/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (Array.isArray(data) && data.length && data[0].id) {",
+                  "    pm.environment.set('product_id', data[0].id);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Applications",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/applications/applications/"
+          }
+        },
+        {
+          "name": "Create Application",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"product_id\": \"{{product_id}}\",\n  \"requested_amount\": \"50000.00\",\n  \"tenure_value\": 1,\n  \"purpose\": \"Personal expense\"\n}"
+            },
+            "url": "{{base_url}}/applications/applications/create/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) pm.environment.set('application_id', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Application",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/applications/applications/{{application_id}}/"
+          }
+        },
+        {
+          "name": "Submit Application",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/applications/applications/{{application_id}}/submit/"
+          }
+        },
+        {
+          "name": "Approve Application",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approved\",\n  \"approved_amount\": \"50000.00\",\n  \"approved_tenure_value\": 1,\n  \"interest_rate\": \"24.0000\",\n  \"processing_fee\": \"500.00\",\n  \"remarks\": \"Approved\"\n}"
+            },
+            "url": "{{base_url}}/applications/applications/{{application_id}}/decide/"
+          }
+        },
+        {
+          "name": "Reject Application",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"rejected\",\n  \"rejection_reason\": \"Insufficient documentation\",\n  \"remarks\": \"Rejected\"\n}"
+            },
+            "url": "{{base_url}}/applications/applications/{{application_id}}/decide/"
+          }
+        },
+        {
+          "name": "Create Loan from Application",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/applications/applications/{{application_id}}/create-loan/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if ([200, 201].includes(pm.response.code)) {",
+                  "  const data = pm.response.json().data;",
+                  "  if (data && data.id) pm.environment.set('loan_id', data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Loans",
+      "item": [
+        {
+          "name": "List Loans",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/loans/"
+          }
+        },
+        {
+          "name": "Get Loan",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/loans/{{loan_id}}/"
+          }
+        },
+        {
+          "name": "Disburse Loan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"utr_reference\": \"UTR123456789\",\n  \"payment_mode\": \"neft\",\n  \"remarks\": \"Disbursed via NEFT\"\n}"
+            },
+            "url": "{{base_url}}/loans/{{loan_id}}/disburse/"
+          }
+        },
+        {
+          "name": "List Repayments",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/loans/{{loan_id}}/repayments/"
+          }
+        },
+        {
+          "name": "Record Repayment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"5000.00\",\n  \"payment_mode\": \"upi\",\n  \"utr\": \"UPI987654321\",\n  \"remarks\": \"Partial repayment\"\n}"
+            },
+            "url": "{{base_url}}/loans/{{loan_id}}/repayments/record/"
+          }
+        },
+        {
+          "name": "Loan Ledger",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/loans/{{loan_id}}/ledger/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List Application Documents",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/documents/applications/{{application_id}}/documents/"
+          }
+        },
+        {
+          "name": "Upload Document",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "document_type", "value": "pan", "type": "text" },
+                { "key": "file", "type": "file", "src": [] }
+              ]
+            },
+            "url": "{{base_url}}/documents/upload/{{application_id}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Workflow",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/workflow/"
+      }
+    },
+    {
+      "name": "Activities",
+      "item": [
+        {
+          "name": "Timeline - Application",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/activities/timeline/?model=loan_application&object_id={{application_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["activities", "timeline", ""],
+              "query": [
+                { "key": "model", "value": "loan_application" },
+                { "key": "object_id", "value": "{{application_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Timeline - Lead",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/activities/timeline/?model=lead&object_id={{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["activities", "timeline", ""],
+              "query": [
+                { "key": "model", "value": "lead" },
+                { "key": "object_id", "value": "{{lead_id}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/"
+          }
+        },
+        {
+          "name": "Tables",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/tables/"
+          }
+        },
+        {
+          "name": "List Branch Targets",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/branch-targets/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Filter Options",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/reports/filters/"
+          }
+        },
+        {
+          "name": "Portfolio Export",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{base_url}}/reports/portfolio/"
+          }
+        },
+        {
+          "name": "Disbursed Report",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/reports/disbursed/"
+          }
+        },
+        {
+          "name": "Collection Report",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/reports/collection/"
+          }
+        },
+        {
+          "name": "CIBIL Report",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/reports/cibil/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/notifications/"
+      }
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/audit-logs/"
+          }
+        },
+        {
+          "name": "Get Audit Log",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/audit-logs/{{audit_log_id}}/"
+          }
+        }
+      ]
+    }
+  ]
+}

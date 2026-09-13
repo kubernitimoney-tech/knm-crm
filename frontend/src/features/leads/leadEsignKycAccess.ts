@@ -1,0 +1,35 @@
+/** Lead statuses where the Log Call action must be hidden on the lead timeline. */
+export const CALL_LOG_BLOCKED_LEAD_STATUSES = new Set([
+  'interested',
+  'documents_pending',
+  'documents_received',
+  'invalid_number',
+]);
+
+type LeadCallAccess = {
+  status: string;
+  close_reason?: string | null;
+};
+
+/** True when the lead was closed due to DND (legacy close reason). */
+export function isDndLead(lead: LeadCallAccess | null | undefined): boolean {
+  return lead?.status === 'closed' && lead.close_reason === 'dnd';
+}
+
+export function canLogCallOnLeadTimeline(
+  lead: LeadCallAccess | null | undefined,
+  hasPermission: boolean,
+): boolean {
+  if (!hasPermission || !lead) return false;
+  if (CALL_LOG_BLOCKED_LEAD_STATUSES.has(lead.status)) return false;
+  if (isDndLead(lead)) return false;
+  return true;
+}
+
+/** Application status when e-sign and video KYC actions appear on the lead timeline. */
+export const ESIGN_VIDEO_KYC_APPLICATION_STATUSES = new Set(['disbursal_sheet_sent']);
+
+export function canRequestEsignAndVideoKyc(applicationStatus: string | null | undefined): boolean {
+  if (!applicationStatus) return false;
+  return ESIGN_VIDEO_KYC_APPLICATION_STATUSES.has(applicationStatus);
+}
