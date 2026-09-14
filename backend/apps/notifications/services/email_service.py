@@ -26,9 +26,7 @@ class EmailService:
         context = {
             "brand_name": getattr(settings, "BRAND_NAME", "Kuberniti Money"),
             "support_email": getattr(settings, "SUPPORT_EMAIL", ""),
-            "website_url": getattr(
-                settings, "WEBSITE_URL", "https://www.kubernitimoney.com"
-            ),
+            "website_url": getattr(settings, "WEBSITE_URL", "https://www.kubernitimoney.com"),
             "logo_cid": "",
             "logo_data_url": "",
         }
@@ -301,7 +299,7 @@ class EmailService:
             "behavior, delays, defaults, or closure status, to one or more Credit Information "
             "Companies / Credit Bureaus in accordance with applicable law.",
             "",
-            'XI. This sanction letter is supplemental to, and shall form an integral part of, '
+            "XI. This sanction letter is supplemental to, and shall form an integral part of, "
             'the executed Borrower\'s Loan Agreement ("BLA"). In the event of any inconsistency, '
             "the terms of the BLA shall prevail.",
             "",

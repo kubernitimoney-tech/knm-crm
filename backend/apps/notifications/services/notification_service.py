@@ -215,9 +215,7 @@ class NotificationService:
             "due_date": cls._format_due_date(repayment_date),
             "penalty_rate": cls._format_rate_per_day(penalty_rate),
             "bounce_penalty": "1,000.00",
-            "repayment_mode": (
-                "UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"
-            ),
+            "repayment_mode": ("UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"),
             "payment_structure": 'Bullet Payment (as per "BLA")',
         }
 
