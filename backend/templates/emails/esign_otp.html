@@ -1,0 +1,14 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">{{ heading }}</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | title }},</p>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">{{ help_text }}</p>
+<p style="margin:0 0 8px;font-size:13px;color:#6b7280;letter-spacing:0.08em;text-transform:uppercase;">Verification code</p>
+<p style="margin:0 0 24px;font-size:32px;line-height:1.2;letter-spacing:0.28em;font-weight:700;color:#0f172a;">{{ otp_code }}</p>
+{% if lead_id %}
+<p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Lead: {{ lead_id }}</p>
+{% endif %}
+<p style="margin:0;font-size:15px;line-height:1.6;">
+  This code expires in 10 minutes. If you did not request it, you can ignore this email.
+</p>
+{% endblock %}

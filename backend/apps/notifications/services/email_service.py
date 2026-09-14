@@ -95,6 +95,33 @@ class EmailService:
         if template == "sanction_approved":
             return cls._plain_sanction_letter(ctx, brand_name=brand_name)
 
+        if template == "esign_otp":
+            otp_code = (ctx.get("otp_code") or "").strip()
+            heading = (ctx.get("heading") or "Your e-sign verification code").strip()
+            help_text = (ctx.get("help_text") or "Enter this code to continue signing.").strip()
+            lead_id = (ctx.get("lead_id") or "").strip()
+            lines = [
+                heading,
+                "",
+                f"Dear {customer_name.title() if customer_name else 'Customer'},",
+                "",
+                help_text,
+                "",
+                f"Verification code: {otp_code}",
+            ]
+            if lead_id:
+                lines.extend(["", f"Lead: {lead_id}"])
+            lines.extend(
+                [
+                    "",
+                    "This code expires in 10 minutes.",
+                    f"Thank you for choosing {brand_name}.",
+                    "",
+                    footer,
+                ]
+            )
+            return "\n".join(lines)
+
         if template == "esign_request":
             signing_url = (ctx.get("signing_url") or "").strip()
             lead_id = (ctx.get("lead_id") or "").strip()

@@ -12,5 +12,5 @@ RUN npm run build
 FROM caddy:2-alpine
 COPY --from=build /app/dist /srv
 # SPA fallback: unknown paths return index.html so client-side routing works.
-RUN printf ':80 {\n\troot * /srv\n\tencode gzip\n\ttry_files {path} /index.html\n\tfile_server\n}\n' > /etc/caddy/Caddyfile
+RUN printf ':80 {\n\troot * /srv\n\tencode gzip\n\theader Permissions-Policy "camera=*, microphone=*, geolocation=*, display-capture=*"\n\ttry_files {path} /index.html\n\tfile_server\n}\n' > /etc/caddy/Caddyfile
 EXPOSE 80

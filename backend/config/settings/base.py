@@ -237,6 +237,15 @@ BRAND_NAME = env("BRAND_NAME", default="Kuberniti Money")
 SUPPORT_EMAIL = env("SUPPORT_EMAIL", default="support@kubernitimoney.com")
 EMAIL_LOGO_PATH = env("EMAIL_LOGO_PATH", default=str(BASE_DIR / "static" / "emails" / "logo.png"))
 
+# Optional SMS for Video KYC invitation links (customer mobile).
+# Fast2SMS: SMS_PROVIDER=fast2sms and SMS_API_KEY=<authorization key>
+# MSG91: SMS_PROVIDER=msg91, SMS_API_KEY=<authkey>, SMS_SENDER_ID=KNMCRM
+# Leave SMS_PROVIDER empty or "console" to log SMS instead of sending.
+SMS_PROVIDER = _env_str("SMS_PROVIDER")
+SMS_API_KEY = _env_str("SMS_API_KEY")
+SMS_TEMPLATE_ID = _env_str("SMS_TEMPLATE_ID")
+SMS_SENDER_ID = _env_str("SMS_SENDER_ID") or "KNMCRM"
+
 # Document virus scan hook (plug in ClamAV etc.)
 DOCUMENT_VIRUS_SCAN_ENABLED = env.bool("DOCUMENT_VIRUS_SCAN_ENABLED", default=False)
 

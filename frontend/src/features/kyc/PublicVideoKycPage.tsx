@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import { CheckCircle2, ShieldCheck } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { CheckCircle2 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useTitle } from '@/hooks/useTitle';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+const DIGIO_FULLSCREEN_STYLE_ID = 'digio-vkyc-fullscreen';
 
 interface PublicVideoKycSession {
   status: string;
@@ -26,19 +26,26 @@ interface DigioInstance {
 interface DigioConstructor {
   new (options: {
     environment: string;
+    is_iframe?: boolean;
+    is_redirection_approach?: boolean;
+    redirect_url?: string;
     callback: (response: { error_code?: string; message?: string }) => void;
   }): DigioInstance;
 }
 
+function getDigioConstructor(): DigioConstructor | undefined {
+  return (window as unknown as { Digio?: DigioConstructor }).Digio;
+}
+
 function loadDigioSdk(src: string): Promise<DigioConstructor> {
-  const current = (window as unknown as { Digio?: DigioConstructor }).Digio;
+  const current = getDigioConstructor();
   if (current) return Promise.resolve(current);
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = src;
     script.async = true;
     script.onload = () => {
-      const loaded = (window as unknown as { Digio?: DigioConstructor }).Digio;
+      const loaded = getDigioConstructor();
       if (loaded) resolve(loaded);
       else reject(new Error('Digio verification failed to load.'));
     };
@@ -47,13 +54,71 @@ function loadDigioSdk(src: string): Promise<DigioConstructor> {
   });
 }
 
+function installDigioFullscreenStyles() {
+  if (document.getElementById(DIGIO_FULLSCREEN_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = DIGIO_FULLSCREEN_STYLE_ID;
+  style.textContent = `
+    [id^="parentdigio-ifm-"] {
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: #eef3fb !important;
+    }
+    [id^="wrapperdigio-ifm-"] {
+      inset: 0 !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      border-radius: 0 !important;
+    }
+    iframe[id^="digio-ifm-"] {
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function prepareDigioIframe() {
+  document.querySelectorAll('iframe[id^="digio-ifm-"]').forEach((node) => {
+    const iframe = node as HTMLIFrameElement;
+    iframe.setAttribute(
+      'allow',
+      'geolocation *; microphone *; camera *; display-capture *; autoplay *; clipboard-write *',
+    );
+    iframe.setAttribute('allowfullscreen', 'true');
+    iframe.removeAttribute('sandbox');
+  });
+}
+
+function primeCameraMicAndLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.watchPosition(
+      () => undefined,
+      () => undefined,
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+    );
+  }
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  void navigator.mediaDevices
+    .getUserMedia({ video: true, audio: true })
+    .then((stream) => stream.getTracks().forEach((track) => track.stop()))
+    .catch(() => undefined);
+}
+
 export function PublicVideoKycPage() {
   useTitle('Identity Verification');
   const { requestId } = useParams<{ requestId: string }>();
   const [session, setSession] = useState<PublicVideoKycSession | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isStarting, setIsStarting] = useState(false);
+  const launchGeneration = useRef(0);
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -74,31 +139,51 @@ export function PublicVideoKycPage() {
       .finally(() => setIsLoading(false));
   }, [load]);
 
-  const startVerification = async () => {
-    if (!session?.document_id || !session.identifier || !session.sdk_url) return;
-    setError('');
-    setIsStarting(true);
-    try {
-      const Digio = await loadDigioSdk(session.sdk_url);
-      const digio = new Digio({
-        environment: session.environment,
-        callback: (response) => {
-          setIsStarting(false);
-          if (response?.error_code) {
-            setError(response.message || 'Verification was not completed.');
-            return;
-          }
-          load().catch(() => undefined);
-        },
-      });
-      digio.init();
-      // Omitting the GWT token keeps Digio's first-factor email/mobile OTP step.
-      digio.submit(session.document_id, session.identifier);
-    } catch (err: unknown) {
-      setIsStarting(false);
-      setError(err instanceof Error ? err.message : 'Could not start verification.');
+  useEffect(() => {
+    if (!session || session.completed) return;
+    if (!session.document_id || !session.identifier || !session.sdk_url) {
+      setError('This KYC request is missing Digio details. Ask the team to send a new link.');
+      return;
     }
-  };
+
+    installDigioFullscreenStyles();
+    document.querySelectorAll('[id^="parentdigio-ifm-"]').forEach((node) => node.remove());
+    primeCameraMicAndLocation();
+
+    const generation = ++launchGeneration.current;
+    const iframeWatcher = window.setInterval(prepareDigioIframe, 300);
+
+    loadDigioSdk(session.sdk_url)
+      .then((Digio) => {
+        if (generation !== launchGeneration.current) return;
+        const digio = new Digio({
+          environment: session.environment,
+          is_iframe: true,
+          is_redirection_approach: false,
+          callback: (response) => {
+            window.clearInterval(iframeWatcher);
+            if (response?.error_code) {
+              setError(response.message || 'Verification was not completed.');
+              return;
+            }
+            load().catch(() => undefined);
+          },
+        });
+        digio.init();
+        prepareDigioIframe();
+        // No GWT token — Authenticate → Send code to Mobile stays as-is.
+        digio.submit(session.document_id, session.identifier);
+      })
+      .catch((err: unknown) => {
+        if (generation !== launchGeneration.current) return;
+        window.clearInterval(iframeWatcher);
+        setError(err instanceof Error ? err.message : 'Could not start verification.');
+      });
+
+    return () => {
+      window.clearInterval(iframeWatcher);
+    };
+  }, [session, load]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
@@ -108,8 +193,8 @@ export function PublicVideoKycPage() {
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-5">
           {isLoading ? (
-            <p className="text-sm text-slate-500 text-center">Loading verification…</p>
-          ) : error && !session ? (
+            <p className="text-sm text-slate-500 text-center">Opening verification…</p>
+          ) : error ? (
             <p className="text-sm text-red-600 text-center">{error}</p>
           ) : session?.completed ? (
             <div className="text-center space-y-2">
@@ -118,27 +203,7 @@ export function PublicVideoKycPage() {
               <p className="text-sm text-slate-500">Your KYC details were submitted successfully.</p>
             </div>
           ) : (
-            <>
-              <div className="text-center space-y-2">
-                <ShieldCheck className="mx-auto h-12 w-12 text-primary" />
-                <h1 className="text-xl font-bold text-slate-900">Identity Verification</h1>
-                <p className="text-sm text-slate-500">
-                  Complete Aadhaar, PAN, selfie and OCR verification
-                  {session?.customer_name ? ` for ${session.customer_name}` : ''}.
-                </p>
-              </div>
-              {error ? <p className="text-sm text-red-600 text-center">{error}</p> : null}
-              <Button
-                className="w-full"
-                disabled={!session?.document_id || isStarting}
-                onClick={() => void startVerification()}
-              >
-                {isStarting ? 'Opening Digio…' : 'Start Video KYC'}
-              </Button>
-              <p className="text-[11px] leading-relaxed text-slate-400 text-center">
-                You will need your Aadhaar and PAN details and permission to use the camera.
-              </p>
-            </>
+            <p className="text-sm text-slate-500 text-center">Opening Digio Authenticate…</p>
           )}
         </div>
       </div>

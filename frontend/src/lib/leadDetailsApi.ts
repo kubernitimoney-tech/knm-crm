@@ -114,6 +114,7 @@ export interface ApiLeadVideoKycRequest {
   recording_file_url: string | null;
   selfie_file_url: string | null;
   email_sent: boolean;
+  sms_sent: boolean;
   request_url?: string | null;
   provider_request_id?: string | null;
 }
@@ -485,11 +486,30 @@ export async function fetchLeadEmployments(leadId: string): Promise<ApiLeadEmplo
 
 export async function sendLeadVideoKycRequest(
   leadId: string,
-  verificationMethod: 'email' | 'mobile',
 ): Promise<ApiLeadVideoKycRequest> {
   return apiPost<ApiLeadVideoKycRequest>(`/leads/${leadId}/video-kyc-requests/`, {
-    verification_method: verificationMethod,
+    verification_method: 'mobile',
   });
+}
+
+export function videoKycDispatchMessage(
+  created: Pick<ApiLeadVideoKycRequest, 'email_sent' | 'sms_sent'>,
+  email?: string,
+  mobile?: string,
+): { text: string; ok: boolean } {
+  const parts: string[] = [];
+  if (created.email_sent) parts.push(email ? `email ${email}` : 'email');
+  if (created.sms_sent) parts.push(mobile ? `mobile ${mobile}` : 'mobile');
+  if (parts.length === 2) {
+    return { text: `Video KYC link sent to ${parts[0]} and ${parts[1]}.`, ok: true };
+  }
+  if (parts.length === 1) {
+    return { text: `Video KYC link sent to ${parts[0]}.`, ok: true };
+  }
+  return {
+    text: 'Video KYC was created, but the link could not be emailed or SMS’d. Use Open to share it.',
+    ok: false,
+  };
 }
 
 export async function fetchLeadVideoKycRequestDetail(
