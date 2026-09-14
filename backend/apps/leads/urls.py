@@ -8,7 +8,12 @@ from apps.leads.views.lead_intake_views import (
 )
 from apps.leads.views.lead_pipeline_views import AssignmentRosterAPIView, LeadPipelineAPIView
 from apps.leads.views.lead_views import CustomerLookupAPIView, LeadSourceListAPIView, LeadViewSet
-from apps.leads.views.public_esign_views import PublicEsignAPIView, PublicEsignDocumentAPIView
+from apps.leads.views.public_esign_views import (
+    PublicEsignAPIView,
+    PublicEsignDocumentAPIView,
+    PublicEsignOtpAPIView,
+    PublicEsignVerifyOtpAPIView,
+)
 from apps.leads.views.public_video_kyc_views import PublicVideoKycAPIView
 
 router = DefaultRouter()
@@ -21,6 +26,12 @@ urlpatterns = [
     ),
     path("intake/track/", PublicLeadTrackAPIView.as_view(), name="lead-public-track"),
     path("esign/<uuid:pk>/", PublicEsignAPIView.as_view(), name="public-esign"),
+    path("esign/<uuid:pk>/otp/", PublicEsignOtpAPIView.as_view(), name="public-esign-otp"),
+    path(
+        "esign/<uuid:pk>/verify-otp/",
+        PublicEsignVerifyOtpAPIView.as_view(),
+        name="public-esign-verify-otp",
+    ),
     path("video-kyc/<uuid:pk>/", PublicVideoKycAPIView.as_view(), name="public-video-kyc"),
     path(
         "esign/<uuid:pk>/document/",

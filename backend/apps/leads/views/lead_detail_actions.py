@@ -684,6 +684,11 @@ class LeadDetailActionsMixin:
                 message="Video KYC request not found.", status_code=status.HTTP_404_NOT_FOUND
             )
 
+        from apps.integrations.digio.webhooks import refresh_video_kyc_from_provider
+
+        refresh_video_kyc_from_provider(row)
+        row.refresh_from_db()
+
         return success_response(data=self._serialize(LeadVideoKycRequestDetailSerializer, row).data)
 
     @rbac_any_permission("lead.view", "loan.view", "collection.view", "disbursal.view")

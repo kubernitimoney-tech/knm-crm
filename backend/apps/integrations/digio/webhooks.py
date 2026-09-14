@@ -162,14 +162,14 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
     if row is None:
         logger.info("Digio KYC webhook for unknown request %s", request_id)
         return False
-    if row.status == VideoKycRequestStatus.COMPLETED:
-        return True
-    if _is_failure_event(event):
+    if _is_failure_event(event) and row.status != VideoKycRequestStatus.COMPLETED:
         row.status = VideoKycRequestStatus.EXPIRED
         details = dict(row.session_details or {})
         details["last_event"] = event
         row.session_details = details
         row.save(update_fields=["status", "session_details", "updated_at"])
+        return True
+    if row.status == VideoKycRequestStatus.COMPLETED and not _vkyc_needs_refresh(row):
         return True
 
     client = DigioClient.from_settings()
@@ -177,9 +177,51 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
         response = client.get_kyc_response(request_id)
     except DigioError:
         response = payload
-    response = _unwrap_kyc_response(response)
+    return _apply_kyc_response(row, response=response, client=client, event=event)
+
+
+def refresh_video_kyc_from_provider(row: LeadVideoKycRequest) -> LeadVideoKycRequest:
+    provider_id = (row.provider_request_id or "").strip()
+    if not provider_id or row.status == VideoKycRequestStatus.EXPIRED:
+        return row
+    if not _vkyc_needs_refresh(row) and row.status == VideoKycRequestStatus.COMPLETED:
+        return row
+    try:
+        client = DigioClient.from_settings()
+        response = client.get_kyc_response(provider_id)
+    except DigioError:
+        logger.exception("Could not refresh Video KYC %s from Digio", provider_id)
+        return row
+    _apply_kyc_response(row, response=response, client=client, event="")
+    row.refresh_from_db()
+    details = dict(row.session_details or {})
+    details["media_sync_attempted"] = True
+    row.session_details = details
+    row.save(update_fields=["session_details", "updated_at"])
+    return row
+
+
+def _vkyc_needs_refresh(row: LeadVideoKycRequest) -> bool:
+    if row.status == VideoKycRequestStatus.EXPIRED:
+        return False
+    details = row.session_details or {}
+    geo = normalize_geolocation(details.get("geolocation") or {})
+    has_geo = (
+        geo.get("latitude") is not None
+        or geo.get("longitude") is not None
+        or bool(geo.get("address"))
+    )
+    if row.status == VideoKycRequestStatus.COMPLETED and row.recording_file and has_geo:
+        return False
+    return not details.get("media_sync_attempted")
+
+
+def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
+    response = _unwrap_kyc_response(response if isinstance(response, dict) else {})
     kyc_status = str(response.get("status") or response.get("kyc_status") or event).lower()
-    should_complete = _is_success_event(event) or kyc_status in {
+    should_complete = row.status == VideoKycRequestStatus.COMPLETED or _is_success_event(
+        event
+    ) or kyc_status in {
         "approved",
         "completed",
         "success",
@@ -192,14 +234,26 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
         row.save(update_fields=["session_details", "updated_at"])
         return True
 
-    row.session_details = _map_kyc_session(response)
-    row.status = VideoKycRequestStatus.COMPLETED
-    row.completed_at = timezone.now()
-    video, selfie = _extract_kyc_media(response)
-    if video:
+    previous = dict(row.session_details or {})
+    mapped = _map_kyc_session(response)
+    mapped["email_sent"] = previous.get("email_sent")
+    mapped["customer_identifier"] = previous.get("customer_identifier")
+    mapped["verification_method"] = previous.get("verification_method")
+    mapped["workflow_name"] = mapped.get("workflow_name") or previous.get("workflow_name") or ""
+    row.session_details = {key: value for key, value in mapped.items() if value is not None}
+    request_id = row.provider_request_id or str(response.get("id") or "kyc")
+    video, selfie = _extract_kyc_media(response, client=client, request_id=request_id)
+    if video and not row.recording_file:
         row.recording_file.save(f"{request_id}.mp4", ContentFile(video), save=False)
-    if selfie:
+    if selfie and not row.selfie_file:
         row.selfie_file.save(f"{request_id}.jpg", ContentFile(selfie), save=False)
+    ids = dict((row.session_details.get("ids_found") or {}))
+    ids["video"] = bool(ids.get("video") or row.recording_file or video)
+    ids["selfie"] = bool(ids.get("selfie") or row.selfie_file or selfie)
+    row.session_details["ids_found"] = ids
+    row.status = VideoKycRequestStatus.COMPLETED
+    if not row.completed_at:
+        row.completed_at = timezone.now()
     row.save()
     return True
 
@@ -289,18 +343,58 @@ def _identity_details(actions: list[dict], token: str) -> dict[str, str]:
     return result
 
 
+def _geo_number(value):
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number
+
+
+def normalize_geolocation(raw) -> dict:
+    if not isinstance(raw, dict):
+        raw = {}
+    latitude = raw.get("latitude", raw.get("lat", raw.get("Latitude")))
+    longitude = raw.get(
+        "longitude",
+        raw.get("lng", raw.get("lon", raw.get("long", raw.get("Longitude")))),
+    )
+    address = (
+        raw.get("address")
+        or raw.get("location")
+        or raw.get("formatted_address")
+        or raw.get("geo_address")
+        or ""
+    )
+    if isinstance(address, dict):
+        address = address.get("address") or address.get("formatted_address") or ""
+    return {
+        "latitude": _geo_number(latitude),
+        "longitude": _geo_number(longitude),
+        "address": str(address).strip(),
+    }
+
+
 def _find_geolocation(response: dict) -> dict:
+    empty = {"latitude": None, "longitude": None, "address": ""}
     for mapping in _walk_dicts(response):
-        geolocation = mapping.get("geolocation")
-        if isinstance(geolocation, dict):
-            return geolocation
-        if any(key in mapping for key in ("latitude", "longitude")):
-            return {
-                "latitude": mapping.get("latitude"),
-                "longitude": mapping.get("longitude"),
-                "address": mapping.get("address") or mapping.get("location") or "",
-            }
-    return {}
+        for key in ("geolocation", "geo_location", "geo_tagging", "geotag", "geo_tag"):
+            nested = mapping.get(key)
+            if isinstance(nested, dict):
+                normalized = normalize_geolocation(nested)
+                if (
+                    normalized["latitude"] is not None
+                    or normalized["longitude"] is not None
+                    or normalized["address"]
+                ):
+                    return normalized
+        if any(key in mapping for key in ("latitude", "longitude", "lat", "lng", "lon")):
+            normalized = normalize_geolocation(mapping)
+            if normalized["latitude"] is not None or normalized["longitude"] is not None:
+                return normalized
+    return empty
 
 
 def _map_kyc_session(response: dict) -> dict:
@@ -342,18 +436,81 @@ def _decode_media(value) -> bytes:
         return b""
 
 
-def _extract_kyc_media(response: dict) -> tuple[bytes, bytes]:
+def _classify_action_media(action_type: str, key: str, media: bytes) -> str:
+    blob = f"{action_type} {key}".lower()
+    if any(token in blob for token in ("video", "vkyc", "two_way")):
+        return "video"
+    if any(token in blob for token in ("selfie", "image", "photo")):
+        return "selfie"
+    if media[:3] == b"\xff\xd8\xff" or media[:8] == b"\x89PNG\r\n\x1a\n":
+        return "selfie"
+    return "video"
+
+
+def _download_kyc_file(client, file_id: str, request_id: str) -> bytes:
+    if client is None or not file_id:
+        return b""
+    downloader = getattr(client, "download_kyc_media", None)
+    if not callable(downloader):
+        return b""
+    try:
+        content = downloader(file_id, request_id)
+    except TypeError:
+        try:
+            content = downloader(file_id=file_id, request_id=request_id)
+        except Exception:
+            logger.exception("Failed to download Digio KYC media %s", file_id)
+            return b""
+    except Exception:
+        logger.exception("Failed to download Digio KYC media %s", file_id)
+        return b""
+    return bytes(content) if isinstance(content, (bytes, bytearray)) else b""
+
+
+def _extract_kyc_media(response: dict, *, client=None, request_id: str = "") -> tuple[bytes, bytes]:
     video = _decode_media(response.get("video_file") or response.get("file_data"))
     selfie = _decode_media(response.get("selfie_file") or response.get("selfie"))
-    for action in response.get("actions") or []:
-        if not isinstance(action, dict):
-            continue
-        action_type = str(action.get("type") or "").lower()
-        media = _decode_media(action.get("file_base64"))
-        if not media:
-            continue
-        if action_type in {"video", "two_way_video"} and not video:
-            video = media
-        elif action_type in {"selfie", "image"} and not selfie:
-            selfie = media
+    request_id = request_id or str(response.get("id") or "").strip()
+
+    for mapping in _walk_dicts(response):
+        action_type = str(mapping.get("type") or mapping.get("action_type") or "").lower()
+        for key in ("file_base64", "file_data", "video_file", "selfie_file", "subfile_base64"):
+            media = _decode_media(mapping.get(key))
+            if not media or media.startswith(b"%PDF"):
+                continue
+            kind = _classify_action_media(action_type, key, media)
+            if kind == "video" and not video:
+                video = media
+            elif kind == "selfie" and not selfie:
+                selfie = media
+
+    if client is not None:
+        seen: set[str] = set()
+        for mapping in _walk_dicts(response):
+            action_type = str(mapping.get("type") or mapping.get("action_type") or "").lower()
+            candidates = [
+                mapping.get("file_id"),
+                mapping.get("sub_file_id"),
+                mapping.get("media_id"),
+                mapping.get("video_file_id"),
+                mapping.get("selfie_file_id"),
+            ]
+            extra = mapping.get("additional_file_ids")
+            if isinstance(extra, list):
+                candidates.extend(extra)
+            for candidate in candidates:
+                if not isinstance(candidate, str):
+                    continue
+                file_id = candidate.strip()
+                if not file_id or file_id in seen:
+                    continue
+                seen.add(file_id)
+                media = _download_kyc_file(client, file_id, request_id)
+                if not media:
+                    continue
+                kind = _classify_action_media(action_type, "file_id", media)
+                if kind == "video" and not video:
+                    video = media
+                elif kind == "selfie" and not selfie:
+                    selfie = media
     return video, selfie

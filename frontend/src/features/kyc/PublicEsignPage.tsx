@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { CheckCircle2, FileText } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { useTitle } from '@/hooks/useTitle';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/Logo';
@@ -14,7 +14,6 @@ interface PublicEsignSession {
   sign_type: 'aadhaar' | 'electronic';
   document_name: string;
   customer_name: string;
-  signing_url: string | null;
   document_id: string;
   identifier: string;
   access_token: string;
@@ -68,6 +67,7 @@ export function PublicEsignPage() {
   const [reviewed, setReviewed] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
 
   const load = useCallback(async () => {
     if (!esignId) return;
@@ -90,6 +90,29 @@ export function PublicEsignPage() {
   }, [load]);
 
   useEffect(() => {
+    if (!session?.document_url || session.signed) {
+      setPreviewUrl('');
+      return;
+    }
+    let objectUrl = '';
+    let cancelled = false;
+    axios
+      .get(session.document_url, { responseType: 'blob' })
+      .then(({ data }) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(data);
+        setPreviewUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewUrl(session.document_url);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [session?.document_url, session?.signed]);
+
+  useEffect(() => {
     if ((!searchParams.get('done') && (!session || session.signed)) || !esignId) return;
     const timer = window.setInterval(() => {
       load().catch(() => undefined);
@@ -97,7 +120,7 @@ export function PublicEsignPage() {
     return () => window.clearInterval(timer);
   }, [esignId, load, searchParams, session]);
 
-  const startSigning = async () => {
+  const continueSigning = async () => {
     if (!session?.document_id || !session.identifier || !session.sdk_url) return;
     setError('');
     setIsStarting(true);
@@ -127,13 +150,12 @@ export function PublicEsignPage() {
   };
 
   const downloadUrl = session?.signed_file_url || session?.document_url;
-  const canContinue = Boolean(session?.document_id && session.identifier);
-  const signMethod =
-    session?.sign_type === 'aadhaar' ? 'Aadhaar number and OTP' : 'email OTP';
+  const canContinue = Boolean(session?.document_id && session.identifier && session.sdk_url);
+  const isAadhaar = session?.sign_type !== 'electronic';
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-8">
+      <div className="w-full max-w-3xl">
         <div className="mb-6 flex justify-center">
           <Logo className="h-8" />
         </div>
@@ -148,7 +170,7 @@ export function PublicEsignPage() {
                 <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
                 <h1 className="text-xl font-bold text-slate-900">Signed Successfully</h1>
                 <p className="text-sm text-slate-500">
-                  Your document has been electronically signed.
+                  Your document has been {isAadhaar ? 'signed with Aadhaar OTP' : 'electronically signed'}.
                 </p>
               </div>
               {downloadUrl ? (
@@ -165,30 +187,42 @@ export function PublicEsignPage() {
               <div className="text-center space-y-1">
                 <h1 className="text-xl font-bold text-slate-900">Document Signing</h1>
                 <p className="text-xs text-slate-400">
-                  Review document → {signMethod} → signed
+                  Preview document → {isAadhaar ? 'Aadhaar OTP' : 'email OTP'} → signed
                 </p>
+                {session?.customer_name ? (
+                  <p className="text-sm font-medium text-slate-700">{session.customer_name}</p>
+                ) : null}
               </div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-center gap-3">
-                <FileText className="h-8 w-8 text-slate-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {session?.document_name || 'Agreement.pdf'}
-                  </p>
-                  {session?.customer_name ? (
-                    <p className="text-xs text-slate-500">{session.customer_name}</p>
-                  ) : null}
-                </div>
-              </div>
+
               {session?.document_url ? (
-                <a
-                  href={session.document_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block w-full text-center rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Review Document
-                </a>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-800">
+                      {session.document_name || 'Agreement.pdf'}
+                    </p>
+                    <a
+                      href={session.document_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                    >
+                      Open full preview
+                    </a>
+                  </div>
+                  {previewUrl ? (
+                    <iframe
+                      title={session.document_name || 'Agreement.pdf'}
+                      src={previewUrl}
+                      className="w-full h-[560px] rounded-xl border border-slate-200 bg-slate-50"
+                    />
+                  ) : (
+                    <div className="flex h-[560px] items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                      Loading document preview…
+                    </div>
+                  )}
+                </div>
               ) : null}
+
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input
                   type="checkbox"
@@ -198,18 +232,22 @@ export function PublicEsignPage() {
                 />
                 I have reviewed this document
               </label>
+
               {error ? <p className="text-sm text-red-600 text-center">{error}</p> : null}
+
               <Button
                 className="w-full"
                 disabled={!reviewed || !canContinue || isStarting}
                 onClick={() => {
-                  void startSigning();
+                  void continueSigning();
                 }}
               >
-                {isStarting ? 'Opening…' : 'Continue'}
+                {isStarting ? 'Opening…' : isAadhaar ? 'Continue to Aadhaar OTP' : 'Continue'}
               </Button>
               <p className="text-[11px] leading-relaxed text-slate-400 text-center">
-                Continue opens Digio for {signMethod}. No Digio account or password is required.
+                {isAadhaar
+                  ? 'Continue opens Digio for Aadhaar number and OTP. You will not be asked to draw a signature.'
+                  : 'This request was created as email OTP. Digio may show a signature pad. Set DIGIO_ESIGN_SIGN_TYPE=aadhaar (and add Aadhaar credits) to use Aadhaar OTP instead.'}
               </p>
             </>
           )}
