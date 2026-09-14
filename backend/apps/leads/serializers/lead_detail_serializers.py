@@ -320,6 +320,7 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
     requested_on = serializers.DateTimeField(source="created_at", read_only=True)
     signed_on = serializers.SerializerMethodField()
     signed_file_url = serializers.SerializerMethodField()
+    review_url = serializers.SerializerMethodField()
 
     class Meta:
         model = LeadEsignRequest
@@ -332,7 +333,9 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
             "requested_on",
             "signed_on",
             "signed_file_url",
+            "sign_type",
             "request_url",
+            "review_url",
             "provider_request_id",
         ]
         read_only_fields = fields
@@ -353,6 +356,11 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
             return obj.signed_file.url
         return request.build_absolute_uri(obj.signed_file.url)
 
+    def get_review_url(self, obj):
+        from apps.integrations.digio.gateway import customer_esign_review_url
+
+        return customer_esign_review_url(obj.id)
+
 
 class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
@@ -361,6 +369,8 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
     requested_on = serializers.DateTimeField(source="created_at", read_only=True)
     signed_on = serializers.SerializerMethodField()
     recording_file_url = serializers.SerializerMethodField()
+    selfie_file_url = serializers.SerializerMethodField()
+    email_sent = serializers.SerializerMethodField()
 
     class Meta:
         model = LeadVideoKycRequest
@@ -373,6 +383,8 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
             "requested_on",
             "signed_on",
             "recording_file_url",
+            "selfie_file_url",
+            "email_sent",
             "request_url",
             "provider_request_id",
         ]
@@ -393,6 +405,17 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
         if request is None:
             return obj.recording_file.url
         return request.build_absolute_uri(obj.recording_file.url)
+
+    def get_selfie_file_url(self, obj):
+        if not obj.selfie_file:
+            return None
+        request = self.context.get("request")
+        if request is None:
+            return obj.selfie_file.url
+        return request.build_absolute_uri(obj.selfie_file.url)
+
+    def get_email_sent(self, obj):
+        return bool((obj.session_details or {}).get("email_sent"))
 
 
 def _customer_has_document(customer: Customer, document_code: str) -> bool:
@@ -458,6 +481,7 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         ids = session.get("ids_found") or {}
         return {
             "video": bool(ids.get("video", bool(obj.recording_file))),
+            "selfie": bool(ids.get("selfie", bool(obj.selfie_file))),
             "aadhaar": bool(ids.get("aadhaar", _customer_has_document(customer, "aadhaar"))),
             "pan": bool(ids.get("pan", _customer_has_document(customer, "pan"))),
         }
@@ -483,6 +507,13 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
                 "address": geolocation.get("address") or "—",
             },
             "recording_file_url": recording_url,
+            "selfie_file_url": (
+                request.build_absolute_uri(obj.selfie_file.url)
+                if obj.selfie_file and request is not None
+                else obj.selfie_file.url
+                if obj.selfie_file
+                else None
+            ),
         }
 
     def _customer_address_line(self, customer: Customer) -> str:

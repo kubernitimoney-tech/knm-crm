@@ -97,7 +97,9 @@ export interface ApiLeadEsignRequest {
   requested_on: string;
   signed_on: string;
   signed_file_url: string | null;
+  sign_type: 'aadhaar' | 'electronic';
   request_url?: string | null;
+  review_url?: string | null;
   provider_request_id?: string | null;
 }
 
@@ -110,6 +112,8 @@ export interface ApiLeadVideoKycRequest {
   requested_on: string;
   signed_on: string;
   recording_file_url: string | null;
+  selfie_file_url: string | null;
+  email_sent: boolean;
   request_url?: string | null;
   provider_request_id?: string | null;
 }
@@ -128,6 +132,7 @@ export interface ApiLeadVideoKycDetail {
   approval_status: string;
   ids_found: {
     video: boolean;
+    selfie: boolean;
     aadhaar: boolean;
     pan: boolean;
   };
@@ -135,6 +140,7 @@ export interface ApiLeadVideoKycDetail {
   video_details: {
     geolocation: ApiLeadVideoKycGeolocation;
     recording_file_url: string | null;
+    selfie_file_url: string | null;
   };
   aadhaar_details: Record<string, string>;
   pan_details: Record<string, string>;
@@ -453,8 +459,13 @@ export async function fetchLeadEsignRequests(leadId: string): Promise<ApiLeadEsi
   );
 }
 
-export async function sendLeadEsignRequest(leadId: string): Promise<ApiLeadEsignRequest> {
-  return apiPost<ApiLeadEsignRequest>(`/leads/${leadId}/esign-requests/`, {});
+export async function sendLeadEsignRequest(
+  leadId: string,
+  signType: ApiLeadEsignRequest['sign_type'],
+): Promise<ApiLeadEsignRequest> {
+  return apiPost<ApiLeadEsignRequest>(`/leads/${leadId}/esign-requests/`, {
+    sign_type: signType,
+  });
 }
 
 export async function fetchLeadVideoKycRequests(
@@ -471,8 +482,13 @@ export async function fetchLeadEmployments(leadId: string): Promise<ApiLeadEmplo
   );
 }
 
-export async function sendLeadVideoKycRequest(leadId: string): Promise<ApiLeadVideoKycRequest> {
-  return apiPost<ApiLeadVideoKycRequest>(`/leads/${leadId}/video-kyc-requests/`, {});
+export async function sendLeadVideoKycRequest(
+  leadId: string,
+  verificationMethod: 'email' | 'mobile',
+): Promise<ApiLeadVideoKycRequest> {
+  return apiPost<ApiLeadVideoKycRequest>(`/leads/${leadId}/video-kyc-requests/`, {
+    verification_method: verificationMethod,
+  });
 }
 
 export async function fetchLeadVideoKycRequestDetail(

@@ -7,7 +7,7 @@ import mimetypes
 from pathlib import Path
 
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.template import engines
 from django.template.loader import render_to_string
 
@@ -115,6 +115,63 @@ class EmailService:
             )
             return "\n".join(lines)
 
+        if template == "esign_request":
+            signing_url = (ctx.get("signing_url") or "").strip()
+            lead_id = (ctx.get("lead_id") or "").strip()
+            sign_method = (ctx.get("sign_method") or "electronic signature OTP").strip()
+            lines = [
+                "Please e-sign your loan agreement.",
+                "",
+                f"Dear {customer_name.title() if customer_name else 'Customer'},",
+                "",
+                f"Please review Agreement.pdf, then continue with {sign_method}.",
+            ]
+            if lead_id:
+                lines.extend(["", f"Lead: {lead_id}"])
+            if signing_url:
+                lines.extend(
+                    [
+                        "",
+                        f"Click here to review the document, then sign with {sign_method}:",
+                        signing_url,
+                    ]
+                )
+            lines.extend(
+                [
+                    "",
+                    "If the button in another email asks you to log in to Digio Drive, ignore it.",
+                    f"Thank you for choosing {brand_name}.",
+                    "",
+                    footer,
+                ]
+            )
+            return "\n".join(lines)
+
+        if template == "video_kyc_request":
+            kyc_url = (ctx.get("kyc_url") or "").strip()
+            lead_id = (ctx.get("lead_id") or "").strip()
+            lines = [
+                "Complete your identity verification.",
+                "",
+                f"Dear {customer_name.title() if customer_name else 'Customer'},",
+                "",
+                "Please complete your Aadhaar, PAN, selfie and OCR verification.",
+            ]
+            if lead_id:
+                lines.extend(["", f"Lead: {lead_id}"])
+            if kyc_url:
+                lines.extend(["", "Open your secure Video KYC link:", kyc_url])
+            lines.extend(
+                [
+                    "",
+                    "Do not share this verification link with anyone.",
+                    f"Thank you for choosing {brand_name}.",
+                    "",
+                    footer,
+                ]
+            )
+            return "\n".join(lines)
+
         if template == "disbursal_sheet_sent":
             lines = [
                 "Disbursal In Progress",
@@ -196,11 +253,21 @@ class EmailService:
                 "and recreate the Django container."
             )
 
-        message = EmailMessage(
+        message = EmailMultiAlternatives(
             subject=subject,
             body=text_body,
             from_email=from_email,
             to=to_addresses,
             cc=cc_addresses or None,
         )
+        if template == "esign_request":
+            message.attach_alternative(
+                cls.render_html(
+                    template=template,
+                    context=context or {},
+                    subject=subject,
+                    for_send=True,
+                ),
+                "text/html",
+            )
         return message.send(fail_silently=False)

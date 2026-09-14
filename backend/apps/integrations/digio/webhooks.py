@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import logging
@@ -176,6 +177,7 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
         response = client.get_kyc_response(request_id)
     except DigioError:
         response = payload
+    response = _unwrap_kyc_response(response)
     kyc_status = str(response.get("status") or response.get("kyc_status") or event).lower()
     should_complete = _is_success_event(event) or kyc_status in {
         "approved",
@@ -193,55 +195,165 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
     row.session_details = _map_kyc_session(response)
     row.status = VideoKycRequestStatus.COMPLETED
     row.completed_at = timezone.now()
-    media = _extract_media_bytes(response)
-    if media:
-        row.recording_file.save(f"{request_id}.mp4", ContentFile(media), save=False)
+    video, selfie = _extract_kyc_media(response)
+    if video:
+        row.recording_file.save(f"{request_id}.mp4", ContentFile(video), save=False)
+    if selfie:
+        row.selfie_file.save(f"{request_id}.jpg", ContentFile(selfie), save=False)
     row.save()
     return True
 
 
-def _map_kyc_session(response: dict) -> dict:
-    actions = response.get("actions") if isinstance(response.get("actions"), list) else []
-    aadhaar = {}
-    pan = {}
-    geolocation = {}
-    has_video = False
+def _unwrap_kyc_response(response: dict) -> dict:
+    request_details = response.get("request_details")
+    if isinstance(request_details, dict) and any(
+        key in request_details for key in ("id", "status", "actions")
+    ):
+        merged = dict(response)
+        merged.update(request_details)
+        return merged
+    return response
+
+
+def _walk_dicts(value):
+    if isinstance(value, dict):
+        yield value
+        for nested in value.values():
+            yield from _walk_dicts(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _walk_dicts(nested)
+
+
+def _search_text(value) -> str:
+    parts: list[str] = []
+    for mapping in _walk_dicts(value):
+        for key, nested in mapping.items():
+            parts.append(str(key).lower())
+            if isinstance(nested, str) and len(nested) < 200:
+                parts.append(nested.lower())
+    return " ".join(parts)
+
+
+def _display_details(value, *, limit: int = 30) -> dict[str, str]:
+    ignored = {
+        "file_base64",
+        "subfile_base64",
+        "file_id",
+        "sub_file_id",
+        "additional_file_ids",
+    }
+    result: dict[str, str] = {}
+
+    def walk(current, prefix: str = "") -> None:
+        if len(result) >= limit:
+            return
+        if isinstance(current, dict):
+            for key, nested in current.items():
+                clean_key = str(key).strip().lower()
+                if clean_key in ignored:
+                    continue
+                next_prefix = f"{prefix}_{clean_key}".strip("_")
+                if isinstance(nested, (dict, list)):
+                    walk(nested, next_prefix)
+                elif nested not in (None, "") and len(str(nested)) < 500:
+                    result[next_prefix] = str(nested)
+        elif isinstance(current, list):
+            for nested in current:
+                walk(nested, prefix)
+
+    walk(value)
+    return result
+
+
+def _identity_details(actions: list[dict], token: str) -> dict[str, str]:
+    result: dict[str, str] = {}
     for action in actions:
-        if not isinstance(action, dict):
+        if token not in _search_text(action):
             continue
-        action_type = str(action.get("type") or action.get("action_type") or "").lower()
-        details = action.get("details") if isinstance(action.get("details"), dict) else action
-        if "aadhaar" in action_type or "aadhaar" in str(action.get("id_type") or "").lower():
-            aadhaar = details
-        if action_type.endswith("pan") or "pan" in action_type:
-            pan = details
-        if "video" in action_type or "vkyc" in action_type:
-            has_video = True
-        geo = details.get("geolocation") if isinstance(details, dict) else None
-        if isinstance(geo, dict):
-            geolocation = geo
-    if isinstance(response.get("geolocation"), dict):
-        geolocation = response["geolocation"]
+        details = _display_details(
+            {
+                key: action.get(key)
+                for key in (
+                    "action_data",
+                    "details",
+                    "ocr_result",
+                    "id_card_data_response",
+                    "validation_result",
+                    "sub_actions",
+                )
+                if action.get(key) not in (None, "", [], {})
+            }
+        )
+        result.update(details)
+    return result
+
+
+def _find_geolocation(response: dict) -> dict:
+    for mapping in _walk_dicts(response):
+        geolocation = mapping.get("geolocation")
+        if isinstance(geolocation, dict):
+            return geolocation
+        if any(key in mapping for key in ("latitude", "longitude")):
+            return {
+                "latitude": mapping.get("latitude"),
+                "longitude": mapping.get("longitude"),
+                "address": mapping.get("address") or mapping.get("location") or "",
+            }
+    return {}
+
+
+def _map_kyc_session(response: dict) -> dict:
+    actions = [action for action in (response.get("actions") or []) if isinstance(action, dict)]
+    action_types = {
+        str(action.get("type") or action.get("action_type") or "").strip().lower()
+        for action in actions
+    }
+    aadhaar = _identity_details(actions, "aadhaar")
+    pan = _identity_details(actions, "pan")
+    has_selfie = "selfie" in action_types or any(
+        "selfie" in _search_text(action) for action in actions
+    )
+    has_video = any("video" in action_type for action_type in action_types)
     return {
         "provider": "digio",
         "request_id": response.get("id") or "",
+        "workflow_name": response.get("workflow_name") or "",
         "status": response.get("status") or "",
         "ids_found": {
-            "video": has_video or bool(response.get("video_file") or response.get("video_url")),
-            "aadhaar": bool(aadhaar) or bool(response.get("aadhaar")),
-            "pan": bool(pan) or bool(response.get("pan")),
+            "video": has_video,
+            "selfie": has_selfie,
+            "aadhaar": bool(aadhaar) or "aadhaar" in _search_text(actions),
+            "pan": bool(pan) or "pan" in _search_text(actions),
         },
-        "geolocation": geolocation,
-        "aadhaar": aadhaar or response.get("aadhaar") or {},
-        "pan": pan or response.get("pan") or {},
+        "geolocation": _find_geolocation(response),
+        "aadhaar_details": aadhaar,
+        "pan_details": pan,
     }
 
 
-def _extract_media_bytes(response: dict) -> bytes:
-    encoded = response.get("video_file") or response.get("file_data")
-    if isinstance(encoded, str) and encoded:
-        try:
-            return base64.b64decode(encoded)
-        except ValueError:
-            return b""
-    return b""
+def _decode_media(value) -> bytes:
+    if not isinstance(value, str) or not value:
+        return b""
+    encoded = value.split(",", 1)[-1] if value.startswith("data:") else value
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        return b""
+
+
+def _extract_kyc_media(response: dict) -> tuple[bytes, bytes]:
+    video = _decode_media(response.get("video_file") or response.get("file_data"))
+    selfie = _decode_media(response.get("selfie_file") or response.get("selfie"))
+    for action in response.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        action_type = str(action.get("type") or "").lower()
+        media = _decode_media(action.get("file_base64"))
+        if not media:
+            continue
+        if action_type in {"video", "two_way_video"} and not video:
+            video = media
+        elif action_type in {"selfie", "image"} and not selfie:
+            selfie = media
+    return video, selfie

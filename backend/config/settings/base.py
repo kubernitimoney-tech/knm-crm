@@ -17,7 +17,6 @@ env = environ.Env(
     DEBUG=(bool, False),
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES=(int, 30),
     JWT_REFRESH_TOKEN_LIFETIME_DAYS=(int, 7),
-    CORS_ALLOW_CREDENTIALS=(bool, True),
 )
 
 # overwrite=True: a mounted .env wins over stale empty EMAIL_* vars baked into
@@ -195,20 +194,8 @@ SIMPLE_JWT = {
 RBAC_PERMISSION_CACHE_PREFIX = "user"
 RBAC_PERMISSION_CACHE_TTL = 3600  # 1 hour
 
-# CORS — browser origins allowed to call the API (CRM + marketing).
-# Set CORS_ALLOWED_ORIGINS per environment; do not use "*".
+# CORS
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
-CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=True)
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "accept-encoding",
-    "authorization",
-    "content-type",
-    "origin",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
 
 # Loan workflow default slug
 DEFAULT_LOAN_WORKFLOW_SLUG = "loan-lifecycle"
@@ -231,8 +218,7 @@ if EMAIL_HOST:
     )
     EMAIL_PORT = env.int("EMAIL_PORT", default=587)
     EMAIL_HOST_USER = _env_str("EMAIL_HOST_USER")
-    # Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are display-only.
-    EMAIL_HOST_PASSWORD = "".join(_env_str("EMAIL_HOST_PASSWORD").split())
+    EMAIL_HOST_PASSWORD = _env_str("EMAIL_HOST_PASSWORD")
     EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
     EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
     EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=30)
@@ -261,6 +247,7 @@ DIGIO_CLIENT_SECRET = env("DIGIO_CLIENT_SECRET", default="")
 DIGIO_WEBHOOK_SECRET = env("DIGIO_WEBHOOK_SECRET", default="")
 DIGIO_KYC_TEMPLATE_NAME = _env_str("DIGIO_KYC_TEMPLATE_NAME")
 DIGIO_ESIGN_SIGN_TYPE = env("DIGIO_ESIGN_SIGN_TYPE", default="aadhaar")
+FRONTEND_BASE_URL = _env_str("FRONTEND_BASE_URL") or "http://localhost:3000"
 DIGIO_WEBHOOK_ALLOW_UNSIGNED = env.bool("DIGIO_WEBHOOK_ALLOW_UNSIGNED", default=False)
 _DIGIO_PRODUCTION = DIGIO_ENV in {"production", "prod", "live"}
 DIGIO_BASE_URL = env(
