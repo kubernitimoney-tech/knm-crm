@@ -1,0 +1,29 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#111827;">Dear {{ customer_name }},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#111827;">
+  Loan Number: <strong>{{ loan_number }}</strong>.
+</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#111827;">
+  We are pleased to have disbursed a loan for <strong>{{ principal_amount }}</strong>
+  @ <strong>{{ interest_rate }}</strong> interest per day for a period of
+  <strong>{{ tenure_days }}</strong> days on the terms and conditions agreed by you.
+</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#111827;">
+  Your repayment amount is <strong>{{ repayment_amount }}</strong>
+  {% if repayment_amount_words %}( {{ repayment_amount_words }} ){% endif %} only.
+</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#111827;">
+  Please repay on due date to avoid penal interest.
+</p>
+<p style="margin:0;font-size:15px;line-height:1.6;color:{{ primary_color|default:'#2A2D4F' }};">
+  Team<br />
+  <strong>{{ brand_name }}</strong>
+</p>
+{% endblock %}
+
+{% block footer %}
+<p style="margin:0;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+  This is an automated message from {{ brand_name }}.
+</p>
+{% endblock %}

@@ -222,6 +222,16 @@ def _env_str(name, default=""):
     return value
 
 
+def _named_from_email(value: str, brand: str) -> str:
+    """Ensure From is ``Name <addr>`` so clients show the brand, not a bare address."""
+    from email.utils import formataddr, parseaddr
+
+    name, addr = parseaddr((value or "").strip())
+    if not addr:
+        return (value or "").strip()
+    return formataddr((name or brand, addr))
+
+
 # Email (SMTP). Set EMAIL_HOST to enable outbound mail; leave empty for console backend.
 EMAIL_HOST = _env_str("EMAIL_HOST")
 if EMAIL_HOST:
@@ -249,7 +259,17 @@ else:
 # Branding used in transactional emails.
 BRAND_NAME = env("BRAND_NAME", default="Kuberniti Money")
 SUPPORT_EMAIL = env("SUPPORT_EMAIL", default="support@kubernitimoney.com")
+# Matches CRM portal --color-primary-deep / --color-secondary-dark.
+BRAND_PRIMARY_COLOR = env("BRAND_PRIMARY_COLOR", default="#2A2D4F")
+BRAND_SECONDARY_COLOR = env("BRAND_SECONDARY_COLOR", default="#424665")
+BRAND_BG_COLOR = env("BRAND_BG_COLOR", default="#F4F6F9")
 EMAIL_LOGO_PATH = env("EMAIL_LOGO_PATH", default=str(BASE_DIR / "static" / "emails" / "logo.png"))
+SANCTION_MAILBOX_EMAIL = _env_str("SANCTION_MAILBOX_EMAIL") or "sanction@kubernitimoney.com"
+CONFIRMATION_MAILBOX_EMAIL = (
+    _env_str("CONFIRMATION_MAILBOX_EMAIL") or "confirmation@kubernitimoney.com"
+)
+DEFAULT_FROM_EMAIL = _named_from_email(DEFAULT_FROM_EMAIL, BRAND_NAME)
+SERVER_EMAIL = _named_from_email(SERVER_EMAIL, BRAND_NAME)
 
 # Document virus scan hook (plug in ClamAV etc.)
 DOCUMENT_VIRUS_SCAN_ENABLED = env.bool("DOCUMENT_VIRUS_SCAN_ENABLED", default=False)

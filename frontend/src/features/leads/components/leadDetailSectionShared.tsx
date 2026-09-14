@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table';
 import { RequiredMark } from '@/components/ui/field-label';
 import { cn } from '@/lib/utils';
-import { SURFACE_CARD_CLASS, ROW_ACTION_ICON_CLASS, ROW_VIEW_ICON_BUTTON_CLASS, ROW_VIEW_ICON_CLASS } from '@/lib/uiTokens';
+import { SURFACE_CARD_CLASS, ROW_ACTION_ICON_CLASS } from '@/lib/uiTokens';
 import { dataTableCellClass, dataTableHeadClass } from '@/components/ui/data-table';
 import { AppSelect } from '@/components/ui/app-select';
 import { entryStatusBadgeClass } from '@/lib/badgeStyles';
@@ -297,13 +297,13 @@ export function SectionMailButton({
       type="button"
       variant="ghost"
       size="icon"
-      className={ROW_VIEW_ICON_BUTTON_CLASS}
+      className="group/row-action h-8 w-8 text-white hover:bg-white/10 hover:text-white"
       onClick={onClick}
       disabled={disabled}
       title={title}
       aria-label={title}
     >
-      <Mail className={cn(ROW_ACTION_ICON_CLASS, ROW_VIEW_ICON_CLASS)} />
+      <Mail className={cn(ROW_ACTION_ICON_CLASS, 'text-white')} />
     </Button>
   );
 }

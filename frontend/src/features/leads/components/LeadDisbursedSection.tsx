@@ -133,14 +133,9 @@ const emptyCompletionForm = (): CompletionFormState => ({
   remarks: '',
 });
 
-function buildCompletionFormFromSheet(
-  mappedDisbursal: DisbursalEntry,
-  options?: { generateReference?: boolean },
-): CompletionFormState {
+function buildCompletionFormFromSheet(mappedDisbursal: DisbursalEntry): CompletionFormState {
   return {
-    disbursalReferenceNo:
-      mappedDisbursal.disbursalReferenceNo ||
-      (options?.generateReference ? generateDisbursalReferenceNo() : ''),
+    disbursalReferenceNo: '',
     disbursalType: mappedDisbursal.disbursalType || 'Manual',
     paymentType: mappedDisbursal.paymentType,
     remarks: mappedDisbursal.remarks,
@@ -370,7 +365,7 @@ export function LeadDisbursedSection({
           remarks: enrichedDisbursal.remarks,
         });
         if (stage === 'sheet_sent') {
-          setCompletionForm(buildCompletionFormFromSheet(enrichedDisbursal, { generateReference: true }));
+          setCompletionForm(buildCompletionFormFromSheet(enrichedDisbursal));
         } else {
           setCompletionForm(emptyCompletionForm());
         }
@@ -611,9 +606,7 @@ export function LeadDisbursedSection({
       setIsEditing(false);
       if (nextStage === 'sheet_sent' && response.disbursal) {
         setCompletionForm(
-          buildCompletionFormFromSheet(mapDisbursalFromApi(response.disbursal), {
-            generateReference: true,
-          }),
+          buildCompletionFormFromSheet(mapDisbursalFromApi(response.disbursal)),
         );
       }
       const statusDisplay =

@@ -1,6 +1,6 @@
 # See https://pre-commit.com for usage.
-# Install: pip install pre-commit && pre-commit install
-# Run all hooks: pre-commit run --all-files
+# Install: python -m pip install pre-commit && python -m pre_commit install
+# Run all hooks: python -m pre_commit run --all-files
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -14,29 +14,34 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=1000]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.13
+  # Local hooks `cd backend` so Ruff matches CI (`working-directory: backend`).
+  - repo: local
     hooks:
       - id: ruff
         name: ruff check (backend)
+        language: python
+        additional_dependencies: ["ruff==0.15.20"]
         files: ^backend/
-        args: [--config=backend/pyproject.toml]
+        types: [python]
+        pass_filenames: false
+        entry: python scripts/ruff_backend.py check --fix
       - id: ruff-format
         name: ruff format (backend)
+        language: python
+        additional_dependencies: ["ruff==0.15.20"]
         files: ^backend/
-        args: [--config=backend/pyproject.toml]
-
-  - repo: local
-    hooks:
+        types: [python]
+        pass_filenames: false
+        entry: python scripts/ruff_backend.py format
       - id: eslint-frontend
         name: eslint (frontend)
-        entry: npm run lint:eslint --prefix frontend
-        language: system
+        language: python
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false
+        entry: python scripts/npm_run.py frontend lint:eslint
       - id: eslint-marketing-site
         name: eslint (marketing-site)
-        entry: npm run lint:eslint --prefix marketing-site
-        language: system
+        language: python
         files: ^marketing-site/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false
+        entry: python scripts/npm_run.py marketing-site lint:eslint

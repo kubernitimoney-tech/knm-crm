@@ -24,12 +24,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+# Globs are `**/` so they match both `cd backend && ruff` (CI) and repo-root pre-commit.
 "**/tests/**/*.py" = ["S101", "F841", "B017"]
-"apps/**/tests/**/*.py" = ["S101", "F841", "B017"]
-"scripts/**/*.py" = ["E402"]
-"apps/leads/serializers/lead_detail_serializers.py" = ["E402"]
-"apps/accounts/tests/test_user_password_reset.py" = ["E402"]
-"config/settings/*.py" = ["F403", "F405"]
+"**/scripts/**/*.py" = ["E402"]
+"**/leads/serializers/lead_detail_serializers.py" = ["E402"]
+"**/accounts/tests/test_user_password_reset.py" = ["E402"]
+"**/config/settings/*.py" = ["F403", "F405"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "config"]
