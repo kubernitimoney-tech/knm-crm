@@ -1018,7 +1018,7 @@ On push/PR to `development`, `testing`, `staging`, `production`, `main`, or `mas
 - **Backend** — Ruff check + format check; pytest
 - **Frontend** — ESLint; production build
 - **Marketing site** — ESLint; production build
-- **`testing` branch only** — SSH deploy to test VPS after all checks pass
+- **PR into `testing`, or push to `testing`** — SSH deploy to the test VPS after all checks pass
 
 **Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
 
