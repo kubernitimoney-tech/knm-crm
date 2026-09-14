@@ -191,7 +191,9 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
         try:
             signed_bytes = client.download_document(row.provider_request_id)
         except DigioAPIError:
-            logger.exception("Failed to download Aadhaar-signed document %s", row.provider_request_id)
+            logger.exception(
+                "Failed to download Aadhaar-signed document %s", row.provider_request_id
+            )
     if not signed_bytes:
         raise DigioAPIError("Digio did not return the signed document.")
 
@@ -205,4 +207,3 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     row.save()
     cache.delete(f"esign-aadhaar-otp:{row.id}")
     return row
-
