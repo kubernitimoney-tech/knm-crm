@@ -245,6 +245,9 @@ class LoanService:
                 extra_update_fields=["disbursal_sheet_details"],
             )
 
+        from apps.notifications.services.notification_service import NotificationService
+
+        NotificationService.send_loan_disbursed_email(loan=loan, application=application)
         return disbursement
 
     @classmethod

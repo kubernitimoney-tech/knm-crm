@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
@@ -44,6 +45,55 @@ class NotificationService:
         return None
 
     @staticmethod
+    def _normalize_email(value) -> str | None:
+        email = (value or "").strip()
+        return email or None
+
+    @classmethod
+    def _mailbox_email(cls, setting_name: str, default: str) -> str | None:
+        return cls._normalize_email(getattr(settings, setting_name, "") or default)
+
+    @classmethod
+    def _official_email(cls, application, *, decision=None) -> str | None:
+        if decision is None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        details = dict(decision.sanction_details or {}) if decision else {}
+        return cls._normalize_email(details.get("official_email") or details.get("officialEmail"))
+
+    @classmethod
+    def _sanction_to_addresses(cls, application) -> list[str]:
+        addresses: list[str] = []
+        seen: set[str] = set()
+        mailbox = cls._mailbox_email("SANCTION_MAILBOX_EMAIL", "sanction@kubernitimoney.com")
+        for email in (cls._customer_email(application), mailbox):
+            if not email:
+                continue
+            key = email.lower()
+            if key not in seen:
+                seen.add(key)
+                addresses.append(email)
+        return addresses
+
+    @classmethod
+    def _sanction_cc_addresses(cls, application, *, decision=None) -> list[str]:
+        addresses: list[str] = []
+        seen: set[str] = set()
+        confirmation = cls._mailbox_email(
+            "CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"
+        )
+        official = cls._official_email(application, decision=decision)
+        for email in (confirmation, official):
+            if not email:
+                continue
+            key = email.lower()
+            if key not in seen:
+                seen.add(key)
+                addresses.append(email)
+        return addresses
+
+    @staticmethod
     def _assigned_officer_emails(application) -> list[str]:
         """Assigned RM/CM emails for customer-facing mail CC."""
         emails: list[str] = []
@@ -63,6 +113,28 @@ class NotificationService:
             return f"{float(value):,.2f}"
         except (TypeError, ValueError):
             return str(value)
+
+    @staticmethod
+    def _format_whole_amount(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            number = Decimal(str(value)).quantize(Decimal("1"))
+            return f"{int(number):,}"
+        except (InvalidOperation, TypeError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _format_daily_rate(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            number = Decimal(str(value))
+        except (TypeError, ValueError):
+            return str(value)
+        if number == number.to_integral_value():
+            return f"{int(number)}%"
+        return f"{number.normalize()}%"
 
     @staticmethod
     def _ordinal_day(day: int) -> str:
@@ -366,7 +438,7 @@ class NotificationService:
 
     @classmethod
     def send_sanction_approved_email(cls, application, *, decision=None) -> None:
-        """Email customer with assigned RM/CM in CC (manual trigger)."""
+        """Email the customer and internal sanction/confirmation mailboxes (manual trigger)."""
         if decision is None:
             decision = (
                 application.decisions.filter(decision="approved").order_by("-decided_at").first()
@@ -384,8 +456,8 @@ class NotificationService:
             ),
             template="sanction_approved",
             context=context,
-            recipients=[customer_email],
-            cc=cls._assigned_officer_emails(application),
+            recipients=cls._sanction_to_addresses(application),
+            cc=cls._sanction_cc_addresses(application, decision=decision),
             raise_on_error=True,
         )
 
@@ -465,21 +537,64 @@ class NotificationService:
         account_users = get_active_users_with_role_slug(ACCOUNT_FINANCE_SLUG)
         cls.notify_users(account_users, title=title, body=body, metadata=metadata)
 
-        details = application.disbursal_sheet_details or {}
-        customer_email = cls._customer_email(application)
+    @classmethod
+    def send_loan_disbursed_email(cls, *, loan, application=None) -> None:
+        """Email the customer when disbursement is completed."""
+        from apps.core.amount_words import indian_amount_in_words
+        from apps.loans.services.loan_calculation_service import LoanCalculationService
+
+        application = application or None
+        if application is None:
+            try:
+                application = loan.application
+            except ObjectDoesNotExist:
+                application = None
+        customer_email = cls._customer_email(application) if application else None
         if not customer_email:
+            customer = getattr(loan, "customer", None)
+            customer_email = cls._normalize_email(getattr(customer, "email", None))
+        if not customer_email:
+            logger.info(
+                "Skipping loan-disbursed email; no customer email for loan %s",
+                getattr(loan, "loan_account_number", loan.pk),
+            )
             return
+
+        customer_label = cls._customer_label(
+            application.customer if application else getattr(loan, "customer", None)
+        )
+        if application:
+            metrics = LoanCalculationService.compute_for_application(application, loan=loan)
+        else:
+            metrics = LoanCalculationService.compute_summary(
+                principal_amount=loan.principal_amount or Decimal("0"),
+                roi_percent=loan.interest_rate or Decimal("0"),
+                disbursed_at=loan.disbursed_at,
+                due_date=loan.due_date,
+            )
+        principal = loan.principal_amount
+        repayment_amount = metrics.repay_amount
         cls._send_email_on_commit(
-            subject=f"Disbursal In Progress — {application.application_number}",
-            template="disbursal_sheet_sent",
+            subject="Kuberniti Money - Loan Disbursed",
+            template="loan_disbursed",
             context={
                 "customer_name": customer_label,
-                "application_number": application.application_number,
-                "amount_to_be_disbursed": cls._format_amount(details.get("amount_to_be_disbursed")),
-                "bank_name": details.get("bank_name") or "",
+                "loan_number": loan.loan_account_number,
+                "principal_amount": cls._format_whole_amount(principal),
+                "interest_rate": cls._format_daily_rate(loan.interest_rate),
+                "tenure_days": str(metrics.tenure_days or ""),
+                "repayment_amount": cls._format_whole_amount(repayment_amount),
+                "repayment_amount_words": indian_amount_in_words(repayment_amount),
             },
             recipients=[customer_email],
-            cc=cls._assigned_officer_emails(application),
+            cc=cls._sanction_cc_addresses(application)
+            if application
+            else [
+                cls._mailbox_email(
+                    "CONFIRMATION_MAILBOX_EMAIL",
+                    "confirmation@kubernitimoney.com",
+                )
+            ],
         )
 
     @classmethod

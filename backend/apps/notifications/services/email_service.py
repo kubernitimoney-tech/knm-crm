@@ -27,6 +27,9 @@ class EmailService:
             "brand_name": getattr(settings, "BRAND_NAME", "Kuberniti Money"),
             "support_email": getattr(settings, "SUPPORT_EMAIL", ""),
             "website_url": getattr(settings, "WEBSITE_URL", "https://www.kubernitimoney.com"),
+            "primary_color": getattr(settings, "BRAND_PRIMARY_COLOR", "#2A2D4F"),
+            "secondary_color": getattr(settings, "BRAND_SECONDARY_COLOR", "#424665"),
+            "brand_bg_color": getattr(settings, "BRAND_BG_COLOR", "#F4F6F9"),
             "logo_cid": "",
             "logo_data_url": "",
         }
@@ -92,6 +95,36 @@ class EmailService:
 
         if template == "sanction_approved":
             return cls._plain_sanction_letter(ctx, brand_name=brand_name)
+
+        if template == "loan_disbursed":
+            loan_number = (ctx.get("loan_number") or "").strip()
+            principal_amount = (ctx.get("principal_amount") or "").strip()
+            interest_rate = (ctx.get("interest_rate") or "").strip()
+            tenure_days = (ctx.get("tenure_days") or "").strip()
+            repayment_amount = (ctx.get("repayment_amount") or "").strip()
+            repayment_words = (ctx.get("repayment_amount_words") or "").strip()
+            repay_line = f"Your repayment amount is {repayment_amount}"
+            if repayment_words:
+                repay_line += f" ( {repayment_words} )"
+            repay_line += " only."
+            return "\n".join(
+                [
+                    f"Dear {customer_name},",
+                    "",
+                    f"Loan Number: {loan_number}.",
+                    "",
+                    f"We are pleased to have disbursed a loan for {principal_amount} "
+                    f"@ {interest_rate} interest per day for a period of {tenure_days} days "
+                    "on the terms and conditions agreed by you.",
+                    "",
+                    repay_line,
+                    "",
+                    "Please repay on due date to avoid penal interest.",
+                    "",
+                    "Team",
+                    brand_name,
+                ]
+            )
 
         if template == "esign_request":
             signing_url = (ctx.get("signing_url") or "").strip()

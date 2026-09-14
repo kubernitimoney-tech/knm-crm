@@ -194,6 +194,159 @@ class NotificationEventTests(TestCase):
             NotificationService.EVENT_DISBURSAL_SHEET_SENT,
         )
 
+    def test_disbursal_sheet_sent_does_not_email_customer(self):
+        from unittest.mock import patch
+
+        submitter = UserFactory(email="cm.submit@example.com")
+        _assign_role(submitter, "credit-manager")
+        customer = customer_factory(email="borrower@example.com")
+        rm = UserFactory(email="rm3@example.com")
+        cm = UserFactory(email="cm3@example.com")
+        lead = _create_lead(lead_code="NTF-002B", customer=customer, rm=rm, cm=cm)
+        application = _create_application(
+            customer=customer,
+            lead=lead,
+            cm=cm,
+            status=ApplicationStatus.APPROVED,
+        )
+
+        with (
+            patch(
+                "apps.applications.services.application_service.apply_ifsc_bank_details",
+                side_effect=lambda details: details,
+            ),
+            patch.object(NotificationService, "_send_email_on_commit") as send_email,
+        ):
+            ApplicationService.submit_disbursal_sheet(
+                user=submitter,
+                application=application,
+                disbursal_details={
+                    "account_number": "123456789012",
+                    "ifsc_code": "HDFC0001234",
+                    "account_holder_name": "Test Customer",
+                    "cheque_no": "CHQ123456",
+                },
+            )
+
+        send_email.assert_not_called()
+
+    def test_loan_disbursed_email_to_customer_cc_confirmation(self):
+        customer = customer_factory(
+            email="rohit.dhingra200@gmail.com",
+            first_name="Rohit",
+            last_name="Dhingra",
+        )
+        rm = UserFactory(email="rm.disburse@example.com")
+        cm = UserFactory(email="cm.disburse@example.com")
+        lead = _create_lead(lead_code="NTF-DISB", customer=customer, rm=rm, cm=cm)
+        application = _create_application(
+            customer=customer,
+            lead=lead,
+            cm=cm,
+            status=ApplicationStatus.APPROVED,
+        )
+        application.requested_amount = Decimal("40000")
+        application.save(update_fields=["requested_amount"])
+        loan = Loan.objects.create(
+            loan_account_number="LDR573689062731",
+            application=application,
+            customer=customer,
+            product=application.product,
+            principal_amount=Decimal("40000"),
+            interest_amount=Decimal("13200"),
+            total_repayable=Decimal("53200"),
+            product_snapshot={"interest_rate": "1"},
+            due_date=timezone.localdate() + timedelta(days=33),
+            status=LoanStatus.ACTIVE,
+            disbursed_at=timezone.now(),
+        )
+
+        captured = {}
+
+        def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
+            captured.update(
+                {
+                    "subject": subject,
+                    "template": template,
+                    "context": context,
+                    "recipients": recipients,
+                    "cc": cc,
+                }
+            )
+
+        with patch.object(
+            NotificationService,
+            "_send_email_on_commit",
+            side_effect=_capture_email,
+        ):
+            NotificationService.send_loan_disbursed_email(loan=loan, application=application)
+
+        self.assertEqual(captured["subject"], "Kuberniti Money - Loan Disbursed")
+        self.assertEqual(captured["template"], "loan_disbursed")
+        self.assertEqual(captured["recipients"], ["rohit.dhingra200@gmail.com"])
+        self.assertEqual(captured["cc"], ["confirmation@kubernitimoney.com"])
+        self.assertNotIn("rm.disburse@example.com", captured["cc"])
+        self.assertNotIn("cm.disburse@example.com", captured["cc"])
+        self.assertEqual(captured["context"]["loan_number"], "LDR573689062731")
+        self.assertEqual(captured["context"]["principal_amount"], "40,000")
+        self.assertEqual(captured["context"]["interest_rate"], "1%")
+        self.assertEqual(captured["context"]["tenure_days"], "33")
+        self.assertEqual(captured["context"]["repayment_amount"], "53,200")
+        self.assertEqual(
+            captured["context"]["repayment_amount_words"],
+            "Fifty-Three Thousand Two Hundred",
+        )
+        self.assertIn("Rohit", captured["context"]["customer_name"])
+
+    def test_loan_disbursed_email_skipped_without_customer_email(self):
+        customer = customer_factory()
+        type(customer).objects.filter(pk=customer.pk).update(email="")
+        customer.refresh_from_db()
+        rm = UserFactory(email="rm.skip@example.com")
+        cm = UserFactory(email="cm.skip@example.com")
+        lead = _create_lead(lead_code="NTF-SKIP", customer=customer, rm=rm, cm=cm)
+        application = _create_application(customer=customer, lead=lead, cm=cm)
+        loan = Loan.objects.create(
+            loan_account_number="LN-SKIP-EMAIL",
+            application=application,
+            customer=customer,
+            product=application.product,
+            principal_amount=Decimal("10000"),
+            total_repayable=Decimal("10000"),
+            due_date=timezone.localdate() + timedelta(days=15),
+            status=LoanStatus.ACTIVE,
+        )
+
+        with patch.object(NotificationService, "_send_email_on_commit") as send_email:
+            NotificationService.send_loan_disbursed_email(loan=loan, application=application)
+
+        send_email.assert_not_called()
+
+    def test_complete_disbursement_sends_loan_disbursed_email(self):
+        from apps.loans.services.loan_service import LoanService
+
+        user = UserFactory()
+        customer = customer_factory(email="borrower@example.com")
+        rm = UserFactory(email="rm.complete@example.com")
+        cm = UserFactory(email="cm.complete@example.com")
+        lead = _create_lead(lead_code="NTF-DONE", customer=customer, rm=rm, cm=cm)
+        application = _create_application(
+            customer=customer,
+            lead=lead,
+            cm=cm,
+            status=ApplicationStatus.APPROVED,
+        )
+        loan = LoanService.create_from_application(user=user, application=application)
+        application.status = ApplicationStatus.DISBURSAL_SHEET_SENT
+        application.save(update_fields=["status"])
+
+        with patch.object(NotificationService, "send_loan_disbursed_email") as send_email:
+            LoanService.disburse_loan(user=user, loan=loan, utr_reference="UTR123456")
+
+        send_email.assert_called_once()
+        self.assertEqual(send_email.call_args.kwargs["loan"], loan)
+        self.assertEqual(send_email.call_args.kwargs["application"], application)
+
     @patch("django.utils.timezone.localdate")
     def test_repayment_reminder_notifies_collection_officer(self, mock_localdate):
         today = date(2026, 7, 10)

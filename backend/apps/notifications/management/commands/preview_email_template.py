@@ -48,6 +48,17 @@ class Command(BaseCommand):
                 "payment_structure": 'Bullet Payment (as per "BLA")',
             }
             subject = "Sanction Approval by Credit Team of Kuberniti Money — APP-2026-00042"
+        elif template == "loan_disbursed":
+            context = {
+                "customer_name": "Rohit Dhingra",
+                "loan_number": "LN00000042",
+                "principal_amount": "40,000",
+                "interest_rate": "1%",
+                "tenure_days": "33",
+                "repayment_amount": "53,200",
+                "repayment_amount_words": "Fifty-Three Thousand Two Hundred",
+            }
+            subject = "Kuberniti Money - Loan Disbursed"
         else:
             context = {
                 "customer_name": "Rahul Sharma",
