@@ -613,6 +613,7 @@ class LeadDetailActionsMixin:
                 lead=lead,
                 requested_by=request.user,
                 recipient_email=email or "",
+                sign_type=request.data.get("sign_type") or "",
             )
         except DigioValidationError as exc:
             return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
@@ -648,6 +649,7 @@ class LeadDetailActionsMixin:
                 lead=lead,
                 requested_by=request.user,
                 recipient_email=email or "",
+                verification_method=request.data.get("verification_method") or "mobile",
             )
         except DigioValidationError as exc:
             return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
@@ -681,6 +683,11 @@ class LeadDetailActionsMixin:
             return error_response(
                 message="Video KYC request not found.", status_code=status.HTTP_404_NOT_FOUND
             )
+
+        from apps.integrations.digio.webhooks import refresh_video_kyc_from_provider
+
+        refresh_video_kyc_from_provider(row)
+        row.refresh_from_db()
 
         return success_response(data=self._serialize(LeadVideoKycRequestDetailSerializer, row).data)
 

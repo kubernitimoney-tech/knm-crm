@@ -1,4 +1,8 @@
+import logging
+from uuid import uuid4
+
 from django.conf import settings
+from django.core.files.base import ContentFile
 
 from apps.integrations.digio.client import DigioClient
 from apps.integrations.digio.exceptions import (
@@ -6,25 +10,45 @@ from apps.integrations.digio.exceptions import (
     DigioConfigurationError,
     DigioValidationError,
 )
-from apps.integrations.digio.gateway import customer_identifier, gateway_from_payload
+from apps.integrations.digio.gateway import (
+    customer_esign_review_url,
+    customer_identifier,
+    gateway_from_payload,
+)
 from apps.integrations.digio.pdf import build_agreement_pdf
 from apps.leads.models import EsignRequestStatus, IntegrationProvider, LeadEsignRequest
 
-SIGN_TYPES = frozenset({"aadhaar", "electronic", "dsc"})
+logger = logging.getLogger(__name__)
+
+SIGN_TYPES = frozenset({"aadhaar", "electronic"})
 
 
-def create_lead_esign_request(*, lead, requested_by, recipient_email: str = "") -> LeadEsignRequest:
+def resolve_esign_sign_type(sign_type: str = "") -> str:
+    """Prefer DIGIO_ESIGN_SIGN_TYPE so Request e-Sign matches backend/.env."""
+    value = (settings.DIGIO_ESIGN_SIGN_TYPE or sign_type or "aadhaar").strip().lower()
+    if value not in SIGN_TYPES:
+        raise DigioConfigurationError(
+            f"DIGIO_ESIGN_SIGN_TYPE must be one of {sorted(SIGN_TYPES)}, got '{value}'."
+        )
+    return value
+
+
+def create_lead_esign_request(
+    *,
+    lead,
+    requested_by,
+    recipient_email: str = "",
+    sign_type: str = "",
+) -> LeadEsignRequest:
     customer = lead.customer
     identifier = customer_identifier(customer=customer, recipient_email=recipient_email)
     if not identifier:
         raise DigioValidationError("Customer email or mobile number is required to send e-sign.")
 
-    sign_type = (settings.DIGIO_ESIGN_SIGN_TYPE or "aadhaar").strip().lower()
-    if sign_type not in SIGN_TYPES:
-        raise DigioConfigurationError(
-            f"DIGIO_ESIGN_SIGN_TYPE must be one of {sorted(SIGN_TYPES)}, got '{sign_type}'."
-        )
+    sign_type = resolve_esign_sign_type(sign_type)
 
+    esign_id = uuid4()
+    review_url = customer_esign_review_url(esign_id)
     client = DigioClient.from_settings()
     pdf_bytes = build_agreement_pdf(lead=lead)
     payload = client.upload_pdf(
@@ -33,6 +57,7 @@ def create_lead_esign_request(*, lead, requested_by, recipient_email: str = "") 
         signer_name=customer.full_name or identifier,
         identifier=identifier,
         sign_type=sign_type,
+        redirect_url=f"{review_url}?done=1",
     )
     entity_id, access_token, request_url = gateway_from_payload(
         payload=payload if isinstance(payload, dict) else {},
@@ -41,11 +66,15 @@ def create_lead_esign_request(*, lead, requested_by, recipient_email: str = "") 
     if not entity_id:
         raise DigioAPIError("Digio did not return a document id for the e-sign request.")
 
-    return LeadEsignRequest.objects.create(
+    row = LeadEsignRequest.objects.create(
+        id=esign_id,
         lead=lead,
         requested_by=requested_by,
+        document_label="Agreement.pdf",
+        source_file=ContentFile(pdf_bytes, name=f"{lead.lead_id}-loan-agreement.pdf"),
         recipient_email=recipient_email or customer.email or "",
         status=EsignRequestStatus.SENT,
+        sign_type=sign_type,
         provider=IntegrationProvider.DIGIO,
         provider_request_id=entity_id,
         request_url=request_url,
@@ -53,3 +82,128 @@ def create_lead_esign_request(*, lead, requested_by, recipient_email: str = "") 
         created_by=requested_by,
         updated_by=requested_by,
     )
+    if (row.recipient_email or "").strip():
+        from apps.notifications.services.notification_service import NotificationService
+
+        try:
+            NotificationService.send_esign_request_email(
+                lead=lead,
+                request_url=review_url,
+                recipient_email=row.recipient_email,
+                sign_type=sign_type,
+            )
+        except Exception:
+            logger.exception("Failed to email e-sign guest link for lead %s", lead.lead_id)
+    return row
+
+
+def _esign_source_bytes(row: LeadEsignRequest) -> bytes:
+    if row.source_file:
+        row.source_file.open("rb")
+        try:
+            return row.source_file.read()
+        finally:
+            row.source_file.close()
+    return build_agreement_pdf(lead=row.lead)
+
+
+def _aadhaar_or_vid(value: str) -> str:
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if len(digits) == 12:
+        from apps.core.validators import validate_aadhaar
+
+        try:
+            return validate_aadhaar(digits)
+        except ValueError as exc:
+            raise DigioValidationError(str(exc)) from exc
+    if len(digits) == 16:
+        return digits
+    raise DigioValidationError("Enter a 12-digit Aadhaar number or 16-digit VID.")
+
+
+def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
+    from django.core.cache import cache
+
+    if row.status == EsignRequestStatus.SIGNED:
+        raise DigioValidationError("This document is already signed.")
+    if row.status == EsignRequestStatus.EXPIRED:
+        raise DigioValidationError("This signing request has expired.")
+
+    aadhaar = _aadhaar_or_vid(aadhaar_id)
+    customer = row.lead.customer
+    unique_request_id = str(row.id).replace("-", "")
+    client = DigioClient.from_settings()
+    response = client.generate_aadhaar_esign_otp(
+        aadhaar_id=aadhaar,
+        unique_request_id=unique_request_id,
+        name=customer.full_name or aadhaar,
+        document_id=row.provider_request_id or "",
+    )
+    cache.set(
+        f"esign-aadhaar-otp:{row.id}",
+        {"aadhaar_id": aadhaar, "unique_request_id": unique_request_id},
+        timeout=10 * 60,
+    )
+    return response if isinstance(response, dict) else {}
+
+
+def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignRequest:
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    if row.status == EsignRequestStatus.SIGNED and row.signed_file:
+        return row
+
+    otp_code = "".join(ch for ch in str(otp or "") if ch.isdigit())
+    if len(otp_code) < 4:
+        raise DigioValidationError("Enter the OTP sent to your Aadhaar-linked mobile number.")
+
+    cached = cache.get(f"esign-aadhaar-otp:{row.id}") or {}
+    aadhaar_id = cached.get("aadhaar_id")
+    unique_request_id = cached.get("unique_request_id") or str(row.id).replace("-", "")
+    if not aadhaar_id:
+        raise DigioValidationError("Request a new OTP, then enter it here.")
+
+    client = DigioClient.from_settings()
+    pdf_bytes = _esign_source_bytes(row)
+    payload = client.complete_aadhaar_esign(
+        unique_request_id=unique_request_id,
+        otp=otp_code,
+        file_name=row.document_label or "Agreement.pdf",
+        file_bytes=pdf_bytes,
+        document_id=row.provider_request_id or "",
+    )
+    signed_bytes = b""
+    if isinstance(payload, dict):
+        encoded = payload.get("file_data") or payload.get("document")
+        if encoded:
+            import base64
+            import binascii
+
+            try:
+                signed_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error):
+                signed_bytes = b""
+        document_id = str(payload.get("id") or payload.get("document_id") or "").strip()
+        if document_id:
+            row.provider_request_id = document_id
+    if not signed_bytes and row.provider_request_id:
+        try:
+            signed_bytes = client.download_document(row.provider_request_id)
+        except DigioAPIError:
+            logger.exception(
+                "Failed to download Aadhaar-signed document %s", row.provider_request_id
+            )
+    if not signed_bytes:
+        raise DigioAPIError("Digio did not return the signed document.")
+
+    row.signed_file.save(
+        f"{row.provider_request_id or row.id}.pdf",
+        ContentFile(signed_bytes),
+        save=False,
+    )
+    row.status = EsignRequestStatus.SIGNED
+    row.signed_at = timezone.now()
+    row.save()
+    cache.delete(f"esign-aadhaar-otp:{row.id}")
+    return row

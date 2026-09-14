@@ -6,6 +6,7 @@ import logging
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import urlparse
 
 from django.conf import settings
 
@@ -40,7 +41,7 @@ class DigioClient:
         base_url: str,
         client_id: str,
         client_secret: str,
-        timeout: int = 30,
+        timeout: int = 180,
     ):
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
@@ -55,8 +56,16 @@ class DigioClient:
             raise DigioConfigurationError(
                 "Digio is not configured. Set DIGIO_CLIENT_ID and DIGIO_CLIENT_SECRET."
             )
+        base_url = (settings.DIGIO_BASE_URL or "").strip()
+        host = (urlparse(base_url).hostname or "").lower()
+        if host in {"enterprise.digio.in", "drive.digio.in", "app.digio.in"}:
+            raise DigioConfigurationError(
+                f"DIGIO_BASE_URL points to the Digio website ({host}), not its REST API. "
+                "Use https://api.digio.in for production or "
+                "https://ext-api.digio.in for sandbox."
+            )
         return cls(
-            base_url=settings.DIGIO_BASE_URL,
+            base_url=base_url,
             client_id=client_id,
             client_secret=client_secret,
         )
@@ -102,6 +111,10 @@ class DigioClient:
                 _friendly_error(err_body, fallback=f"Digio request failed ({exc.code})."),
                 status_code=exc.code,
                 body=err_body,
+            ) from exc
+        except TimeoutError as exc:
+            raise DigioAPIError(
+                "Digio timed out while sending the agreement. Please try again."
             ) from exc
         except urllib.error.URLError as exc:
             raise DigioAPIError(f"Could not reach Digio: {exc.reason}") from exc
@@ -152,25 +165,30 @@ class DigioClient:
         identifier: str,
         sign_type: str,
         expire_in_days: int = 10,
+        redirect_url: str = "",
     ) -> dict:
+        payload = {
+            "file_name": file_name,
+            "file_data": base64.b64encode(file_bytes).decode("ascii"),
+            "expire_in_days": expire_in_days,
+            # Digio's own mail opens drive.digio.in and asks for a Digio login.
+            # We email the guest gateway link instead (no password).
+            "notify_signers": False,
+            "generate_access_token": True,
+            "signers": [
+                {
+                    "identifier": identifier,
+                    "name": signer_name,
+                    "sign_type": sign_type,
+                }
+            ],
+        }
+        if redirect_url:
+            payload["redirect_url"] = redirect_url
         return self.request(
             "POST",
             "/v2/client/document/uploadpdf",
-            {
-                "file_name": file_name,
-                "file_data": base64.b64encode(file_bytes).decode("ascii"),
-                "expire_in_days": expire_in_days,
-                "notify_signers": True,
-                "generate_access_token": True,
-                "display_on_page": "last",
-                "signers": [
-                    {
-                        "identifier": identifier,
-                        "name": signer_name,
-                        "sign_type": sign_type,
-                    }
-                ],
-            },
+            payload,
         )
 
     def get_document(self, document_id: str) -> dict:
@@ -202,6 +220,7 @@ class DigioClient:
         template_name: str,
         reference_id: str,
     ) -> dict:
+        transaction_id = reference_id.replace("-", "")
         return self.request(
             "POST",
             "/client/kyc/v2/request/with_template",
@@ -210,13 +229,82 @@ class DigioClient:
                 "customer_name": customer_name,
                 "template_name": template_name,
                 "notify_customer": True,
-                "generate_access_token": True,
+                # Do not generate a GWT bypass token: the customer must complete
+                # Digio's initial email/mobile OTP verification.
+                "generate_access_token": False,
                 "reference_id": reference_id,
+                "transaction_id": transaction_id,
+                "expire_in_days": 10,
             },
         )
 
     def get_kyc_response(self, request_id: str) -> dict:
-        return self.request("GET", f"/client/kyc/v2/{request_id}/response")
+        # DigiStudio's detailed-result API is POST, despite being named "Get Details".
+        # file_data=true asks Digio to inline recordings/selfies as base64.
+        return self.request(
+            "POST",
+            f"/client/kyc/v2/{request_id}/response?detail_response=true&file_data=true",
+        )
+
+    def download_kyc_media(self, file_id: str, request_id: str = "") -> bytes:
+        paths = [f"/client/kyc/v2/media/{file_id}"]
+        if request_id:
+            paths.insert(0, f"/client/kyc/v2/{request_id}/media/{file_id}")
+        for path in paths:
+            try:
+                content = self.request("GET", path, raw=True)
+            except DigioAPIError as exc:
+                if exc.status_code in {404, 405}:
+                    continue
+                raise
+            if isinstance(content, dict):
+                encoded = content.get("file_data") or content.get("file_base64")
+                if encoded:
+                    return base64.b64decode(encoded)
+                continue
+            if not content:
+                continue
+            stripped = content.lstrip()
+            if stripped.startswith(b"{") or stripped.startswith(b"<"):
+                continue
+            return content
+        return b""
+
+    def generate_aadhaar_esign_otp(
+        self,
+        *,
+        aadhaar_id: str,
+        unique_request_id: str,
+        name: str,
+        document_id: str = "",
+    ) -> dict:
+        payload = {
+            "unique_request_id": unique_request_id,
+            "aadhaar_id": aadhaar_id,
+            "name": name,
+        }
+        if document_id:
+            payload["document_id"] = document_id
+        return self.request("POST", "/v2/client/aadhaar/esign/otp", payload)
+
+    def complete_aadhaar_esign(
+        self,
+        *,
+        unique_request_id: str,
+        otp: str,
+        file_name: str,
+        file_bytes: bytes,
+        document_id: str = "",
+    ) -> dict:
+        payload = {
+            "unique_request_id": unique_request_id,
+            "otp": otp,
+            "file_name": file_name,
+            "file_data": base64.b64encode(file_bytes).decode("ascii"),
+        }
+        if document_id:
+            payload["document_id"] = document_id
+        return self.request("POST", "/v2/client/aadhaar/esign", payload)
 
 
 def extract_entity_id(payload: dict) -> str:
@@ -263,9 +351,8 @@ def _friendly_error(body: str, *, fallback: str) -> str:
     if "insufficient credit" in message.lower() or "INSUFFICIENT" in code:
         if "aadhaar" in message.lower():
             return (
-                "Digio has no Aadhaar eSign credits on this account. Buy Aadhaar credits in the "
-                "enterprise dashboard, or set DIGIO_ESIGN_SIGN_TYPE=electronic in backend/.env "
-                "and recreate Django to test with OTP e-sign."
+                "Digio has no Aadhaar eSign credits on this account. Buy Aadhaar eSign credits "
+                "in the Digio enterprise dashboard, then retry."
             )
         return f"{message} Add credits in the Digio enterprise dashboard, then retry."
     if "template" in message.lower() and "not found" in message.lower():
@@ -279,3 +366,22 @@ def _friendly_error(body: str, *, fallback: str) -> str:
             "docker compose up -d --force-recreate django. "
             "See https://documentation.digio.in/digikyc/agent_assisted_vkyc/integration_guide/"
         )
+    reference = parsed.get("details")
+    if str(code) == "1024" or "requested resource not found" in message.lower():
+        ref = f" Digio reference: {reference}." if isinstance(reference, str) and reference else ""
+        return (
+            "Digio does not support sending Aadhaar OTP from this page (code 1024). "
+            "Preview the agreement here, then continue to Digio's Aadhaar OTP screen. "
+            "That is not the draw-signature screen."
+            f"{ref}"
+        )
+    suffix = " ".join(
+        part
+        for part in (
+            f"Code: {code}." if code else "",
+            f"Digio reference: {reference}." if isinstance(reference, str) and reference else "",
+        )
+        if part
+    )
+    friendly = message or fallback
+    return f"{friendly} {suffix}".strip()

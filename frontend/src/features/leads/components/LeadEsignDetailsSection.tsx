@@ -37,7 +37,8 @@ export interface LeadEsignEntry {
   requestedOn: string;
   signedOn: string;
   signedFileUrl: string | null;
-  requestUrl: string | null;
+  reviewUrl: string | null;
+  signType: ApiLeadEsignRequest['sign_type'];
 }
 
 interface LeadEsignDetailsSectionProps {
@@ -56,7 +57,8 @@ function mapApiEntry(entry: ApiLeadEsignRequest): LeadEsignEntry {
     requestedOn: entry.requested_on,
     signedOn: entry.signed_on,
     signedFileUrl: entry.signed_file_url,
-    requestUrl: entry.request_url || null,
+    reviewUrl: entry.review_url || null,
+    signType: entry.sign_type,
   };
 }
 
@@ -102,8 +104,8 @@ export function LeadEsignDetailsSection({
       toast({
         title: 'E-sign request sent',
         description: customerEmail
-          ? `Digio signing request created for ${customerEmail}. Open the link from the row to complete sandbox signing.`
-          : 'Digio signing request created. Open the link from the row to complete sandbox signing.',
+          ? `Signing link emailed to ${customerEmail}. Customer previews Agreement.pdf, then signs with Aadhaar/VID OTP.`
+          : 'Signing link created. Customer previews Agreement.pdf, then signs with Aadhaar/VID OTP.',
         variant: 'success',
       });
     } catch (err) {
@@ -121,14 +123,15 @@ export function LeadEsignDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Send digital signing requests and track agreement completion.
+          Customer previews Agreement.pdf on our page, then enters Aadhaar or VID and OTP. No drawn
+          signature is required.
         </p>
         {canSendRequest ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
-            onClick={handleSendRequest}
+            onClick={() => void handleSendRequest()}
             disabled={isSending}
             title="Request E-Sign"
           >
@@ -142,6 +145,7 @@ export function LeadEsignDetailsSection({
           <TableRow className="hover:bg-transparent">
             <TableHead className={sectionHeadClassName()}>Status</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested By</TableHead>
+            <TableHead className={sectionHeadClassName()}>Method</TableHead>
             <TableHead className={sectionHeadClassName()}>Documents</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested On</TableHead>
             <TableHead className={sectionHeadClassName()}>Signed On</TableHead>
@@ -149,14 +153,14 @@ export function LeadEsignDetailsSection({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableLoadingRow colSpan={5} message="Loading e-sign requests…" compact />
+            <TableLoadingRow colSpan={6} message="Loading e-sign requests…" compact />
           ) : entries.length === 0 ? (
-            <EmptyTableRow colSpan={5} message="No e-sign requests sent yet." />
+            <EmptyTableRow colSpan={6} message="No e-sign requests sent yet." />
           ) : (
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
               const canOpenSigningLink =
-                Boolean(entry.requestUrl) &&
+                Boolean(entry.reviewUrl) &&
                 entry.status !== 'signed' &&
                 entry.status !== 'expired';
               return (
@@ -169,6 +173,9 @@ export function LeadEsignDetailsSection({
                 <TableCell className={sectionCellClassName}>
                   {formatPersonName(entry.requestedBy)}
                 </TableCell>
+                <TableCell className={sectionCellClassName}>
+                  {entry.signType === 'aadhaar' ? 'Aadhaar / VID OTP' : 'Email OTP'}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {canOpenSigningLink && (
@@ -176,10 +183,10 @@ export function LeadEsignDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open Digio signing link"
+                        title="Open document review, then Aadhaar/VID OTP"
                         onClick={() => {
-                          if (entry.requestUrl) {
-                            window.open(entry.requestUrl, '_blank', 'noopener,noreferrer');
+                          if (entry.reviewUrl) {
+                            window.open(entry.reviewUrl, '_blank', 'noopener,noreferrer');
                           }
                         }}
                       >

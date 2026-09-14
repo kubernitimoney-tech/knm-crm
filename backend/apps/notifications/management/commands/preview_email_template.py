@@ -25,13 +25,49 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         template = (options["template"] or "sanction_approved").strip()
-        context = {
-            "customer_name": "Rahul Sharma",
-            "application_number": "APP-2026-00042",
-            "product_name": "personal loan",
-            "approved_amount": "25,000.00",
-        }
-        subject = "Your loan application has been approved — APP-2026-00042"
+        if template == "sanction_approved":
+            context = {
+                "customer_name": "Naveen",
+                "customer_mobile": "9876543210",
+                "application_number": "APP-2026-00042",
+                "product_name": "Payday Loan",
+                "letter_datetime": "14th September, 2026 - 11:20 AM",
+                "approved_amount": "25,000.00",
+                "interest_rate": "1.00% per day",
+                "tenure": "15 days",
+                "processing_fee": "2,500.00",
+                "gst": "450.00",
+                "net_disbursed_amount": "22,050.00",
+                "repayment_amount": "28,750.00",
+                "due_date": "29.09.2026",
+                "penalty_rate": "0.25% per day",
+                "bounce_penalty": "1,000.00",
+                "repayment_mode": (
+                    "UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"
+                ),
+                "payment_structure": 'Bullet Payment (as per "BLA")',
+            }
+            subject = "Sanction Approval by Credit Team of Kuberniti Money — APP-2026-00042"
+        elif template == "loan_disbursed":
+            context = {
+                "customer_name": "Rohit Dhingra",
+                "loan_number": "LN00000042",
+                "principal_amount": "40,000",
+                "interest_rate": "1%",
+                "tenure_days": "33",
+                "repayment_amount": "53,200",
+                "repayment_amount_words": "Fifty-Three Thousand Two Hundred",
+            }
+            subject = "Kuberniti Money - Loan Disbursed"
+        else:
+            context = {
+                "customer_name": "Rahul Sharma",
+                "application_number": "APP-2026-00042",
+                "amount_to_be_disbursed": "22,050.00",
+                "bank_name": "HDFC Bank",
+            }
+            subject = "Disbursal In Progress — APP-2026-00042"
+
         html = EmailService.render_html(template=template, context=context, subject=subject)
 
         output_path = (options["output"] or "").strip()
