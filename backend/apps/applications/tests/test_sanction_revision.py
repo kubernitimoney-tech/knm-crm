@@ -56,13 +56,19 @@ class TestSanctionRevision:
             approved_tenure_value=30,
             interest_rate=Decimal("24"),
             processing_fee=Decimal("500"),
-            sanction_details={"branch": "Delhi", "cibil_score": "750"},
+            sanction_details={
+                "branch": "Delhi",
+                "cibil_score": "750",
+                "repayment_date": "2026-10-13",
+            },
         )
 
         captured = {}
 
         def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
             captured["context"] = context
+            captured["subject"] = subject
+            captured["template"] = template
 
         with patch.object(
             NotificationService,
@@ -71,7 +77,13 @@ class TestSanctionRevision:
         ):
             ApplicationService.send_sanction_approved_email(user=user, application=application)
 
+        assert captured["template"] == "sanction_approved"
+        assert "Kuberniti Money" in captured["subject"]
         assert captured["context"]["approved_amount"] == "25,000.00"
+        assert captured["context"]["interest_rate"] == "24.00% per day"
+        assert captured["context"]["processing_fee"] == "500.00"
+        assert captured["context"]["due_date"] == "13.10.2026"
+        assert "Indi Rupee" not in captured["subject"]
 
     def test_sanction_email_puts_customer_in_to_and_officers_in_cc(self):
         rm = UserFactory(email="rm@example.com")

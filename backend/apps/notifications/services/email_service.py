@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from email.mime.image import MIMEImage
 from pathlib import Path
 
 from django.conf import settings
-from django.core.mail import EmailMessage
+from django.core.mail import EmailMultiAlternatives
 from django.template import engines
 from django.template.loader import render_to_string
 
@@ -25,6 +26,9 @@ class EmailService:
         context = {
             "brand_name": getattr(settings, "BRAND_NAME", "Kuberniti Money"),
             "support_email": getattr(settings, "SUPPORT_EMAIL", ""),
+            "website_url": getattr(
+                settings, "WEBSITE_URL", "https://www.kubernitimoney.com"
+            ),
             "logo_cid": "",
             "logo_data_url": "",
         }
@@ -89,31 +93,7 @@ class EmailService:
         application_number = (ctx.get("application_number") or "").strip()
 
         if template == "sanction_approved":
-            lines = [
-                "Your loan application has been approved.",
-                "",
-                f"Dear {customer_name.title() if customer_name else 'Customer'},",
-                "",
-                "We are pleased to inform you that your loan application has been approved.",
-                "",
-                f"Application Number: {application_number}",
-            ]
-            product_name = (ctx.get("product_name") or "").strip()
-            if product_name:
-                lines.append(f"Product: {product_name.title()}")
-            approved_amount = (ctx.get("approved_amount") or "").strip()
-            if approved_amount:
-                lines.append(f"Approved Loan Amount: ₹ {approved_amount}")
-            lines.extend(
-                [
-                    "",
-                    "Our team will reach out shortly with the next steps for disbursal.",
-                    f"Thank you for choosing {brand_name}.",
-                    "",
-                    footer,
-                ]
-            )
-            return "\n".join(lines)
+            return cls._plain_sanction_letter(ctx, brand_name=brand_name)
 
         if template == "disbursal_sheet_sent":
             lines = [
@@ -153,6 +133,143 @@ class EmailService:
         return "\n".join(lines)
 
     @staticmethod
+    def _plain_sanction_letter(ctx: dict, *, brand_name: str) -> str:
+        website = (ctx.get("website_url") or "https://www.kubernitimoney.com").strip()
+        customer_name = (ctx.get("customer_name") or "Customer").strip()
+        customer_mobile = (ctx.get("customer_mobile") or "").strip()
+        application_number = (ctx.get("application_number") or "").strip()
+        letter_datetime = (ctx.get("letter_datetime") or "").strip()
+        penalty_rate = (ctx.get("penalty_rate") or "1.00% per day").strip()
+        bounce_penalty = (ctx.get("bounce_penalty") or "1,000.00").strip()
+
+        def rupee(key: str) -> str:
+            value = (ctx.get(key) or "").strip()
+            return f"₹ {value}" if value else "—"
+
+        lines = [
+            f"Sanction Approval by Credit Team of {brand_name}, a Product of "
+            "Har Shreejee Finance and Leasing Co. Ltd. (www.kubernitimoney.com)",
+            "Corporate Office: E-37, 1st Floor, Sector 3, Noida, Uttar Pradesh, 201301",
+            "Reg. No. RBI B-14.02044",
+            "",
+            f"Date & time: {letter_datetime or '—'}",
+            f"Loan Application ID: {application_number or '—'}",
+            f"Applicant Name: {customer_name}",
+            "",
+            "RESOLVED THAT, based on the assessment of the loan application submitted by "
+            f"the above-mentioned applicant through {website}, the Credit Team hereby "
+            "accords approval in principle for the issuance of a short-term personal loan, "
+            "subject to the disclosures, terms, and conditions as set out below.",
+            "",
+            "SCHEDULE OF SANCTIONED LOAN TERMS",
+            f"Loan Amount (Principal): {rupee('approved_amount')}",
+            f"Rate of Interest: {(ctx.get('interest_rate') or '—')}",
+            f"Tenure: {(ctx.get('tenure') or '—')}",
+            f"Processing Fees: {rupee('processing_fee')}",
+            f"GST on Processing Fees: {rupee('gst')}",
+            f"Net Disbursed Amount: {rupee('net_disbursed_amount')}",
+            f"Repayment Amount (Total): {rupee('repayment_amount')}",
+            f"Due Date for Repayment: {(ctx.get('due_date') or '—')}",
+            "Repayment Mode: UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque",
+            f"Penalty Interest: {penalty_rate}",
+            'Payment Structure: Bullet Payment (as per "BLA")',
+            "",
+            "FURTHER RESOLVED THAT the following disclosures and conditions form an "
+            "integral part of this resolution and shall be binding upon the Borrower upon acceptance:",
+            "",
+            "I. This sanction is extended in principle only and does not constitute an "
+            "unconditional or automatic commitment to disburse funds. Disbursement shall be "
+            "effected only after successful completion of all mandatory pre-disbursal "
+            "requirements and the Company's final internal verification and approval at the "
+            "time of disbursal.",
+            "",
+            "Acceptance of this sanction must be provided through a clear and unconditional "
+            "reply confirming that the Borrower has read, understood, and agreed to all terms "
+            "and conditions. Such acceptance, whether by email or digital confirmation, shall "
+            "constitute a binding acknowledgment and consent to proceed further.",
+            "",
+            "Mandatory Acceptance Format:",
+            "I accept the terms and conditions of the loan as mentioned. Please proceed further.",
+            f"Name: {customer_name}",
+            f"Registered Mobile Number: {customer_mobile}",
+            "",
+            "II. The Borrower is under no obligation to accept this offer. The Company advises "
+            "the Borrower to review all terms carefully and proceed only if fully understood "
+            "and agreed upon.",
+            "",
+            "III. Following the Borrower's acceptance, the sanctioned loan amount shall be "
+            "disbursed only after successful completion of the following mandatory steps: "
+            "(a) physical address/home verification, (b) completion of Video KYC, "
+            "(c) co-execution of the E-Sign Loan Agreement, and (d) registration of "
+            "E-Mandate/E-NACH. Upon fulfilment of these conditions, the net disbursed amount "
+            "shall be credited to the Borrower's verified salary account.",
+            "",
+            "IV. While repayment through UPI, IMPS, or online transfer is allowed before or on "
+            "the due date, the Borrower expressly acknowledges that in the event of non-payment "
+            "by the due date, the Lender is authorised to initiate debit attempts via E-Mandate / "
+            "E-NACH or any other permissible recovery process as prescribed under applicable law, "
+            "until all dues are recovered.",
+            "",
+            f"V. In the event of non-payment on or before the due date, penal interest at the "
+            f"rate of {penalty_rate} shall be levied strictly on the principal loan amount only, "
+            "for the period of default, from the due date until the date of actual repayment. "
+            "Such penal interest shall be simple in nature and shall not be compounded, nor "
+            "charged on accrued interest or other charges.",
+            "",
+            f"VI. E-Mandate or cheque bounce will attract a penalty charge of ₹ {bounce_penalty} "
+            "per instance.",
+            "",
+            "VII. There is no cooling-off or look-up period, and no prepayment penalty shall "
+            "apply if the loan is repaid early.",
+            "",
+            "VIII. If the Borrower chooses not to proceed or does not provide acceptance in the "
+            "prescribed format, this sanction shall be considered cancelled and no fees shall "
+            "be charged.",
+            "",
+            "IX. The Borrower is required to submit a physical blank signed cheque solely as a "
+            "security instrument. The Borrower acknowledges that such cheque shall be presented "
+            "for recovery only in the event of non-payment or default, strictly in accordance "
+            "with the terms of the executed Loan Agreement and applicable law. This cheque shall "
+            "be securely retained by the Company and will be destroyed only upon: (a) full and "
+            "final repayment of all dues, (b) issuance of the No Objection Certificate (NOC), "
+            "and (c) receipt of a written destruction request from the Borrower via email. The "
+            "destruction shall be completed within 45 days of such request, and photographic "
+            "confirmation shall be provided to the Borrower via email for their records. "
+            "Provided that, if any outstanding amount remains payable by the Borrower to the "
+            "Company, the Company shall retain the cheque securely and reserves the right to "
+            "present it for recovery in the event of unpaid dues, until all liabilities are cleared.",
+            "",
+            "X. The Borrower expressly acknowledges and authorizes the Company to report, "
+            "disclose, and update the Borrower's loan account information, including repayment "
+            "behavior, delays, defaults, or closure status, to one or more Credit Information "
+            "Companies / Credit Bureaus in accordance with applicable law.",
+            "",
+            'XI. This sanction letter is supplemental to, and shall form an integral part of, '
+            'the executed Borrower\'s Loan Agreement ("BLA"). In the event of any inconsistency, '
+            "the terms of the BLA shall prevail.",
+            "",
+            "XII. Any legal disputes shall be subject to the exclusive jurisdiction of Delhi Courts.",
+            "",
+            "Note: The effective annualized cost (Annual Percentage Rate – APR), inclusive of all "
+            "applicable interest, fees, and charges, is reflected in the executed Borrower's Loan "
+            "Agreement and may be reviewed upon request.",
+            "",
+            "GRIEVANCE REDRESSAL CONTACT",
+            "Komal Dhawan",
+            "Grievance Redressal Officer",
+            "E-mail: grievance@kubernitimoney.com",
+            "",
+            "NOTE TO BORROWER: Timely repayment of this loan not only protects your credit health "
+            "but also enhances your eligibility for higher amounts and better terms in the future.",
+            "",
+            "Best Regards",
+            f"{brand_name} – Your Credit Companion",
+            "A product of Har Shreejee Finance and Leasing Co. Ltd.",
+            f"Approved by: Credit Team, {brand_name}",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
     def _clean_recipients(recipients) -> list[str]:
         cleaned: list[str] = []
         seen: set[str] = set()
@@ -165,6 +282,19 @@ class EmailService:
         return cleaned
 
     @classmethod
+    def _attach_inline_logo(cls, message: EmailMultiAlternatives) -> None:
+        logo_path = cls._logo_path()
+        if logo_path is None:
+            return
+        mime_type = mimetypes.guess_type(logo_path.name)[0] or "image/png"
+        subtype = mime_type.split("/")[-1] if "/" in mime_type else "png"
+        image = MIMEImage(logo_path.read_bytes(), _subtype=subtype)
+        image.add_header("Content-ID", f"<{EMAIL_LOGO_CONTENT_ID}>")
+        image.add_header("Content-Disposition", "inline", filename=logo_path.name)
+        message.attach(image)
+        message.mixed_subtype = "related"
+
+    @classmethod
     def send_html(
         cls,
         *,
@@ -174,12 +304,7 @@ class EmailService:
         recipients,
         cc=None,
     ) -> int:
-        """
-        Send a plain-text email for the given template key.
-
-        HTML templates under ``templates/emails/`` are kept for preview only and
-        are not attached to outbound mail.
-        """
+        """Send a multipart email (plain text + HTML) for the given template key."""
         to_addresses = cls._clean_recipients(recipients)
         if not to_addresses:
             return 0
@@ -188,7 +313,6 @@ class EmailService:
         to_lower = {address.lower() for address in to_addresses}
         cc_addresses = [address for address in cc_addresses if address.lower() not in to_lower]
 
-        text_body = cls.render_plain_text(template=template, context=context or {})
         from_email = (getattr(settings, "DEFAULT_FROM_EMAIL", None) or "").strip()
         if not from_email:
             raise ValueError(
@@ -196,11 +320,21 @@ class EmailService:
                 "and recreate the Django container."
             )
 
-        message = EmailMessage(
+        payload = context or {}
+        text_body = cls.render_plain_text(template=template, context=payload)
+        html_body = cls.render_html(
+            template=template,
+            context=payload,
+            subject=subject,
+            for_send=True,
+        )
+        message = EmailMultiAlternatives(
             subject=subject,
             body=text_body,
             from_email=from_email,
             to=to_addresses,
             cc=cc_addresses or None,
         )
+        message.attach_alternative(html_body, "text/html")
+        cls._attach_inline_logo(message)
         return message.send(fail_silently=False)

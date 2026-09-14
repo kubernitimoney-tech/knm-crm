@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
+from decimal import Decimal
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from apps.accounts.services.role_helpers import (
@@ -60,6 +63,163 @@ class NotificationService:
             return f"{float(value):,.2f}"
         except (TypeError, ValueError):
             return str(value)
+
+    @staticmethod
+    def _ordinal_day(day: int) -> str:
+        if 11 <= day <= 13:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+        return f"{day}{suffix}"
+
+    @classmethod
+    def _format_letter_datetime(cls, value) -> str:
+        if value is None:
+            value = timezone.localtime()
+        if isinstance(value, datetime):
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
+            time_part = value.strftime("%I:%M %p").lstrip("0")
+            return f"{cls._ordinal_day(value.day)} {value.strftime('%B, %Y')} - {time_part}"
+        if isinstance(value, date):
+            return f"{cls._ordinal_day(value.day)} {value.strftime('%B, %Y')}"
+        return str(value)
+
+    @staticmethod
+    def _format_due_date(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            value = timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+        if isinstance(value, date):
+            return value.strftime("%d.%m.%Y")
+        return str(value)
+
+    @staticmethod
+    def _format_rate_per_day(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            return f"{float(value):.2f}% per day"
+        except (TypeError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _format_tenure(days) -> str:
+        try:
+            count = int(days or 0)
+        except (TypeError, ValueError):
+            return str(days or "")
+        if count <= 0:
+            return ""
+        return f"{count} day" if count == 1 else f"{count} days"
+
+    @classmethod
+    def _customer_mobile(cls, application) -> str:
+        customer = getattr(application, "customer", None)
+        if customer and getattr(customer, "mobile_number", None):
+            return str(customer.mobile_number).strip()
+        return ""
+
+    @classmethod
+    def _sanction_letter_context(cls, application, *, decision=None) -> dict:
+        from apps.applications.services.sanction_fee_service import SanctionFeeService
+        from apps.loans.services.loan_calculation_service import LoanCalculationService
+
+        if decision is None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        loan = None
+        try:
+            loan = application.loan
+        except ObjectDoesNotExist:
+            loan = None
+        details = dict(decision.sanction_details or {}) if decision else {}
+        customer_label = cls._customer_label(application.customer)
+        product_name = application.product.name if application.product_id else ""
+
+        approved_amount = (
+            decision.approved_amount
+            if decision and decision.approved_amount is not None
+            else application.approved_amount
+        )
+        interest_rate = None
+        if decision and decision.interest_rate is not None:
+            interest_rate = decision.interest_rate
+        elif application.product_id:
+            interest_rate = application.product.interest_rate
+
+        net = SanctionFeeService.net_disbursal_for_application(application)
+        repayment_date = LoanCalculationService.resolve_repayment_date(
+            application=application,
+            loan=loan,
+            decision=decision,
+        )
+        tenure_days = LoanCalculationService.compute_contract_tenure_days(
+            repayment_date=repayment_date,
+            disbursal_date=LoanCalculationService.resolve_actual_disbursal_date(loan=loan),
+            disbursal_sheet_sent_date=LoanCalculationService.resolve_sheet_sent_date(
+                application=application
+            ),
+            sanction_date=LoanCalculationService.resolve_sanction_date(
+                application=application,
+                decision=decision,
+            ),
+        )
+        if tenure_days <= 0:
+            if decision and decision.approved_tenure_value:
+                tenure_days = decision.approved_tenure_value
+            elif application.tenure_value:
+                tenure_days = application.tenure_value
+
+        principal = approved_amount or Decimal("0")
+        roi = interest_rate or Decimal("0")
+        metrics = LoanCalculationService.compute_summary(
+            principal_amount=principal,
+            roi_percent=roi,
+            contract_tenure_days=tenure_days,
+            due_date=repayment_date,
+        )
+        penalty_rate = LoanCalculationService.resolve_penalty_rate_percent(
+            loan=loan,
+            application=application,
+        )
+        if penalty_rate <= 0:
+            penalty_rate = Decimal("1.00")
+
+        letter_at = None
+        if decision and decision.decided_at:
+            letter_at = decision.decided_at
+        elif application.decided_at:
+            letter_at = application.decided_at
+
+        processing_fee = net.get("processing_fee")
+        if decision and decision.processing_fee is not None:
+            processing_fee = str(decision.processing_fee)
+        gst = net.get("gst") or details.get("gst") or details.get("admin_gst")
+
+        return {
+            "customer_name": customer_label,
+            "customer_mobile": cls._customer_mobile(application),
+            "application_number": application.application_number,
+            "product_name": product_name,
+            "letter_datetime": cls._format_letter_datetime(letter_at),
+            "approved_amount": cls._format_amount(approved_amount),
+            "interest_rate": cls._format_rate_per_day(interest_rate),
+            "tenure": cls._format_tenure(tenure_days),
+            "processing_fee": cls._format_amount(processing_fee),
+            "gst": cls._format_amount(gst),
+            "net_disbursed_amount": cls._format_amount(net.get("amount_to_be_disbursed")),
+            "repayment_amount": cls._format_amount(metrics.repay_amount),
+            "due_date": cls._format_due_date(repayment_date),
+            "penalty_rate": cls._format_rate_per_day(penalty_rate),
+            "bounce_penalty": "1,000.00",
+            "repayment_mode": (
+                "UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"
+            ),
+            "payment_structure": 'Bullet Payment (as per "BLA")',
+        }
 
     @classmethod
     def _send_email_on_commit(
@@ -209,31 +369,23 @@ class NotificationService:
     @classmethod
     def send_sanction_approved_email(cls, application, *, decision=None) -> None:
         """Email customer with assigned RM/CM in CC (manual trigger)."""
-        customer_label = cls._customer_label(application.customer)
-        product_name = application.product.name if application.product_id else ""
         if decision is None:
             decision = (
                 application.decisions.filter(decision="approved").order_by("-decided_at").first()
             )
-        approved_amount = (
-            decision.approved_amount
-            if decision and decision.approved_amount is not None
-            else application.approved_amount
-        )
         customer_email = cls._customer_email(application)
         if not customer_email:
             raise ValueError(
                 "This customer has no email address. Add one before sending the sanction email."
             )
+        context = cls._sanction_letter_context(application, decision=decision)
         cls._send_email_on_commit(
-            subject=f"Your loan application has been approved — {application.application_number}",
+            subject=(
+                f"Sanction Approval by Credit Team of Kuberniti Money — "
+                f"{application.application_number}"
+            ),
             template="sanction_approved",
-            context={
-                "customer_name": customer_label,
-                "application_number": application.application_number,
-                "product_name": product_name,
-                "approved_amount": cls._format_amount(approved_amount),
-            },
+            context=context,
             recipients=[customer_email],
             cc=cls._assigned_officer_emails(application),
             raise_on_error=True,
