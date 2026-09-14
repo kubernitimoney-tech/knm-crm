@@ -103,7 +103,7 @@ class TestDigioEsignAndVideoKyc:
         assert "pankajanand702@gmail.com" not in text
         assert "/AcroForm" not in reader.trailer["/Root"]
 
-    def test_send_esign_accepts_email_otp_method(self):
+    def test_send_esign_uses_configured_sign_type(self):
         admin = UserFactory(email="admin-digio-email-otp@test.com")
         _assign_role(admin, "admin")
         lead = _create_lead()
@@ -115,14 +115,15 @@ class TestDigioEsignAndVideoKyc:
 
         client = APIClient()
         client.force_authenticate(user=admin)
-        with patch(
-            "apps.integrations.digio.esign.DigioClient.from_settings",
-            return_value=mock_client,
-        ):
-            response = client.post(
-                reverse("lead-esign-requests", kwargs={"pk": lead.id}),
-                {"sign_type": "electronic"},
-            )
+        with override_settings(DIGIO_ESIGN_SIGN_TYPE="electronic"):
+            with patch(
+                "apps.integrations.digio.esign.DigioClient.from_settings",
+                return_value=mock_client,
+            ):
+                response = client.post(
+                    reverse("lead-esign-requests", kwargs={"pk": lead.id}),
+                    {"sign_type": "aadhaar"},
+                )
 
         assert response.status_code == status.HTTP_201_CREATED
         row = LeadEsignRequest.objects.get(lead=lead)
@@ -229,12 +230,14 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_200_OK
         payload = response.data["data"]
         assert payload["id"] == str(row.id)
+        assert payload["sign_type"] == row.sign_type
         assert payload["signing_url"] == row.request_url
         assert payload["document_id"] == "DIDPUBLIC123456789"
         assert payload["identifier"] == lead.customer.email
         assert payload["access_token"] == "tok-public"
         assert payload["sdk_url"].endswith("/sdk/v11/digio.js")
         assert f"/sign/{row.id}" in payload["review_url"]
+        assert payload["document_url"].endswith(f"/api/v1/leads/esign/{row.id}/document/")
         document = client.get(reverse("public-esign-document", kwargs={"pk": row.id}))
         assert document.status_code == status.HTTP_200_OK
         assert document["Content-Type"].startswith("application/pdf")
@@ -444,6 +447,138 @@ class TestDigioEsignAndVideoKyc:
         assert row.session_details["aadhaar_details"]["action_data_aadhaar_number"] == "XXXX1234"
         assert row.session_details["pan_details"]["ocr_result_pan"] == "ABCDE1234F"
 
+    def test_webhook_saves_video_recording_and_lat_lng_aliases(self):
+        import base64
+
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.SENT,
+            provider_request_id="KIDVIDEOGEO123456",
+        )
+        video = b"\x00\x00\x00\x18ftypmp42" + b"0" * 80
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDVIDEOGEO123456",
+            "status": "approved",
+            "actions": [
+                {
+                    "type": "video_kyc",
+                    "file_base64": base64.b64encode(video).decode(),
+                    "details": {"lat": "19.076", "lng": "72.877", "address": "Mumbai"},
+                }
+            ],
+        }
+        mock_client.download_kyc_media.return_value = b""
+
+        body = b'{"event":"kyc.approved","id":"KIDVIDEOGEO123456"}'
+        api = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = api.generic(
+                "POST",
+                reverse("digio-webhook"),
+                data=body,
+                content_type="application/json",
+                HTTP_X_DIGIO_SIGNATURE=_hmac(body),
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.status == VideoKycRequestStatus.COMPLETED
+        assert row.recording_file
+        assert row.session_details["geolocation"]["latitude"] == 19.076
+        assert row.session_details["geolocation"]["longitude"] == 72.877
+        assert row.session_details["geolocation"]["address"] == "Mumbai"
+
+    def test_webhook_downloads_kyc_media_by_file_id(self):
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.SENT,
+            provider_request_id="KIDFILEIDVIDEO123",
+        )
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDFILEIDVIDEO123",
+            "status": "approved",
+            "actions": [{"type": "video", "file_id": "FIDVIDEO123", "details": {}}],
+        }
+        mock_client.download_kyc_media.return_value = b"\x00\x00\x00\x18ftypmp42" + b"1" * 40
+
+        body = b'{"event":"kyc.approved","id":"KIDFILEIDVIDEO123"}'
+        api = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = api.generic(
+                "POST",
+                reverse("digio-webhook"),
+                data=body,
+                content_type="application/json",
+                HTTP_X_DIGIO_SIGNATURE=_hmac(body),
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.recording_file
+        mock_client.download_kyc_media.assert_called()
+
+    def test_public_esign_aadhaar_otp_signs_document(self):
+        import base64
+
+        admin = UserFactory(email="admin-digio-aadhaar-otp@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        mock_client = MagicMock()
+        mock_client.upload_pdf.return_value = {"id": "DIDAADHAAROTP1234"}
+        mock_client.generate_aadhaar_esign_otp.return_value = {"status": "success"}
+        mock_client.complete_aadhaar_esign.return_value = {
+            "id": "DIDAADHAAROTP1234",
+            "file_data": base64.b64encode(b"%PDF-signed").decode(),
+        }
+
+        api = APIClient()
+        api.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.esign.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            created = api.post(
+                reverse("lead-esign-requests", kwargs={"pk": lead.id}),
+                {"sign_type": "aadhaar"},
+            )
+            assert created.status_code == status.HTTP_201_CREATED
+            row = LeadEsignRequest.objects.get(lead=lead)
+            otp_response = api.post(
+                reverse("public-esign-otp", kwargs={"pk": row.id}),
+                {"aadhaar_number": "234123412341"},
+                format="json",
+            )
+            assert otp_response.status_code == status.HTTP_200_OK
+            vid_response = api.post(
+                reverse("public-esign-otp", kwargs={"pk": row.id}),
+                {"aadhaar_number": "1234123412341234"},
+                format="json",
+            )
+            assert vid_response.status_code == status.HTTP_200_OK
+            verify_response = api.post(
+                reverse("public-esign-verify-otp", kwargs={"pk": row.id}),
+                {"otp": "123456"},
+                format="json",
+            )
+
+        assert verify_response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.status == EsignRequestStatus.SIGNED
+        assert row.signed_file
+        assert verify_response.data["data"]["signed"] is True
+
 
 class TestDigioClientResponseHandling:
     def test_digistudio_request_includes_tracking_fields(self):
@@ -478,7 +613,7 @@ class TestDigioClientResponseHandling:
 
         request.assert_called_once_with(
             "POST",
-            "/client/kyc/v2/KID123/response?detail_response=true",
+            "/client/kyc/v2/KID123/response?detail_response=true&file_data=true",
         )
 
     def test_generic_digio_error_never_returns_none(self):

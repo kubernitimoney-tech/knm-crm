@@ -491,29 +491,27 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         return dt.isoformat() if dt else ""
 
     def get_video_details(self, obj):
+        from apps.integrations.digio.webhooks import normalize_geolocation
+
         session = obj.session_details or {}
-        geolocation = session.get("geolocation") or {}
-        recording_url = None
-        if obj.recording_file:
-            request = self.context.get("request")
+        geolocation = normalize_geolocation(session.get("geolocation") or {})
+        request = self.context.get("request")
+
+        def file_url(field):
+            if not field:
+                return None
             if request is None:
-                recording_url = obj.recording_file.url
-            else:
-                recording_url = request.build_absolute_uri(obj.recording_file.url)
+                return field.url
+            return request.build_absolute_uri(field.url)
+
         return {
             "geolocation": {
                 "latitude": geolocation.get("latitude"),
                 "longitude": geolocation.get("longitude"),
                 "address": geolocation.get("address") or "—",
             },
-            "recording_file_url": recording_url,
-            "selfie_file_url": (
-                request.build_absolute_uri(obj.selfie_file.url)
-                if obj.selfie_file and request is not None
-                else obj.selfie_file.url
-                if obj.selfie_file
-                else None
-            ),
+            "recording_file_url": file_url(obj.recording_file),
+            "selfie_file_url": file_url(obj.selfie_file),
         }
 
     def _customer_address_line(self, customer: Customer) -> str:

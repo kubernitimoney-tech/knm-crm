@@ -461,11 +461,12 @@ export async function fetchLeadEsignRequests(leadId: string): Promise<ApiLeadEsi
 
 export async function sendLeadEsignRequest(
   leadId: string,
-  signType: ApiLeadEsignRequest['sign_type'],
+  signType?: ApiLeadEsignRequest['sign_type'],
 ): Promise<ApiLeadEsignRequest> {
-  return apiPost<ApiLeadEsignRequest>(`/leads/${leadId}/esign-requests/`, {
-    sign_type: signType,
-  });
+  return apiPost<ApiLeadEsignRequest>(
+    `/leads/${leadId}/esign-requests/`,
+    signType ? { sign_type: signType } : {},
+  );
 }
 
 export async function fetchLeadVideoKycRequests(

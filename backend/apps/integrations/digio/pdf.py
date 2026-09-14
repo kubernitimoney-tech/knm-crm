@@ -9,7 +9,9 @@ from io import BytesIO
 from pathlib import Path
 
 from django.utils import timezone
+from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -312,13 +314,22 @@ def _draw_laxmi_branding(pdf: canvas.Canvas, index: int) -> None:
         pdf.drawString(x + 2, y, text)
 
 
+def _compressed_background(path: Path) -> ImageReader:
+    image = Image.open(path).convert("RGB")
+    image.thumbnail((1000, 1414), Image.Resampling.LANCZOS)
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", quality=45, optimize=True)
+    buffer.seek(0)
+    return ImageReader(buffer)
+
+
 def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     background = PAGE_BACKGROUNDS.get(index)
-    if background:
+    if background and background.is_file():
         pdf.drawImage(
-            str(background),
+            _compressed_background(background),
             0,
             0,
             width=PAGE_WIDTH,

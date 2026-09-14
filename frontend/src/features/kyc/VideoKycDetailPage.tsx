@@ -250,21 +250,31 @@ export function VideoKycDetailPage() {
                 <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
                   <span className="text-slate-400 font-medium">Latitude</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {hasCoordinates ? geolocation.latitude : '—'}
+                    {geolocation.latitude ?? '—'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
                   <span className="text-slate-400 font-medium">Longitude</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
-                    {hasCoordinates ? geolocation.longitude : '—'}
+                    {geolocation.longitude ?? '—'}
                   </span>
                 </div>
                 <div className="flex justify-between gap-4">
                   <span className="text-slate-400 font-medium shrink-0">Address</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-200 text-right">
-                    {geolocation.address}
+                    {geolocation.address || '—'}
                   </span>
                 </div>
+                {hasCoordinates ? (
+                  <a
+                    href={`https://www.google.com/maps?q=${geolocation.latitude},${geolocation.longitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex pt-1 text-[11px] font-bold text-primary-deep underline"
+                  >
+                    Open in Maps
+                  </a>
+                ) : null}
               </div>
             </Card>
 
