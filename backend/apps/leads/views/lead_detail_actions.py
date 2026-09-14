@@ -613,6 +613,7 @@ class LeadDetailActionsMixin:
                 lead=lead,
                 requested_by=request.user,
                 recipient_email=email or "",
+                sign_type=request.data.get("sign_type") or "",
             )
         except DigioValidationError as exc:
             return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
@@ -648,6 +649,7 @@ class LeadDetailActionsMixin:
                 lead=lead,
                 requested_by=request.user,
                 recipient_email=email or "",
+                verification_method=request.data.get("verification_method") or "mobile",
             )
         except DigioValidationError as exc:
             return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)

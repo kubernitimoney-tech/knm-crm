@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Download, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -38,6 +45,8 @@ export interface LeadEsignEntry {
   signedOn: string;
   signedFileUrl: string | null;
   requestUrl: string | null;
+  reviewUrl: string | null;
+  signType: ApiLeadEsignRequest['sign_type'];
 }
 
 interface LeadEsignDetailsSectionProps {
@@ -57,6 +66,8 @@ function mapApiEntry(entry: ApiLeadEsignRequest): LeadEsignEntry {
     signedOn: entry.signed_on,
     signedFileUrl: entry.signed_file_url,
     requestUrl: entry.request_url || null,
+    reviewUrl: entry.review_url || null,
+    signType: entry.sign_type,
   };
 }
 
@@ -72,6 +83,7 @@ export function LeadEsignDetailsSection({
   const [entries, setEntries] = useState<LeadEsignEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isMethodDialogOpen, setIsMethodDialogOpen] = useState(false);
 
   const loadEntries = useCallback(async () => {
     if (!leadId) return;
@@ -94,16 +106,21 @@ export function LeadEsignDetailsSection({
     loadEntries();
   }, [loadEntries]);
 
-  const handleSendRequest = async () => {
+  const handleSendRequest = async (signType: ApiLeadEsignRequest['sign_type']) => {
     setIsSending(true);
     try {
-      const created = await sendLeadEsignRequest(leadId);
+      const created = await sendLeadEsignRequest(leadId, signType);
       setEntries((prev) => [mapApiEntry(created), ...prev]);
+      setIsMethodDialogOpen(false);
       toast({
         title: 'E-sign request sent',
         description: customerEmail
-          ? `Digio signing request created for ${customerEmail}. Open the link from the row to complete sandbox signing.`
-          : 'Digio signing request created. Open the link from the row to complete sandbox signing.',
+          ? `Signing link emailed to ${customerEmail}. Customer reviews Agreement.pdf, then completes ${
+              signType === 'aadhaar' ? 'Aadhaar OTP' : 'email OTP'
+            }.`
+          : `Signing link created for ${
+              signType === 'aadhaar' ? 'Aadhaar OTP' : 'email OTP'
+            }.`,
         variant: 'success',
       });
     } catch (err) {
@@ -121,14 +138,15 @@ export function LeadEsignDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Send digital signing requests and track agreement completion.
+          Customer reviews Agreement.pdf, then signs using Aadhaar OTP or email OTP.
+          Aadhaar signing requires Digio Aadhaar credits.
         </p>
         {canSendRequest ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
-            onClick={handleSendRequest}
+            onClick={() => setIsMethodDialogOpen(true)}
             disabled={isSending}
             title="Request E-Sign"
           >
@@ -142,6 +160,7 @@ export function LeadEsignDetailsSection({
           <TableRow className="hover:bg-transparent">
             <TableHead className={sectionHeadClassName()}>Status</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested By</TableHead>
+            <TableHead className={sectionHeadClassName()}>Method</TableHead>
             <TableHead className={sectionHeadClassName()}>Documents</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested On</TableHead>
             <TableHead className={sectionHeadClassName()}>Signed On</TableHead>
@@ -149,14 +168,15 @@ export function LeadEsignDetailsSection({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableLoadingRow colSpan={5} message="Loading e-sign requests…" compact />
+            <TableLoadingRow colSpan={6} message="Loading e-sign requests…" compact />
           ) : entries.length === 0 ? (
-            <EmptyTableRow colSpan={5} message="No e-sign requests sent yet." />
+            <EmptyTableRow colSpan={6} message="No e-sign requests sent yet." />
           ) : (
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
+              const openUrl = entry.reviewUrl || entry.requestUrl;
               const canOpenSigningLink =
-                Boolean(entry.requestUrl) &&
+                Boolean(openUrl) &&
                 entry.status !== 'signed' &&
                 entry.status !== 'expired';
               return (
@@ -169,6 +189,9 @@ export function LeadEsignDetailsSection({
                 <TableCell className={sectionCellClassName}>
                   {formatPersonName(entry.requestedBy)}
                 </TableCell>
+                <TableCell className={sectionCellClassName}>
+                  {entry.signType === 'aadhaar' ? 'Aadhaar OTP' : 'Email OTP'}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {canOpenSigningLink && (
@@ -176,10 +199,10 @@ export function LeadEsignDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open Digio signing link"
+                        title="Open document review, then Aadhaar eSign"
                         onClick={() => {
-                          if (entry.requestUrl) {
-                            window.open(entry.requestUrl, '_blank', 'noopener,noreferrer');
+                          if (openUrl) {
+                            window.open(openUrl, '_blank', 'noopener,noreferrer');
                           }
                         }}
                       >
@@ -228,6 +251,31 @@ export function LeadEsignDetailsSection({
           )}
         </TableBody>
       </SectionTable>
+      <Dialog open={isMethodDialogOpen} onOpenChange={setIsMethodDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose signing method</DialogTitle>
+            <DialogDescription>
+              The customer will review Agreement.pdf before Digio opens the selected OTP flow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Button
+              onClick={() => void handleSendRequest('aadhaar')}
+              disabled={isSending}
+            >
+              Aadhaar number + Aadhaar OTP
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void handleSendRequest('electronic')}
+              disabled={isSending}
+            >
+              Email OTP
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

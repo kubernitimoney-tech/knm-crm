@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Download, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -37,7 +44,7 @@ export interface LeadVideoKycEntry {
   requestedOn: string;
   signedOn: string;
   recordingFileUrl: string | null;
-  requestUrl: string | null;
+  selfieFileUrl: string | null;
 }
 
 interface LeadVideoKycDetailsSectionProps {
@@ -56,7 +63,7 @@ function mapApiEntry(entry: ApiLeadVideoKycRequest): LeadVideoKycEntry {
     requestedOn: entry.requested_on,
     signedOn: entry.signed_on,
     recordingFileUrl: entry.recording_file_url,
-    requestUrl: entry.request_url || null,
+    selfieFileUrl: entry.selfie_file_url,
   };
 }
 
@@ -72,6 +79,7 @@ export function LeadVideoKycDetailsSection({
   const [entries, setEntries] = useState<LeadVideoKycEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isMethodDialogOpen, setIsMethodDialogOpen] = useState(false);
 
   const loadEntries = useCallback(async () => {
     if (!leadId) return;
@@ -94,17 +102,18 @@ export function LeadVideoKycDetailsSection({
     loadEntries();
   }, [loadEntries]);
 
-  const handleSendRequest = async () => {
+  const handleSendRequest = async (verificationMethod: 'email' | 'mobile') => {
     setIsSending(true);
     try {
-      const created = await sendLeadVideoKycRequest(leadId);
+      const created = await sendLeadVideoKycRequest(leadId, verificationMethod);
       setEntries((prev) => [mapApiEntry(created), ...prev]);
+      setIsMethodDialogOpen(false);
       toast({
         title: 'Video KYC request sent',
-        description: customerEmail
-          ? `Digio video KYC created for ${customerEmail}. Open the link from the row to start the sandbox session.`
-          : 'Digio video KYC created. Open the link from the row to start the sandbox session.',
-        variant: 'success',
+        description: created.email_sent && customerEmail
+          ? `Video KYC link emailed to ${customerEmail}.`
+          : 'Video KYC was created, but the email could not be sent. Use Open to share the link.',
+        variant: created.email_sent ? 'success' : 'error',
       });
     } catch (err) {
       toast({
@@ -121,14 +130,15 @@ export function LeadVideoKycDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Send video KYC session links and track completion status.
+          Uses the “AadharPAN with selfie and OCR” DigiStudio workflow to collect DigiLocker
+          identity data, selfie/video and OCR results.
         </p>
         {canSendRequest ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
-            onClick={handleSendRequest}
+            onClick={() => setIsMethodDialogOpen(true)}
             disabled={isSending}
             title="Request Video KYC"
           >
@@ -156,7 +166,6 @@ export function LeadVideoKycDetailsSection({
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
               const canOpenKycSession =
-                Boolean(entry.requestUrl) &&
                 entry.status !== 'completed' &&
                 entry.status !== 'expired';
               return (
@@ -176,11 +185,14 @@ export function LeadVideoKycDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open Digio video KYC session"
+                        title="Open Digio Aadhaar, PAN and selfie KYC session"
                         onClick={() => {
-                          if (entry.requestUrl) {
-                            window.open(entry.requestUrl, '_blank', 'noopener,noreferrer');
-                          }
+                          window.open(`/verify-kyc/${entry.id}`, '_blank', 'noopener,noreferrer');
+                          toast({
+                            title: 'KYC workflow opened',
+                            description: 'Complete the Aadhaar, PAN, selfie and OCR steps in Digio.',
+                            variant: 'success',
+                          });
                         }}
                       >
                         <ExternalLink size={12} className="mr-1" />
@@ -199,10 +211,14 @@ export function LeadVideoKycDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        disabled={entry.status !== 'completed' || !entry.recordingFileUrl}
+                        disabled={
+                          entry.status !== 'completed' ||
+                          (!entry.recordingFileUrl && !entry.selfieFileUrl)
+                        }
                         onClick={() => {
-                          if (entry.recordingFileUrl) {
-                            window.open(entry.recordingFileUrl, '_blank', 'noopener,noreferrer');
+                          const mediaUrl = entry.recordingFileUrl || entry.selfieFileUrl;
+                          if (mediaUrl) {
+                            window.open(mediaUrl, '_blank', 'noopener,noreferrer');
                           }
                         }}
                       >
@@ -227,6 +243,31 @@ export function LeadVideoKycDetailsSection({
           )}
         </TableBody>
       </SectionTable>
+      <Dialog open={isMethodDialogOpen} onOpenChange={setIsMethodDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Choose initial verification code</DialogTitle>
+            <DialogDescription>
+              Digio will verify the customer with this code before starting the KYC workflow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Button
+              onClick={() => void handleSendRequest('mobile')}
+              disabled={isSending}
+            >
+              Send code to mobile number
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void handleSendRequest('email')}
+              disabled={isSending}
+            >
+              Send code to email address
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

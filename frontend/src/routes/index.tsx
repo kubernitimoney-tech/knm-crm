@@ -39,6 +39,8 @@ import { ActivityLogsReportPage } from '../features/reports/ActivityLogsReportPa
 import { RMListPage } from '../features/assignments/RMListPage';
 import { CMListPage } from '../features/assignments/CMListPage';
 import { ESignPage } from '../features/kyc/ESignPage';
+import { PublicEsignPage } from '../features/kyc/PublicEsignPage';
+import { PublicVideoKycPage } from '../features/kyc/PublicVideoKycPage';
 import { VideoKycDetailPage } from '../features/kyc/VideoKycDetailPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RecoverPasswordPage } from '../features/auth/RecoverPasswordPage';
@@ -64,6 +66,16 @@ const router = createBrowserRouter([
         <RecoverPasswordPage />
       </GuestGuard>
     ),
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: '/sign/:esignId',
+    element: <PublicEsignPage />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: '/verify-kyc/:requestId',
+    element: <PublicVideoKycPage />,
     errorElement: <RouteErrorBoundary />,
   },
   {
