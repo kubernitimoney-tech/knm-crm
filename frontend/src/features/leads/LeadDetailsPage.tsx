@@ -45,7 +45,13 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/badge';
 import { badgeClass } from '@/lib/badgeStyles';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { MODAL_HEADER_CLASS, SURFACE_INPUT_CLASS } from '@/lib/uiTokens';
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { ResponsiveTabsNav } from "@/components/ui/responsive-tabs-nav";
@@ -199,6 +205,7 @@ export const LeadDetailsPage = () => {
   const [esignKycRefresh, setEsignKycRefresh] = useState(0);
   const [isRequestingTimelineEsign, setIsRequestingTimelineEsign] = useState(false);
   const [isRequestingTimelineVideoKyc, setIsRequestingTimelineVideoKyc] = useState(false);
+  const [isTimelineKycMethodOpen, setIsTimelineKycMethodOpen] = useState(false);
 
   const loadWorkflowReadiness = useCallback(async (options?: {
     freshSanction?: ApiLeadSanction | null;
@@ -683,18 +690,21 @@ export const LeadDetailsPage = () => {
     }
   }, [id, customerEmailForRequests]);
 
-  const handleTimelineVideoKycRequest = useCallback(async () => {
+  const handleTimelineVideoKycRequest = useCallback(async (
+    verificationMethod: 'email' | 'mobile',
+  ) => {
     if (!id) return;
     setIsRequestingTimelineVideoKyc(true);
     try {
-      await sendLeadVideoKycRequest(id);
+      const created = await sendLeadVideoKycRequest(id, verificationMethod);
       setEsignKycRefresh((n) => n + 1);
+      setIsTimelineKycMethodOpen(false);
       toast({
         title: 'Video KYC request sent',
-        description: customerEmailForRequests
+        description: created.email_sent && customerEmailForRequests
           ? `Video KYC link emailed to ${customerEmailForRequests}.`
-          : 'Video KYC request email has been queued.',
-        variant: 'success',
+          : 'Video KYC was created, but the email could not be sent. Use Open in the Video KYC details.',
+        variant: created.email_sent ? 'success' : 'error',
       });
     } catch (err) {
       toast({
@@ -817,10 +827,38 @@ export const LeadDetailsPage = () => {
                 : undefined
             }
             onRequestEsign={canRequestEsignVideoKyc ? handleTimelineEsignRequest : undefined}
-            onRequestVideoKyc={canRequestEsignVideoKyc ? handleTimelineVideoKycRequest : undefined}
+            onRequestVideoKyc={
+              canRequestEsignVideoKyc ? () => setIsTimelineKycMethodOpen(true) : undefined
+            }
             isRequestingEsign={isRequestingTimelineEsign}
             isRequestingVideoKyc={isRequestingTimelineVideoKyc}
           />
+
+          <Dialog open={isTimelineKycMethodOpen} onOpenChange={setIsTimelineKycMethodOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Choose initial verification code</DialogTitle>
+                <DialogDescription>
+                  Digio verifies the customer with this code before starting Video KYC.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3">
+                <Button
+                  disabled={isRequestingTimelineVideoKyc}
+                  onClick={() => void handleTimelineVideoKycRequest('mobile')}
+                >
+                  Send code to mobile number
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={isRequestingTimelineVideoKyc}
+                  onClick={() => void handleTimelineVideoKycRequest('email')}
+                >
+                  Send code to email address
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {isCallFormOpen && canLogCall ? (
             <Dialog open={isCallFormOpen} onOpenChange={setIsCallFormOpen}>

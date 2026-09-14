@@ -6,6 +6,7 @@ import logging
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import urlparse
 
 from django.conf import settings
 
@@ -55,8 +56,16 @@ class DigioClient:
             raise DigioConfigurationError(
                 "Digio is not configured. Set DIGIO_CLIENT_ID and DIGIO_CLIENT_SECRET."
             )
+        base_url = (settings.DIGIO_BASE_URL or "").strip()
+        host = (urlparse(base_url).hostname or "").lower()
+        if host in {"enterprise.digio.in", "drive.digio.in", "app.digio.in"}:
+            raise DigioConfigurationError(
+                f"DIGIO_BASE_URL points to the Digio website ({host}), not its REST API. "
+                "Use https://api.digio.in for production or "
+                "https://ext-api.digio.in for sandbox."
+            )
         return cls(
-            base_url=settings.DIGIO_BASE_URL,
+            base_url=base_url,
             client_id=client_id,
             client_secret=client_secret,
         )
@@ -152,25 +161,31 @@ class DigioClient:
         identifier: str,
         sign_type: str,
         expire_in_days: int = 10,
+        redirect_url: str = "",
     ) -> dict:
+        payload = {
+            "file_name": file_name,
+            "file_data": base64.b64encode(file_bytes).decode("ascii"),
+            "expire_in_days": expire_in_days,
+            # Digio's own mail opens drive.digio.in and asks for a Digio login.
+            # We email the guest gateway link instead (no password).
+            "notify_signers": False,
+            "generate_access_token": True,
+            "display_on_page": "last",
+            "signers": [
+                {
+                    "identifier": identifier,
+                    "name": signer_name,
+                    "sign_type": sign_type,
+                }
+            ],
+        }
+        if redirect_url:
+            payload["redirect_url"] = redirect_url
         return self.request(
             "POST",
             "/v2/client/document/uploadpdf",
-            {
-                "file_name": file_name,
-                "file_data": base64.b64encode(file_bytes).decode("ascii"),
-                "expire_in_days": expire_in_days,
-                "notify_signers": True,
-                "generate_access_token": True,
-                "display_on_page": "last",
-                "signers": [
-                    {
-                        "identifier": identifier,
-                        "name": signer_name,
-                        "sign_type": sign_type,
-                    }
-                ],
-            },
+            payload,
         )
 
     def get_document(self, document_id: str) -> dict:
@@ -202,6 +217,7 @@ class DigioClient:
         template_name: str,
         reference_id: str,
     ) -> dict:
+        transaction_id = reference_id.replace("-", "")
         return self.request(
             "POST",
             "/client/kyc/v2/request/with_template",
@@ -210,13 +226,21 @@ class DigioClient:
                 "customer_name": customer_name,
                 "template_name": template_name,
                 "notify_customer": True,
-                "generate_access_token": True,
+                # Do not generate a GWT bypass token: the customer must complete
+                # Digio's initial email/mobile OTP verification.
+                "generate_access_token": False,
                 "reference_id": reference_id,
+                "transaction_id": transaction_id,
+                "expire_in_days": 10,
             },
         )
 
     def get_kyc_response(self, request_id: str) -> dict:
-        return self.request("GET", f"/client/kyc/v2/{request_id}/response")
+        # DigiStudio's detailed-result API is POST, despite being named "Get Details".
+        return self.request(
+            "POST",
+            f"/client/kyc/v2/{request_id}/response?detail_response=true",
+        )
 
 
 def extract_entity_id(payload: dict) -> str:
@@ -279,3 +303,14 @@ def _friendly_error(body: str, *, fallback: str) -> str:
             "docker compose up -d --force-recreate django. "
             "See https://documentation.digio.in/digikyc/agent_assisted_vkyc/integration_guide/"
         )
+    reference = parsed.get("details")
+    suffix = " ".join(
+        part
+        for part in (
+            f"Code: {code}." if code else "",
+            f"Digio reference: {reference}." if isinstance(reference, str) and reference else "",
+        )
+        if part
+    )
+    friendly = message or fallback
+    return f"{friendly} {suffix}".strip()
