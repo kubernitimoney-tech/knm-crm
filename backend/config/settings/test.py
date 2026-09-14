@@ -34,6 +34,7 @@ STORAGES = {
 MEDIA_ROOT = BASE_DIR / "media-test"
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 EMAIL_HOST = ""
+DEFAULT_FROM_EMAIL = "noreply@test.local"
 
 DIGIO_ENV = "sandbox"
 DIGIO_CLIENT_ID = "test-digio-client"
@@ -44,3 +45,4 @@ DIGIO_ESIGN_SIGN_TYPE = "aadhaar"
 DIGIO_WEBHOOK_ALLOW_UNSIGNED = False
 DIGIO_BASE_URL = "https://ext-api.digio.in"
 DIGIO_GATEWAY_BASE_URL = "https://ext.digio.in"
+FRONTEND_BASE_URL = "http://localhost:3000"

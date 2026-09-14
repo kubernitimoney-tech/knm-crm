@@ -1,0 +1,26 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">Complete your identity verification</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | title }},</p>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+  Please complete your Aadhaar, PAN, selfie and OCR verification.
+</p>
+{% if lead_id %}
+<p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Lead: {{ lead_id }}</p>
+{% endif %}
+{% if kyc_url %}
+<p style="margin:0 0 24px;">
+  <a href="{{ kyc_url }}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:8px;">Start Video KYC</a>
+</p>
+<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#6b7280;">
+  If the button does not open, copy this URL into your browser:<br />
+  <span style="word-break:break-all;">{{ kyc_url }}</span>
+</p>
+{% endif %}
+<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#b45309;">
+  Do not share this verification link with anyone.
+</p>
+<p style="margin:0;font-size:15px;line-height:1.6;">
+  Thank you for choosing {{ brand_name }}.
+</p>
+{% endblock %}

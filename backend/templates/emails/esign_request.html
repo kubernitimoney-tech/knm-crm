@@ -1,0 +1,24 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">Please e-sign your loan agreement.</h1>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | title }},</p>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+  Please review Agreement.pdf, then continue with {{ sign_method }}.
+</p>
+{% if lead_id %}
+<p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Lead: {{ lead_id }}</p>
+{% endif %}
+{% if signing_url %}
+<p style="margin:0 0 24px;">
+  <a href="{{ signing_url }}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:8px;">Click Here</a>
+</p>
+<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#6b7280;">
+  This link opens Document Signing. You do not need a Digio account or password.
+  If the link does not open, copy this URL into your browser:<br />
+  <span style="word-break:break-all;">{{ signing_url }}</span>
+</p>
+{% endif %}
+<p style="margin:0;font-size:15px;line-height:1.6;">
+  Thank you for choosing {{ brand_name }}.
+</p>
+{% endblock %}

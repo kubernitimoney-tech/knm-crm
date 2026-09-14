@@ -41,10 +41,77 @@ function detailRows(record: Record<string, string>) {
 }
 
 const VIDEO_KYC_TAB_ITEMS = [
-  { value: 'video', label: 'Video Details' },
+  { value: 'video', label: 'Selfie / Video' },
   { value: 'aadhaar', label: 'Aadhar Details' },
   { value: 'pan', label: 'Pancard Details' },
 ] as const;
+
+function VideoKycPlayer({ src }: { src: string | null }) {
+  const [playbackError, setPlaybackError] = useState(false);
+
+  useEffect(() => {
+    setPlaybackError(false);
+  }, [src]);
+
+  if (!src) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
+        <p className="text-xs text-slate-400 font-medium text-center px-4">
+          No video recording was returned for this workflow.
+        </p>
+      </div>
+    );
+  }
+
+  if (playbackError) {
+    return (
+      <div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 px-4">
+        <p className="text-xs text-slate-500 font-medium text-center">
+          This recording cannot be played here. Download the file or open it in Chrome.
+        </p>
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[11px] font-bold text-primary-deep underline"
+        >
+          Open recording
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <video
+      controls
+      playsInline
+      preload="metadata"
+      className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-black max-h-[320px]"
+      onError={() => setPlaybackError(true)}
+    >
+      <source src={src} type="video/mp4" />
+    </video>
+  );
+}
+
+function SelfiePreview({ src }: { src: string | null }) {
+  if (!src) {
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/40">
+        <p className="px-4 text-center text-xs font-medium text-slate-400">
+          No selfie image has been returned yet.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt="Customer selfie captured during KYC"
+      className="max-h-[320px] w-full rounded-lg border border-slate-200 bg-black object-contain dark:border-slate-800"
+    />
+  );
+}
 
 export function VideoKycDetailPage() {
   const { leadId, requestId } = useParams<{ leadId: string; requestId: string }>();
@@ -98,7 +165,11 @@ export function VideoKycDetailPage() {
     );
   }
 
-  const { geolocation, recording_file_url: recordingUrl } = detail.video_details;
+  const {
+    geolocation,
+    recording_file_url: recordingUrl,
+    selfie_file_url: selfieUrl,
+  } = detail.video_details;
   const hasCoordinates = geolocation.latitude != null && geolocation.longitude != null;
 
   return (
@@ -149,6 +220,7 @@ export function VideoKycDetailPage() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">ID&apos;s Found</p>
             <div className="flex flex-wrap gap-1.5">
               <IdFoundBadge label="Video" found={detail.ids_found.video} />
+              <IdFoundBadge label="Selfie" found={detail.ids_found.selfie} />
               <IdFoundBadge label="Aadhaar" found={detail.ids_found.aadhaar} />
               <IdFoundBadge label="PAN" found={detail.ids_found.pan} />
             </div>
@@ -168,7 +240,7 @@ export function VideoKycDetailPage() {
         />
 
         <TabsContent value="video" className="mt-0 animate-in slide-in-from-bottom-2 duration-300">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="p-4 border-slate-150 dark:border-slate-800 space-y-3">
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <MapPin size={12} />
@@ -197,20 +269,13 @@ export function VideoKycDetailPage() {
             </Card>
 
             <Card className="p-4 border-slate-150 dark:border-slate-800 space-y-3">
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Selfie</p>
+              <SelfiePreview src={selfieUrl} />
+            </Card>
+
+            <Card className="p-4 border-slate-150 dark:border-slate-800 space-y-3">
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Video Player</p>
-              {recordingUrl ? (
-                <video
-                  controls
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-black max-h-[320px]"
-                  src={recordingUrl}
-                >
-                  Your browser does not support the video tag.
-                </video>
-              ) : (
-                <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
-                  <p className="text-xs text-slate-400 font-medium italic">No recording available yet.</p>
-                </div>
-              )}
+              <VideoKycPlayer src={recordingUrl} />
             </Card>
           </div>
         </TabsContent>

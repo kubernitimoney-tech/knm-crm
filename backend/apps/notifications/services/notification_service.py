@@ -392,6 +392,65 @@ class NotificationService:
         )
 
     @classmethod
+    def send_esign_request_email(
+        cls,
+        *,
+        lead,
+        request_url: str,
+        recipient_email: str = "",
+        sign_type: str = "electronic",
+    ) -> None:
+        """Email the guest signing link. Do not send Digio Drive login URLs."""
+        customer = getattr(lead, "customer", None)
+        customer_label = cls._customer_label(customer)
+        email = (recipient_email or getattr(customer, "email", None) or "").strip()
+        if not email:
+            raise ValueError("This customer has no email address. Add one before sending e-sign.")
+        if not (request_url or "").strip():
+            raise ValueError("E-sign signing link is missing.")
+        cls._send_email_on_commit(
+            subject=f"Please e-sign your loan agreement — {lead.lead_id}",
+            template="esign_request",
+            context={
+                "customer_name": customer_label,
+                "lead_id": lead.lead_id,
+                "signing_url": request_url.strip(),
+                "sign_method": (
+                    "Aadhaar OTP" if sign_type == "aadhaar" else "OTP sent to your registered email"
+                ),
+            },
+            recipients=[email],
+            raise_on_error=True,
+        )
+
+    @classmethod
+    def send_video_kyc_request_email(
+        cls,
+        *,
+        lead,
+        request_url: str,
+        recipient_email: str = "",
+    ) -> None:
+        customer = getattr(lead, "customer", None)
+        customer_label = cls._customer_label(customer)
+        email = (recipient_email or getattr(customer, "email", None) or "").strip()
+        if not email:
+            raise ValueError("This customer has no email address. Add one before sending KYC.")
+        if not (request_url or "").strip():
+            raise ValueError("Video KYC link is missing.")
+        cls._send_email_on_commit(
+            subject=f"Complete your Aadhaar, PAN and selfie KYC — {lead.lead_id}",
+            template="video_kyc_request",
+            context={
+                "customer_name": customer_label,
+                "lead_id": lead.lead_id,
+                "kyc_url": request_url.strip(),
+            },
+            recipients=[email],
+            raise_on_error=True,
+        )
+
+    @classmethod
     def notify_disbursal_sheet_sent(cls, application) -> None:
         customer_label = cls._customer_label(application.customer)
         title = "Disbursal sheet sent"

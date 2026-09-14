@@ -130,9 +130,15 @@ class LeadEsignRequest(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel):
         related_name="esign_requests_sent",
     )
     document_label = models.CharField(max_length=255, default="Loan Agreement Pack")
+    source_file = models.FileField(upload_to="lead_esign/source/%Y/%m/", blank=True)
     recipient_email = models.EmailField(blank=True)
     signed_file = models.FileField(upload_to="lead_esign/%Y/%m/", blank=True)
     signed_at = models.DateTimeField(null=True, blank=True)
+    sign_type = models.CharField(
+        max_length=20,
+        choices=[("aadhaar", "Aadhaar OTP"), ("electronic", "Email OTP")],
+        default="electronic",
+    )
     provider = models.CharField(
         max_length=20,
         choices=IntegrationProvider.choices,
@@ -163,6 +169,7 @@ class LeadVideoKycRequest(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel):
     session_label = models.CharField(max_length=255, default="Video KYC Session")
     recipient_email = models.EmailField(blank=True)
     recording_file = models.FileField(upload_to="lead_video_kyc/%Y/%m/", blank=True)
+    selfie_file = models.FileField(upload_to="lead_video_kyc/selfie/%Y/%m/", blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     session_details = models.JSONField(default=dict, blank=True)
     provider = models.CharField(
