@@ -119,7 +119,9 @@ class SmsService:
             parsed = json.loads(body)
         except json.JSONDecodeError:
             parsed = None
-        if isinstance(parsed, dict) and str(parsed.get("return") or parsed.get("type") or "").lower() in {
+        if isinstance(parsed, dict) and str(
+            parsed.get("return") or parsed.get("type") or ""
+        ).lower() in {
             "false",
             "error",
         }:

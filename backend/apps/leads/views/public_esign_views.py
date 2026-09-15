@@ -132,7 +132,9 @@ class PublicEsignEmailOtpAPIView(APIView):
         except (DigioValidationError, DigioConfigurationError, DigioAPIError) as exc:
             return _digio_error_response(exc)
         except Exception as exc:
-            return _digio_error_response(DigioValidationError(str(exc) or "Could not send the verification code."))
+            return _digio_error_response(
+                DigioValidationError(str(exc) or "Could not send the verification code.")
+            )
         return success_response(
             data={
                 "otp_sent": True,

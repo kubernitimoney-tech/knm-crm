@@ -566,6 +566,7 @@ class TestDigioEsignAndVideoKyc:
             email_otp = api.post(reverse("public-esign-email-otp", kwargs={"pk": row.id}), {})
             assert email_otp.status_code == status.HTTP_200_OK
             from django.core.cache import cache
+
             from apps.integrations.digio.esign import AADHAAR_OTP_KEY, EMAIL_OTP_KEY
 
             email_code = cache.get(EMAIL_OTP_KEY.format(row.id))

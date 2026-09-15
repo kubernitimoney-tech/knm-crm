@@ -1,3 +1,5 @@
+import base64
+import binascii
 import logging
 import secrets
 from uuid import uuid4
@@ -274,9 +276,6 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
         if isinstance(payload, dict):
             encoded = payload.get("file_data") or payload.get("document")
             if encoded:
-                import base64
-                import binascii
-
                 try:
                     signed_bytes = base64.b64decode(encoded, validate=True)
                 except (ValueError, binascii.Error):
@@ -286,7 +285,6 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
                 row.provider_request_id = document_id
         if not signed_bytes and row.provider_request_id:
             try:
-
                 signed_bytes = client.download_document(row.provider_request_id)
             except DigioAPIError:
                 logger.exception(
@@ -298,22 +296,6 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
         if str(cached.get("otp") or "") != otp_code:
             raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")
         signed_bytes = _esign_source_bytes(row)
-
-                signed_bytes = base64.b64decode(encoded, validate=True)
-            except (ValueError, binascii.Error):
-                signed_bytes = b""
-        document_id = str(payload.get("id") or payload.get("document_id") or "").strip()
-        if document_id:
-            row.provider_request_id = document_id
-    if not signed_bytes and row.provider_request_id:
-        try:
-            signed_bytes = client.download_document(row.provider_request_id)
-        except DigioAPIError:
-            logger.exception(
-                "Failed to download Aadhaar-signed document %s", row.provider_request_id
-            )
-    if not signed_bytes:
-        raise DigioAPIError("Digio did not return the signed document.")
 
     row.signed_file.save(
         f"{row.provider_request_id or row.id}.pdf",
