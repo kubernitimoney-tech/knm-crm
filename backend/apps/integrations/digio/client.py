@@ -191,13 +191,14 @@ class DigioClient:
         sign_type: str,
         expire_in_days: int = 10,
         redirect_url: str = "",
+        reason: str = "Loan Agreement",
     ) -> dict:
         payload = {
             "file_name": file_name,
             "file_data": base64.b64encode(file_bytes).decode("ascii"),
             "expire_in_days": expire_in_days,
             # Digio's own mail opens drive.digio.in and asks for a Digio login.
-            # We email the guest gateway link instead (no password).
+            # We email the LMS /sign/ page instead.
             "notify_signers": False,
             "generate_access_token": True,
             "signers": [
@@ -205,6 +206,7 @@ class DigioClient:
                     "identifier": identifier,
                     "name": signer_name,
                     "sign_type": sign_type,
+                    "reason": reason,
                 }
             ],
         }

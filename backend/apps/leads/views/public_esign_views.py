@@ -67,6 +67,8 @@ def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
         "email_hint": _mask_email(row.recipient_email or (customer.email if customer else "")),
         "email_verified": _email_verified(row),
         "company_name": getattr(settings, "BRAND_NAME", "Kuberniti Money"),
+        "company_url": (getattr(settings, "FRONTEND_BASE_URL", "") or "").rstrip("/")
+        or "https://kubernitimoney.com",
         "company_email": _company_email(),
         "reason": row.document_label or "Loan Agreement",
         "city": _customer_city(customer),
@@ -118,6 +120,11 @@ class PublicEsignAPIView(APIView):
 
     def get(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
+        sync = str(request.query_params.get("sync") or "").strip().lower() in {"1", "true", "yes"}
+        if sync and row.status != EsignRequestStatus.SIGNED:
+            from apps.integrations.digio.webhooks import refresh_esign_from_provider
+
+            row = refresh_esign_from_provider(row)
         return success_response(data=_public_esign_payload(request, row))
 
 

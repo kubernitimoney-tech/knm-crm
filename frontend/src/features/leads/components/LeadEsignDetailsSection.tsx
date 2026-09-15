@@ -99,13 +99,13 @@ export function LeadEsignDetailsSection({
   const handleSendRequest = async () => {
     setIsSending(true);
     try {
-      const created = await sendLeadEsignRequest(leadId);
+      const created = await sendLeadEsignRequest(leadId, 'aadhaar');
       setEntries((prev) => [mapApiEntry(created), ...prev]);
       toast({
         title: 'E-sign request sent',
         description: customerEmail
-          ? `Signing link emailed to ${customerEmail}. Customer previews Agreement.pdf, then signs with Aadhaar OTP on the Aadhaar-linked mobile.`
-          : 'Signing link created. Customer previews Agreement.pdf, then signs with Aadhaar OTP on the Aadhaar-linked mobile.',
+          ? `Signing link emailed to ${customerEmail}. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.`
+          : 'Signing link created. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.',
         variant: 'success',
       });
     } catch (err) {
@@ -123,8 +123,7 @@ export function LeadEsignDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Customer previews Agreement.pdf on our page, then enters Aadhaar or VID and OTP. No drawn
-          signature is required.
+          Customer verifies email on our page, then Sign Now opens Aadhaar eSign (Protean). OTP goes to the Aadhaar-linked mobile.
         </p>
         {canSendRequest ? (
           <Button
