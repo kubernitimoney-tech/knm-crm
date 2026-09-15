@@ -1,12 +1,18 @@
 from io import BytesIO
 
+from django.conf import settings
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from apps.core.responses import error_response, success_response
-from apps.integrations.digio.esign import complete_esign_aadhaar_otp, send_esign_aadhaar_otp
+from apps.integrations.digio.esign import (
+    complete_esign_aadhaar_otp,
+    send_esign_aadhaar_otp,
+    send_esign_email_otp,
+    verify_esign_email_otp,
+)
 from apps.integrations.digio.exceptions import (
     DigioAPIError,
     DigioConfigurationError,
@@ -21,6 +27,20 @@ from apps.integrations.digio.pdf import build_agreement_pdf
 from apps.leads.models import EsignRequestStatus, LeadEsignRequest
 
 
+def _company_email() -> str:
+    raw = str(getattr(settings, "DEFAULT_FROM_EMAIL", "") or "")
+    if "<" in raw and ">" in raw:
+        raw = raw[raw.find("<") + 1 : raw.find(">")]
+    return raw.strip()
+
+
+def _customer_city(customer) -> str:
+    if not customer:
+        return ""
+    address = customer.addresses.order_by("-created_at").only("city").first()
+    return (address.city if address else "") or ""
+
+
 def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
     customer = row.lead.customer
     signed = row.status == EsignRequestStatus.SIGNED
@@ -29,7 +49,7 @@ def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
         "id": str(row.id),
         "status": row.status,
         "sign_type": row.sign_type or "aadhaar",
-        "document_name": row.document_label or "Agreement.pdf",
+        "document_name": row.document_label or "Loan Agreement",
         "customer_name": customer.full_name if customer else "",
         "review_url": customer_esign_review_url(row.id),
         "signing_url": row.request_url,
@@ -44,6 +64,15 @@ def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
             request.build_absolute_uri(row.signed_file.url) if row.signed_file else None
         ),
         "mobile_hint": _mask_mobile(customer.mobile_number if customer else ""),
+        "email_hint": _mask_email(row.recipient_email or (customer.email if customer else "")),
+        "email_verified": _email_verified(row),
+        "company_name": getattr(settings, "BRAND_NAME", "Kuberniti Money"),
+        "company_email": _company_email(),
+        "reason": row.document_label or "Loan Agreement",
+        "city": _customer_city(customer),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "signed_at": row.signed_at.isoformat() if row.signed_at else None,
+        "transaction_id": row.provider_request_id or str(row.id),
     }
 
 
@@ -52,6 +81,25 @@ def _mask_mobile(value: str) -> str:
     if len(digits) < 4:
         return ""
     return f"{'*' * (len(digits) - 4)}{digits[-4:]}"
+
+
+def _mask_email(value: str) -> str:
+    email = (value or "").strip()
+    if "@" not in email:
+        return ""
+    local, _, domain = email.partition("@")
+    if len(local) <= 2:
+        visible = local[:1] or "*"
+        return f"{visible}***@{domain}"
+    return f"{local[0]}***{local[-1]}@{domain}"
+
+
+def _email_verified(row: LeadEsignRequest) -> bool:
+    from django.core.cache import cache
+
+    from apps.integrations.digio.esign import EMAIL_OK_KEY
+
+    return bool(cache.get(EMAIL_OK_KEY.format(row.id)))
 
 
 def _digio_error_response(exc: Exception):
@@ -73,6 +121,47 @@ class PublicEsignAPIView(APIView):
         return success_response(data=_public_esign_payload(request, row))
 
 
+class PublicEsignEmailOtpAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, pk):
+        row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
+        try:
+            send_esign_email_otp(row=row)
+        except (DigioValidationError, DigioConfigurationError, DigioAPIError) as exc:
+            return _digio_error_response(exc)
+        except Exception as exc:
+            return _digio_error_response(
+                DigioValidationError(str(exc) or "Could not send the verification code.")
+            )
+        return success_response(
+            data={
+                "otp_sent": True,
+                "email_hint": _mask_email(
+                    row.recipient_email or (row.lead.customer.email if row.lead.customer else "")
+                ),
+            },
+            message="Verification code sent to your email.",
+        )
+
+
+class PublicEsignVerifyEmailOtpAPIView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, pk):
+        row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
+        try:
+            verify_esign_email_otp(row=row, otp=str(request.data.get("otp") or ""))
+        except (DigioValidationError, DigioConfigurationError, DigioAPIError) as exc:
+            return _digio_error_response(exc)
+        return success_response(
+            data=_public_esign_payload(request, row),
+            message="Email verified.",
+        )
+
+
 class PublicEsignOtpAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -92,8 +181,13 @@ class PublicEsignOtpAPIView(APIView):
         except (DigioValidationError, DigioConfigurationError, DigioAPIError) as exc:
             return _digio_error_response(exc)
         return success_response(
-            data={"otp_sent": True, "mobile_hint": _mask_mobile(row.lead.customer.mobile_number)},
-            message="OTP sent to the mobile number linked with this Aadhaar / VID.",
+            data={
+                "otp_sent": True,
+                "email_hint": _mask_email(
+                    row.recipient_email or (row.lead.customer.email if row.lead.customer else "")
+                ),
+            },
+            message="OTP sent to your email.",
         )
 
 

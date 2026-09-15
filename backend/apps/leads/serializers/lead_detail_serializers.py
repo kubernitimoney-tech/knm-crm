@@ -371,6 +371,7 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
     recording_file_url = serializers.SerializerMethodField()
     selfie_file_url = serializers.SerializerMethodField()
     email_sent = serializers.SerializerMethodField()
+    sms_sent = serializers.SerializerMethodField()
 
     class Meta:
         model = LeadVideoKycRequest
@@ -385,6 +386,7 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
             "recording_file_url",
             "selfie_file_url",
             "email_sent",
+            "sms_sent",
             "request_url",
             "provider_request_id",
         ]
@@ -416,6 +418,9 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
 
     def get_email_sent(self, obj):
         return bool((obj.session_details or {}).get("email_sent"))
+
+    def get_sms_sent(self, obj):
+        return bool((obj.session_details or {}).get("sms_sent"))
 
 
 def _customer_has_document(customer: Customer, document_code: str) -> bool:

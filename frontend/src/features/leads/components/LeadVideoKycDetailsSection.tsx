@@ -1,13 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Download, ExternalLink, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -23,6 +16,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import {
   fetchLeadVideoKycRequests,
   sendLeadVideoKycRequest,
+  videoKycDispatchMessage,
   type ApiLeadVideoKycRequest,
 } from '@/lib/leadDetailsApi';
 import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
@@ -50,6 +44,7 @@ export interface LeadVideoKycEntry {
 interface LeadVideoKycDetailsSectionProps {
   leadId: string;
   customerEmail?: string;
+  customerMobile?: string;
   canSendRequest?: boolean;
   refreshToken?: number;
 }
@@ -70,6 +65,7 @@ function mapApiEntry(entry: ApiLeadVideoKycRequest): LeadVideoKycEntry {
 export function LeadVideoKycDetailsSection({
   leadId,
   customerEmail,
+  customerMobile,
   canSendRequest = false,
   refreshToken = 0,
 }: LeadVideoKycDetailsSectionProps) {
@@ -79,7 +75,6 @@ export function LeadVideoKycDetailsSection({
   const [entries, setEntries] = useState<LeadVideoKycEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [isMethodDialogOpen, setIsMethodDialogOpen] = useState(false);
 
   const loadEntries = useCallback(async () => {
     if (!leadId) return;
@@ -102,18 +97,16 @@ export function LeadVideoKycDetailsSection({
     loadEntries();
   }, [loadEntries]);
 
-  const handleSendRequest = async (verificationMethod: 'email' | 'mobile') => {
+  const handleSendRequest = async () => {
     setIsSending(true);
     try {
-      const created = await sendLeadVideoKycRequest(leadId, verificationMethod);
+      const created = await sendLeadVideoKycRequest(leadId);
       setEntries((prev) => [mapApiEntry(created), ...prev]);
-      setIsMethodDialogOpen(false);
+      const dispatched = videoKycDispatchMessage(created, customerEmail, customerMobile);
       toast({
         title: 'Video KYC request sent',
-        description: created.email_sent && customerEmail
-          ? `Video KYC link emailed to ${customerEmail}.`
-          : 'Video KYC was created, but the email could not be sent. Use Open to share the link.',
-        variant: created.email_sent ? 'success' : 'error',
+        description: dispatched.text,
+        variant: dispatched.ok ? 'success' : 'error',
       });
     } catch (err) {
       toast({
@@ -138,7 +131,7 @@ export function LeadVideoKycDetailsSection({
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
-            onClick={() => setIsMethodDialogOpen(true)}
+            onClick={() => void handleSendRequest()}
             disabled={isSending}
             title="Request Video KYC"
           >
@@ -243,31 +236,6 @@ export function LeadVideoKycDetailsSection({
           )}
         </TableBody>
       </SectionTable>
-      <Dialog open={isMethodDialogOpen} onOpenChange={setIsMethodDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Choose initial verification code</DialogTitle>
-            <DialogDescription>
-              Digio will verify the customer with this code before starting the KYC workflow.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <Button
-              onClick={() => void handleSendRequest('mobile')}
-              disabled={isSending}
-            >
-              Send code to mobile number
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void handleSendRequest('email')}
-              disabled={isSending}
-            >
-              Send code to email address
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

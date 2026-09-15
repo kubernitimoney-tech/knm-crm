@@ -64,6 +64,18 @@ class DigioClient:
                 "Use https://api.digio.in for production or "
                 "https://ext-api.digio.in for sandbox."
             )
+        env_name = (settings.DIGIO_ENV or "").strip().lower()
+        if env_name in {"sandbox", "test"} and host == "api.digio.in":
+            raise DigioConfigurationError(
+                "DIGIO_ENV=sandbox but DIGIO_BASE_URL is the production API. "
+                "Use https://ext-api.digio.in with sandbox Client ID/Secret from "
+                "https://ext.digio.in, or set DIGIO_ENV=production to use these keys."
+            )
+        if env_name in {"production", "prod", "live"} and host == "ext-api.digio.in":
+            raise DigioConfigurationError(
+                "DIGIO_ENV=production but DIGIO_BASE_URL is the sandbox API. "
+                "Use https://api.digio.in with production Client ID/Secret."
+            )
         return cls(
             base_url=base_url,
             client_id=client_id,
@@ -103,6 +115,19 @@ class DigioClient:
                         f"Digio redirected the request (HTTP {exc.code}) instead of returning JSON. "
                         "Confirm DIGIO_ENV=sandbox, DIGIO_BASE_URL=https://ext-api.digio.in, and that "
                         "DIGIO_CLIENT_ID / DIGIO_CLIENT_SECRET are sandbox credentials."
+                    ),
+                    status_code=exc.code,
+                    body=err_body,
+                ) from exc
+            if exc.code == 502 and _looks_like_html(err_body):
+                raise DigioAPIError(
+                    (
+                        "Digio sandbox returned HTTP 502 (Bad Gateway) for /v2/client/document/uploadpdf. "
+                        "That usually means production Client ID/Secret were sent to "
+                        "https://ext-api.digio.in. Open https://ext.digio.in, copy that sandbox "
+                        "Client ID and Secret into backend/.env, then run: "
+                        "docker compose up -d --force-recreate django. "
+                        "Do not use https://enterprise.digio.in keys for testing."
                     ),
                     status_code=exc.code,
                     body=err_body,
@@ -229,8 +254,7 @@ class DigioClient:
                 "customer_name": customer_name,
                 "template_name": template_name,
                 "notify_customer": True,
-                # Do not generate a GWT bypass token: the customer must complete
-                # Digio's initial email/mobile OTP verification.
+                # No GWT token: Digio must show Send code to Mobile, then the security code.
                 "generate_access_token": False,
                 "reference_id": reference_id,
                 "transaction_id": transaction_id,
@@ -368,12 +392,11 @@ def _friendly_error(body: str, *, fallback: str) -> str:
         )
     reference = parsed.get("details")
     if str(code) == "1024" or "requested resource not found" in message.lower():
-        ref = f" Digio reference: {reference}." if isinstance(reference, str) and reference else ""
+        ref = f" ({reference})" if isinstance(reference, str) and reference else ""
         return (
-            "Digio does not support sending Aadhaar OTP from this page (code 1024). "
-            "Preview the agreement here, then continue to Digio's Aadhaar OTP screen. "
-            "That is not the draw-signature screen."
-            f"{ref}"
+            "Code 1024 means Digio has no /v2/client/aadhaar/esign/otp API. "
+            "Send OTP on our page was calling an endpoint that does not exist"
+            f"{ref}."
         )
     suffix = " ".join(
         part

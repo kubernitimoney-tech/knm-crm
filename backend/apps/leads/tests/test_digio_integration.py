@@ -175,6 +175,8 @@ class TestDigioEsignAndVideoKyc:
         assert "/#/gateway/ekyc/" in row.request_url
         assert row.session_details["email_sent"] is True
         assert response.data["data"]["email_sent"] is True
+        assert row.session_details["sms_sent"] is True
+        assert response.data["data"]["sms_sent"] is True
         assert mock_client.create_kyc_request.call_args.kwargs["customer_identifier"] == (
             lead.customer.mobile_number
         )
@@ -183,11 +185,17 @@ class TestDigioEsignAndVideoKyc:
         assert len(mail.outbox) == 1
         assert f"/verify-kyc/{row.id}" in mail.outbox[0].body
         assert mail.outbox[0].to == [lead.customer.email]
+        from apps.notifications.services.sms_service import SmsService
+
+        assert SmsService.outbox
+        assert SmsService.outbox[-1]["mobile"] == lead.customer.mobile_number
+        assert f"/verify-kyc/{row.id}" in SmsService.outbox[-1]["message"]
         public = client.get(reverse("public-video-kyc", kwargs={"pk": row.id}))
         assert public.status_code == status.HTTP_200_OK
         assert public.data["data"]["document_id"] == row.provider_request_id
         assert public.data["data"]["identifier"] == lead.customer.mobile_number
         assert "access_token" not in public.data["data"]
+        assert "gateway_url" not in public.data["data"]
 
     def test_send_video_kyc_can_use_email_for_initial_code(self):
         admin = UserFactory(email="admin-digio-vkyc-email@test.com")
@@ -555,6 +563,20 @@ class TestDigioEsignAndVideoKyc:
             )
             assert created.status_code == status.HTTP_201_CREATED
             row = LeadEsignRequest.objects.get(lead=lead)
+            email_otp = api.post(reverse("public-esign-email-otp", kwargs={"pk": row.id}), {})
+            assert email_otp.status_code == status.HTTP_200_OK
+            from django.core.cache import cache
+
+            from apps.integrations.digio.esign import AADHAAR_OTP_KEY, EMAIL_OTP_KEY
+
+            email_code = cache.get(EMAIL_OTP_KEY.format(row.id))
+            assert email_code
+            verify_email = api.post(
+                reverse("public-esign-verify-email-otp", kwargs={"pk": row.id}),
+                {"otp": email_code},
+                format="json",
+            )
+            assert verify_email.status_code == status.HTTP_200_OK
             otp_response = api.post(
                 reverse("public-esign-otp", kwargs={"pk": row.id}),
                 {"aadhaar_number": "234123412341"},
@@ -567,9 +589,12 @@ class TestDigioEsignAndVideoKyc:
                 format="json",
             )
             assert vid_response.status_code == status.HTTP_200_OK
+            aadhaar_cached = cache.get(AADHAAR_OTP_KEY.format(row.id)) or {}
+            aadhaar_code = aadhaar_cached.get("otp")
+            assert aadhaar_code
             verify_response = api.post(
                 reverse("public-esign-verify-otp", kwargs={"pk": row.id}),
-                {"otp": "123456"},
+                {"otp": aadhaar_code},
                 format="json",
             )
 

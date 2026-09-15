@@ -47,3 +47,5 @@ DIGIO_WEBHOOK_ALLOW_UNSIGNED = False
 DIGIO_BASE_URL = "https://ext-api.digio.in"
 DIGIO_GATEWAY_BASE_URL = "https://ext.digio.in"
 FRONTEND_BASE_URL = "http://localhost:3000"
+SMS_PROVIDER = "console"
+SMS_API_KEY = ""
