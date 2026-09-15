@@ -183,11 +183,9 @@ class PublicEsignOtpAPIView(APIView):
         return success_response(
             data={
                 "otp_sent": True,
-                "email_hint": _mask_email(
-                    row.recipient_email or (row.lead.customer.email if row.lead.customer else "")
-                ),
+                "otp_channel": "aadhaar_mobile",
             },
-            message="OTP sent to your email.",
+            message="OTP sent to the Aadhaar-linked mobile number.",
         )
 
 
