@@ -671,7 +671,7 @@ export const LeadDetailsPage = () => {
     if (!id) return;
     setIsRequestingTimelineEsign(true);
     try {
-      await sendLeadEsignRequest(id);
+      await sendLeadEsignRequest(id, 'aadhaar');
       setEsignKycRefresh((n) => n + 1);
       toast({
         title: 'E-sign request sent',

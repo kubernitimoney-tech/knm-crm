@@ -157,6 +157,18 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     return True
 
 
+def refresh_esign_from_provider(row: LeadEsignRequest) -> LeadEsignRequest:
+    """After Protean redirects back, copy Digio's completed PDF if the webhook has not arrived yet."""
+    provider_id = (row.provider_request_id or "").strip()
+    if not provider_id:
+        return row
+    if row.status == EsignRequestStatus.SIGNED and row.signed_file:
+        return row
+    _handle_esign(provider_id, event="")
+    row.refresh_from_db()
+    return row
+
+
 def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
     row = LeadVideoKycRequest.objects.filter(provider_request_id__iexact=request_id).first()
     if row is None:

@@ -122,13 +122,40 @@ class TestDigioEsignAndVideoKyc:
             ):
                 response = client.post(
                     reverse("lead-esign-requests", kwargs={"pk": lead.id}),
-                    {"sign_type": "aadhaar"},
+                    {},
                 )
 
         assert response.status_code == status.HTTP_201_CREATED
         row = LeadEsignRequest.objects.get(lead=lead)
         assert row.sign_type == "electronic"
         assert mock_client.upload_pdf.call_args.kwargs["sign_type"] == "electronic"
+
+    def test_send_esign_request_sign_type_overrides_settings(self):
+        admin = UserFactory(email="admin-digio-aadhaar-override@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        mock_client = MagicMock()
+        mock_client.upload_pdf.return_value = {
+            "id": "DIDAADHAAROVERRIDE1",
+            "access_token": {"id": "tok-aadhaar"},
+        }
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with override_settings(DIGIO_ESIGN_SIGN_TYPE="electronic"):
+            with patch(
+                "apps.integrations.digio.esign.DigioClient.from_settings",
+                return_value=mock_client,
+            ):
+                response = client.post(
+                    reverse("lead-esign-requests", kwargs={"pk": lead.id}),
+                    {"sign_type": "aadhaar"},
+                )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        row = LeadEsignRequest.objects.get(lead=lead)
+        assert row.sign_type == "aadhaar"
+        assert mock_client.upload_pdf.call_args.kwargs["sign_type"] == "aadhaar"
 
     def test_send_esign_fails_without_creating_row_when_digio_errors(self):
         from apps.integrations.digio.exceptions import DigioAPIError
@@ -245,10 +272,36 @@ class TestDigioEsignAndVideoKyc:
         assert payload["access_token"] == "tok-public"
         assert payload["sdk_url"].endswith("/sdk/v11/digio.js")
         assert f"/sign/{row.id}" in payload["review_url"]
+        assert payload["company_url"]
         assert payload["document_url"].endswith(f"/api/v1/leads/esign/{row.id}/document/")
         document = client.get(reverse("public-esign-document", kwargs={"pk": row.id}))
         assert document.status_code == status.HTTP_200_OK
         assert document["Content-Type"].startswith("application/pdf")
+
+    def test_public_esign_sync_marks_signed_from_digio(self):
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SENT,
+            provider_request_id="DIDSYNC1234567890AB",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {"status": "completed"}
+        mock_client.download_document.return_value = b"%PDF-signed"
+
+        client = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(reverse("public-esign", kwargs={"pk": row.id}), {"sync": "1"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["signed"] is True
+        row.refresh_from_db()
+        assert row.status == EsignRequestStatus.SIGNED
+        assert row.signed_file
 
     def test_gateway_ignores_digio_drive_login_url(self):
         from apps.integrations.digio.gateway import gateway_from_payload
