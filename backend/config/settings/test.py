@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
 from .base import *  # noqa: F403
+from .base import _named_from_email
 
 DEBUG = False
 PASSWORD_HASHERS = [
@@ -34,7 +35,7 @@ STORAGES = {
 MEDIA_ROOT = BASE_DIR / "media-test"
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 EMAIL_HOST = ""
-DEFAULT_FROM_EMAIL = "noreply@test.local"
+DEFAULT_FROM_EMAIL = _named_from_email("noreply@test.local", BRAND_NAME)
 
 DIGIO_ENV = "sandbox"
 DIGIO_CLIENT_ID = "test-digio-client"

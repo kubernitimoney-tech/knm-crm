@@ -219,13 +219,16 @@ def _vkyc_needs_refresh(row: LeadVideoKycRequest) -> bool:
 def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     response = _unwrap_kyc_response(response if isinstance(response, dict) else {})
     kyc_status = str(response.get("status") or response.get("kyc_status") or event).lower()
-    should_complete = row.status == VideoKycRequestStatus.COMPLETED or _is_success_event(
-        event
-    ) or kyc_status in {
-        "approved",
-        "completed",
-        "success",
-    }
+    should_complete = (
+        row.status == VideoKycRequestStatus.COMPLETED
+        or _is_success_event(event)
+        or kyc_status
+        in {
+            "approved",
+            "completed",
+            "success",
+        }
+    )
     if not should_complete:
         details = dict(row.session_details or {})
         details["last_event"] = event
@@ -247,7 +250,7 @@ def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
         row.recording_file.save(f"{request_id}.mp4", ContentFile(video), save=False)
     if selfie and not row.selfie_file:
         row.selfie_file.save(f"{request_id}.jpg", ContentFile(selfie), save=False)
-    ids = dict((row.session_details.get("ids_found") or {}))
+    ids = dict(row.session_details.get("ids_found") or {})
     ids["video"] = bool(ids.get("video") or row.recording_file or video)
     ids["selfie"] = bool(ids.get("selfie") or row.selfie_file or selfie)
     row.session_details["ids_found"] = ids

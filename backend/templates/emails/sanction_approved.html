@@ -1,8 +1,8 @@
 {% extends "emails/base_email.html" %}
 {% block content %}
-<p style="margin:0 0 6px;font-size:13px;line-height:1.55;color:#111827;font-weight:700;">
+<p style="margin:0 0 6px;font-size:13px;line-height:1.55;color:{{ primary_color|default:'#2A2D4F' }};font-weight:700;">
   Sanction Approval by Credit Team of {{ brand_name }}, a Product of Har Shreejee Finance and Leasing Co. Ltd.
-  (<a href="https://www.kubernitimoney.com" style="color:#0f766e;text-decoration:none;">www.kubernitimoney.com</a>)
+  (<a href="https://www.kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">www.kubernitimoney.com</a>)
 </p>
 <p style="margin:0 0 4px;font-size:12px;line-height:1.5;color:#374151;">
   Corporate Office: E-37, 1st Floor, Sector 3, Noida, Uttar Pradesh, 201301
@@ -14,73 +14,73 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">
   <tr>
     <td style="padding:6px 0;font-size:13px;color:#6b7280;width:42%;">Date &amp; time</td>
-    <td style="padding:6px 0;font-size:13px;font-weight:600;color:#111827;">{{ letter_datetime|default:"—" }}</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ letter_datetime|default:"—" }}</td>
   </tr>
   <tr>
     <td style="padding:6px 0;font-size:13px;color:#6b7280;">Loan Application ID</td>
-    <td style="padding:6px 0;font-size:13px;font-weight:600;color:#111827;">{{ application_number }}</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ application_number }}</td>
   </tr>
   <tr>
     <td style="padding:6px 0;font-size:13px;color:#6b7280;">Applicant Name</td>
-    <td style="padding:6px 0;font-size:13px;font-weight:600;color:#111827;">{{ customer_name }}</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ customer_name }}</td>
   </tr>
 </table>
 
 <p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
   <strong>RESOLVED THAT</strong>, based on the assessment of the loan application submitted by the
   above-mentioned applicant through
-  <a href="https://www.kubernitimoney.com" style="color:#0f766e;text-decoration:none;">www.kubernitimoney.com</a>,
+  <a href="https://www.kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">www.kubernitimoney.com</a>,
   the Credit Team hereby accords approval in principle for the issuance of a short-term personal
   loan, subject to the disclosures, terms, and conditions as set out below.
 </p>
 
-<p style="margin:0 0 10px;font-size:14px;font-weight:700;letter-spacing:0.4px;color:#111827;">
+<p style="margin:0 0 10px;font-size:14px;font-weight:700;letter-spacing:0.4px;color:{{ primary_color|default:'#2A2D4F' }};">
   SCHEDULE OF SANCTIONED LOAN TERMS
 </p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border-collapse:collapse;border:1px solid #d1d5db;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border-collapse:collapse;border:1px solid {{ primary_color|default:'#2A2D4F' }};">
   <tr>
-    <th align="left" style="padding:9px 12px;font-size:12px;background:#111827;color:#ffffff;width:48%;">Particulars</th>
-    <th align="left" style="padding:9px 12px;font-size:12px;background:#111827;color:#ffffff;">Details</th>
+    <th align="left" style="padding:9px 12px;font-size:12px;background:{{ primary_color|default:'#2A2D4F' }};color:#ffffff;width:48%;">Particulars</th>
+    <th align="left" style="padding:9px 12px;font-size:12px;background:{{ primary_color|default:'#2A2D4F' }};color:#ffffff;">Details</th>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Loan Amount (Principal)</td>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if approved_amount %}&#8377; {{ approved_amount }}{% else %}—{% endif %}</td>
   </tr>
   <tr>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;color:#374151;">Rate of Interest</td>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">{{ interest_rate|default:"—" }}</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Rate of Interest</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ interest_rate|default:"—" }}</td>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Tenure</td>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{{ tenure|default:"—" }}</td>
   </tr>
   <tr>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;color:#374151;">Processing Fees</td>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">{% if processing_fee %}&#8377; {{ processing_fee }}{% else %}—{% endif %}</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Processing Fees</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{% if processing_fee %}&#8377; {{ processing_fee }}{% else %}—{% endif %}</td>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">GST on Processing Fees</td>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if gst %}&#8377; {{ gst }}{% else %}—{% endif %}</td>
   </tr>
   <tr>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;color:#374151;">Net Disbursed Amount</td>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">{% if net_disbursed_amount %}&#8377; {{ net_disbursed_amount }}{% else %}—{% endif %}</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Net Disbursed Amount</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{% if net_disbursed_amount %}&#8377; {{ net_disbursed_amount }}{% else %}—{% endif %}</td>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Repayment Amount (Total)</td>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if repayment_amount %}&#8377; {{ repayment_amount }}{% else %}—{% endif %}</td>
   </tr>
   <tr>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;color:#374151;">Due Date for Repayment</td>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">{{ due_date|default:"—" }}</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Due Date for Repayment</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ due_date|default:"—" }}</td>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Repayment Mode</td>
     <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{{ repayment_mode }}</td>
   </tr>
   <tr>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;color:#374151;">Penalty Interest</td>
-    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:#f9fafb;font-weight:600;">{{ penalty_rate|default:"—" }}</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Penalty Interest</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ penalty_rate|default:"—" }}</td>
   </tr>
   <tr>
     <td style="padding:8px 12px;font-size:13px;color:#374151;">Payment Structure</td>
@@ -108,8 +108,8 @@
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:collapse;">
   <tr>
-    <td style="padding:14px 16px;background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;">
-      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#92400e;letter-spacing:0.3px;">
+    <td style="padding:14px 16px;background:{{ brand_bg_color|default:'#F4F6F9' }};border:1px solid {{ primary_color|default:'#2A2D4F' }};border-radius:8px;">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:{{ primary_color|default:'#2A2D4F' }};letter-spacing:0.3px;">
         Mandatory Acceptance Format
       </p>
       <p style="margin:0 0 8px;font-size:13px;line-height:1.55;color:#111827;">
@@ -193,13 +193,13 @@
   may be reviewed upon request.
 </p>
 
-<p style="margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:0.4px;color:#111827;">
+<p style="margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:0.4px;color:{{ primary_color|default:'#2A2D4F' }};">
   GRIEVANCE REDRESSAL CONTACT
 </p>
 <p style="margin:0 0 18px;font-size:13px;line-height:1.55;color:#111827;">
   Komal Dhawan<br />
   Grievance Redressal Officer<br />
-  E-mail: <a href="mailto:grievance@kubernitimoney.com" style="color:#0f766e;text-decoration:none;">grievance@kubernitimoney.com</a>
+  E-mail: <a href="mailto:grievance@kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">grievance@kubernitimoney.com</a>
 </p>
 
 <p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
@@ -222,6 +222,6 @@
 </p>
 <p style="margin:0;font-size:12px;line-height:1.5;color:#6b7280;">
   For grievances, contact
-  <a href="mailto:grievance@kubernitimoney.com" style="color:#2563eb;text-decoration:none;">grievance@kubernitimoney.com</a>.
+  <a href="mailto:grievance@kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">grievance@kubernitimoney.com</a>.
 </p>
 {% endblock %}

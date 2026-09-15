@@ -286,6 +286,7 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
                 row.provider_request_id = document_id
         if not signed_bytes and row.provider_request_id:
             try:
+
                 signed_bytes = client.download_document(row.provider_request_id)
             except DigioAPIError:
                 logger.exception(
@@ -298,6 +299,22 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
             raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")
         signed_bytes = _esign_source_bytes(row)
 
+                signed_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error):
+                signed_bytes = b""
+        document_id = str(payload.get("id") or payload.get("document_id") or "").strip()
+        if document_id:
+            row.provider_request_id = document_id
+    if not signed_bytes and row.provider_request_id:
+        try:
+            signed_bytes = client.download_document(row.provider_request_id)
+        except DigioAPIError:
+            logger.exception(
+                "Failed to download Aadhaar-signed document %s", row.provider_request_id
+            )
+    if not signed_bytes:
+        raise DigioAPIError("Digio did not return the signed document.")
+
     row.signed_file.save(
         f"{row.provider_request_id or row.id}.pdf",
         ContentFile(signed_bytes),
@@ -309,4 +326,3 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     cache.delete(AADHAAR_OTP_KEY.format(row.id))
     cache.delete(EMAIL_OK_KEY.format(row.id))
     return row
-

@@ -3,10 +3,10 @@ name: CI/CD
 # Promotion path (PRs, not auto-merge):
 #   development → testing → staging → production
 #
-# Deploys after CI passes on a push (merged PR):
-#   testing    → test VPS    (test / api-test / dev / staging / api-staging)
-#   staging    → test VPS    (same box, staging branch)
-#   production → production VPS (app / api / kubernitimoney.com)
+# Deploys after CI passes:
+#   PR into testing, or push to testing → test VPS
+#   push to staging    → staging hostnames on the same VPS
+#   push to production → production VPS
 
 on:
   push:
@@ -42,7 +42,7 @@ jobs:
           cache-dependency-path: backend/requirements/dev.txt
 
       - name: Install Ruff
-        run: pip install "ruff>=0.9,<1.0"
+        run: pip install "ruff==0.15.20"
 
       - name: Ruff check
         run: ruff check .
@@ -200,7 +200,9 @@ jobs:
   deploy-test:
     name: Deploy — Test (test.kubernitimoney.com)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/testing') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'testing')
     needs:
       - backend-lint
       - backend-test
@@ -225,19 +227,20 @@ jobs:
             export VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
+            DEPLOY_REF="${{ github.event_name == 'pull_request' && format('pull/{0}/merge', github.event.pull_request.number) || 'testing' }}"
             if [ ! -d /knm-crm/.git ]; then
               git clone --branch testing "$REPO_URL" /knm-crm
             fi
             cd /knm-crm
             git remote set-url origin "$REPO_URL"
-            git fetch origin testing
-            git checkout testing
-            git reset --hard origin/testing
+            git fetch origin "$DEPLOY_REF"
+            git checkout -B testing FETCH_HEAD
             docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
             docker image prune -f
 
       - name: Open promotion PR
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

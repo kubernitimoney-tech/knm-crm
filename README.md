@@ -960,7 +960,7 @@ cd backend && ruff check . && ruff format --check . && cd ../frontend && npm run
 
 ```bash
 # Backend — Ruff is not in the production image; install once per container session
-docker compose exec django sh -c "pip install 'ruff>=0.9,<1.0' && ruff check . && ruff format --check ."
+docker compose exec django sh -c "pip install 'ruff==0.15.20' && ruff check . && ruff format --check ."
 
 # Frontend
 docker compose exec frontend npm run lint:eslint
@@ -986,26 +986,28 @@ Runs **backend (Ruff)**, **frontend (ESLint)**, **marketing-site (ESLint)**, plu
 **Install once** (Python 3.12+ and Node.js on the host; `npm install` in `frontend/` and `marketing-site/`):
 
 ```bash
-pip install pre-commit
-pre-commit install
+python -m pip install pre-commit
+python -m pre_commit install
 ```
+
+On Windows, `pre-commit` may not be on PATH after a user-level pip install. `python -m pre_commit` always works.
 
 **Run all hooks on the whole repo** (recommended before push):
 
 ```bash
-pre-commit run --all-files
+python -m pre_commit run --all-files
 ```
 
 **Run a single hook:**
 
 ```bash
-pre-commit run ruff --all-files
-pre-commit run ruff-format --all-files
-pre-commit run eslint-frontend --all-files
-pre-commit run eslint-marketing-site --all-files
+python -m pre_commit run ruff --all-files
+python -m pre_commit run ruff-format --all-files
+python -m pre_commit run eslint-frontend --all-files
+python -m pre_commit run eslint-marketing-site --all-files
 ```
 
-Hooks also run automatically on `git commit` after `pre-commit install`.
+Hooks also run automatically on `git commit` after `python -m pre_commit install`.
 
 ### CI (GitHub Actions)
 
@@ -1016,7 +1018,7 @@ On push/PR to `development`, `testing`, `staging`, `production`, `main`, or `mas
 - **Backend** — Ruff check + format check; pytest
 - **Frontend** — ESLint; production build
 - **Marketing site** — ESLint; production build
-- **`testing` branch only** — SSH deploy to test VPS after all checks pass
+- **PR into `testing`, or push to `testing`** — SSH deploy to the test VPS after all checks pass
 
 **Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
 

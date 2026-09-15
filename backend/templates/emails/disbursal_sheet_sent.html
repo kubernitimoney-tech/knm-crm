@@ -1,6 +1,6 @@
 {% extends "emails/base_email.html" %}
 {% block content %}
-<h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">Disbursal In Progress</h1>
+<h1 style="margin:0 0 16px;font-size:22px;color:{{ primary_color|default:'#2A2D4F' }};">Disbursal In Progress</h1>
 <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name }},</p>
 <p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
   The disbursal sheet for your loan has been sent for processing. Your funds will be
