@@ -590,11 +590,13 @@ class TestDigioEsignAndVideoKyc:
             )
             assert vid_response.status_code == status.HTTP_200_OK
             aadhaar_cached = cache.get(AADHAAR_OTP_KEY.format(row.id)) or {}
-            aadhaar_code = aadhaar_cached.get("otp")
-            assert aadhaar_code
+            assert aadhaar_cached.get("via_digio") is True
+            assert aadhaar_cached.get("otp") is None
+            assert aadhaar_cached.get("unique_request_id")
+            mock_client.generate_aadhaar_esign_otp.assert_called()
             verify_response = api.post(
                 reverse("public-esign-verify-otp", kwargs={"pk": row.id}),
-                {"otp": aadhaar_code},
+                {"otp": "654321"},
                 format="json",
             )
 
@@ -603,6 +605,7 @@ class TestDigioEsignAndVideoKyc:
         assert row.status == EsignRequestStatus.SIGNED
         assert row.signed_file
         assert verify_response.data["data"]["signed"] is True
+        mock_client.complete_aadhaar_esign.assert_called()
 
 
 class TestDigioClientResponseHandling:
