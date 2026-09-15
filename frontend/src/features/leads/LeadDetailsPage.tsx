@@ -48,7 +48,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -82,6 +81,7 @@ import {
   fetchLeadEmployments,
   sendLeadEsignRequest,
   sendLeadVideoKycRequest,
+  videoKycDispatchMessage,
   type ApiLeadSanction,
   type ApiLeadEmployment,
 } from '@/lib/leadDetailsApi';
@@ -205,7 +205,6 @@ export const LeadDetailsPage = () => {
   const [esignKycRefresh, setEsignKycRefresh] = useState(0);
   const [isRequestingTimelineEsign, setIsRequestingTimelineEsign] = useState(false);
   const [isRequestingTimelineVideoKyc, setIsRequestingTimelineVideoKyc] = useState(false);
-  const [isTimelineKycMethodOpen, setIsTimelineKycMethodOpen] = useState(false);
 
   const loadWorkflowReadiness = useCallback(async (options?: {
     freshSanction?: ApiLeadSanction | null;
@@ -665,6 +664,8 @@ export const LeadDetailsPage = () => {
   const customerCanAdd = (allowed: boolean) => allowed && !hideCustomerSectionActions;
   const customerEmailForRequests =
     leadData.email !== '—' ? leadData.email : undefined;
+  const customerMobileForRequests =
+    leadData.mobile !== '—' ? leadData.mobile : undefined;
 
   const handleTimelineEsignRequest = useCallback(async () => {
     if (!id) return;
@@ -690,21 +691,21 @@ export const LeadDetailsPage = () => {
     }
   }, [id, customerEmailForRequests]);
 
-  const handleTimelineVideoKycRequest = useCallback(async (
-    verificationMethod: 'email' | 'mobile',
-  ) => {
+  const handleTimelineVideoKycRequest = useCallback(async () => {
     if (!id) return;
     setIsRequestingTimelineVideoKyc(true);
     try {
-      const created = await sendLeadVideoKycRequest(id, verificationMethod);
+      const created = await sendLeadVideoKycRequest(id);
       setEsignKycRefresh((n) => n + 1);
-      setIsTimelineKycMethodOpen(false);
+      const dispatched = videoKycDispatchMessage(
+        created,
+        customerEmailForRequests,
+        customerMobileForRequests,
+      );
       toast({
         title: 'Video KYC request sent',
-        description: created.email_sent && customerEmailForRequests
-          ? `Video KYC link emailed to ${customerEmailForRequests}.`
-          : 'Video KYC was created, but the email could not be sent. Use Open in the Video KYC details.',
-        variant: created.email_sent ? 'success' : 'error',
+        description: dispatched.text,
+        variant: dispatched.ok ? 'success' : 'error',
       });
     } catch (err) {
       toast({
@@ -715,7 +716,7 @@ export const LeadDetailsPage = () => {
     } finally {
       setIsRequestingTimelineVideoKyc(false);
     }
-  }, [id, customerEmailForRequests]);
+  }, [id, customerEmailForRequests, customerMobileForRequests]);
 
   const customerLeadStats = useMemo(
     () =>
@@ -828,37 +829,11 @@ export const LeadDetailsPage = () => {
             }
             onRequestEsign={canRequestEsignVideoKyc ? handleTimelineEsignRequest : undefined}
             onRequestVideoKyc={
-              canRequestEsignVideoKyc ? () => setIsTimelineKycMethodOpen(true) : undefined
+              canRequestEsignVideoKyc ? handleTimelineVideoKycRequest : undefined
             }
             isRequestingEsign={isRequestingTimelineEsign}
             isRequestingVideoKyc={isRequestingTimelineVideoKyc}
           />
-
-          <Dialog open={isTimelineKycMethodOpen} onOpenChange={setIsTimelineKycMethodOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Choose initial verification code</DialogTitle>
-                <DialogDescription>
-                  Digio verifies the customer with this code before starting Video KYC.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-3">
-                <Button
-                  disabled={isRequestingTimelineVideoKyc}
-                  onClick={() => void handleTimelineVideoKycRequest('mobile')}
-                >
-                  Send code to mobile number
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={isRequestingTimelineVideoKyc}
-                  onClick={() => void handleTimelineVideoKycRequest('email')}
-                >
-                  Send code to email address
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
 
           {isCallFormOpen && canLogCall ? (
             <Dialog open={isCallFormOpen} onOpenChange={setIsCallFormOpen}>
@@ -1085,6 +1060,7 @@ export const LeadDetailsPage = () => {
                       <LeadVideoKycDetailsSection
                         leadId={leadData.id}
                         customerEmail={customerEmailForRequests}
+                        customerMobile={customerMobileForRequests}
                         canSendRequest={customerCanAdd(canRequestEsignVideoKyc)}
                         refreshToken={esignKycRefresh}
                       />

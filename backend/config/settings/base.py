@@ -257,6 +257,15 @@ CONFIRMATION_MAILBOX_EMAIL = (
 DEFAULT_FROM_EMAIL = _named_from_email(DEFAULT_FROM_EMAIL, BRAND_NAME)
 SERVER_EMAIL = _named_from_email(SERVER_EMAIL, BRAND_NAME)
 
+# Optional SMS for Video KYC invitation links (customer mobile).
+# Fast2SMS: SMS_PROVIDER=fast2sms and SMS_API_KEY=<authorization key>
+# MSG91: SMS_PROVIDER=msg91, SMS_API_KEY=<authkey>, SMS_SENDER_ID=KNMCRM
+# Leave SMS_PROVIDER empty or "console" to log SMS instead of sending.
+SMS_PROVIDER = _env_str("SMS_PROVIDER")
+SMS_API_KEY = _env_str("SMS_API_KEY")
+SMS_TEMPLATE_ID = _env_str("SMS_TEMPLATE_ID")
+SMS_SENDER_ID = _env_str("SMS_SENDER_ID") or "KNMCRM"
+
 # Document virus scan hook (plug in ClamAV etc.)
 DOCUMENT_VIRUS_SCAN_ENABLED = env.bool("DOCUMENT_VIRUS_SCAN_ENABLED", default=False)
 

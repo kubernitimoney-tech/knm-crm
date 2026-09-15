@@ -11,7 +11,9 @@ from apps.leads.views.lead_views import CustomerLookupAPIView, LeadSourceListAPI
 from apps.leads.views.public_esign_views import (
     PublicEsignAPIView,
     PublicEsignDocumentAPIView,
+    PublicEsignEmailOtpAPIView,
     PublicEsignOtpAPIView,
+    PublicEsignVerifyEmailOtpAPIView,
     PublicEsignVerifyOtpAPIView,
 )
 from apps.leads.views.public_video_kyc_views import PublicVideoKycAPIView
@@ -26,6 +28,16 @@ urlpatterns = [
     ),
     path("intake/track/", PublicLeadTrackAPIView.as_view(), name="lead-public-track"),
     path("esign/<uuid:pk>/", PublicEsignAPIView.as_view(), name="public-esign"),
+    path(
+        "esign/<uuid:pk>/email-otp/",
+        PublicEsignEmailOtpAPIView.as_view(),
+        name="public-esign-email-otp",
+    ),
+    path(
+        "esign/<uuid:pk>/verify-email-otp/",
+        PublicEsignVerifyEmailOtpAPIView.as_view(),
+        name="public-esign-verify-email-otp",
+    ),
     path("esign/<uuid:pk>/otp/", PublicEsignOtpAPIView.as_view(), name="public-esign-otp"),
     path(
         "esign/<uuid:pk>/verify-otp/",

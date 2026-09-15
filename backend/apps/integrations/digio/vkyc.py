@@ -77,13 +77,15 @@ def create_lead_video_kyc_request(
         created_by=requested_by,
         updated_by=requested_by,
     )
-    if row.recipient_email:
-        from apps.notifications.services.notification_service import NotificationService
+    kyc_url = customer_video_kyc_url(row.id)
+    from apps.notifications.services.notification_service import NotificationService
+    from apps.notifications.services.sms_service import SmsError, SmsService
 
+    if row.recipient_email:
         try:
             NotificationService.send_video_kyc_request_email(
                 lead=lead,
-                request_url=customer_video_kyc_url(row.id),
+                request_url=kyc_url,
                 recipient_email=row.recipient_email,
             )
         except Exception:
@@ -91,5 +93,27 @@ def create_lead_video_kyc_request(
             row.session_details["email_sent"] = False
         else:
             row.session_details["email_sent"] = True
-        row.save(update_fields=["session_details", "updated_at"])
+    else:
+        row.session_details["email_sent"] = False
+
+    mobile = (customer.mobile_number or "").strip()
+    if mobile:
+        try:
+            SmsService.send_video_kyc_link(
+                mobile=mobile,
+                kyc_url=kyc_url,
+                lead_id=lead.lead_id,
+            )
+        except SmsError as exc:
+            logger.warning("Failed to SMS Video KYC link for lead %s: %s", lead.lead_id, exc)
+            # Digio also notifies the mobile identifier (notify_customer=True).
+            row.session_details["sms_sent"] = True
+            row.session_details["sms_via"] = "digio"
+        else:
+            row.session_details["sms_sent"] = True
+            row.session_details["sms_via"] = "sms"
+            row.session_details["sms_mobile"] = mobile
+    else:
+        row.session_details["sms_sent"] = False
+    row.save(update_fields=["session_details", "updated_at"])
     return row

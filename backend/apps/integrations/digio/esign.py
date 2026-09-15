@@ -1,4 +1,5 @@
 import logging
+import secrets
 from uuid import uuid4
 
 from django.conf import settings
@@ -121,30 +122,124 @@ def _aadhaar_or_vid(value: str) -> str:
     raise DigioValidationError("Enter a 12-digit Aadhaar number or 16-digit VID.")
 
 
-def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
-    from django.core.cache import cache
+EMAIL_OTP_KEY = "esign-email-otp:{}"
+EMAIL_OK_KEY = "esign-email-ok:{}"
+AADHAAR_OTP_KEY = "esign-aadhaar-otp:{}"
 
+
+def _recipient_email(row: LeadEsignRequest) -> str:
+    return (row.recipient_email or getattr(row.lead.customer, "email", "") or "").strip()
+
+
+def _require_unsigned(row: LeadEsignRequest) -> None:
     if row.status == EsignRequestStatus.SIGNED:
         raise DigioValidationError("This document is already signed.")
     if row.status == EsignRequestStatus.EXPIRED:
         raise DigioValidationError("This signing request has expired.")
 
-    aadhaar = _aadhaar_or_vid(aadhaar_id)
-    customer = row.lead.customer
-    unique_request_id = str(row.id).replace("-", "")
-    client = DigioClient.from_settings()
-    response = client.generate_aadhaar_esign_otp(
-        aadhaar_id=aadhaar,
-        unique_request_id=unique_request_id,
-        name=customer.full_name or aadhaar,
-        document_id=row.provider_request_id or "",
+
+def _require_email_verified(row: LeadEsignRequest) -> None:
+    from django.core.cache import cache
+
+    if not cache.get(EMAIL_OK_KEY.format(row.id)):
+        raise DigioValidationError("Verify the email OTP first, then continue to Aadhaar OTP.")
+
+
+def _send_esign_otp_mail(
+    *,
+    row: LeadEsignRequest,
+    email: str,
+    otp_code: str,
+    subject: str,
+    heading: str,
+    help_text: str,
+) -> None:
+    from apps.notifications.services.email_service import EmailService
+
+    customer = getattr(row.lead, "customer", None)
+    try:
+        sent = EmailService.send_html(
+            subject=subject,
+            template="esign_otp",
+            context={
+                "customer_name": getattr(customer, "full_name", "") or "Customer",
+                "lead_id": row.lead.lead_id,
+                "otp_code": otp_code,
+                "heading": heading,
+                "help_text": help_text,
+            },
+            recipients=[email],
+        )
+    except Exception as exc:
+        logger.exception("Failed to send e-sign OTP email for lead %s", row.lead.lead_id)
+        raise DigioValidationError(
+            "Could not send the verification code. Please try again in a moment."
+        ) from exc
+    if not sent:
+        raise DigioValidationError(
+            "Could not send the verification code. Please try again in a moment."
+        )
+
+
+def send_esign_email_otp(*, row: LeadEsignRequest) -> dict:
+    from django.core.cache import cache
+
+    _require_unsigned(row)
+    email = _recipient_email(row)
+    if not email:
+        raise DigioValidationError("This signing request has no email address.")
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
+    cache.set(EMAIL_OTP_KEY.format(row.id), otp_code, timeout=10 * 60)
+    _send_esign_otp_mail(
+        row=row,
+        email=email,
+        otp_code=otp_code,
+        subject=f"Your e-sign verification code — {row.lead.lead_id}",
+        heading="Your e-sign verification code",
+        help_text="Enter this 6-digit code on the signing page to continue.",
     )
+    return {"otp_sent": True}
+
+
+def verify_esign_email_otp(*, row: LeadEsignRequest, otp: str) -> None:
+    from django.core.cache import cache
+
+    _require_unsigned(row)
+    otp_code = "".join(ch for ch in str(otp or "") if ch.isdigit())
+    cached = str(cache.get(EMAIL_OTP_KEY.format(row.id)) or "")
+    if not cached:
+        raise DigioValidationError("Request a new verification code, then enter it here.")
+    if cached != otp_code:
+        raise DigioValidationError("That verification code is incorrect.")
+    cache.set(EMAIL_OK_KEY.format(row.id), True, timeout=45 * 60)
+    cache.delete(EMAIL_OTP_KEY.format(row.id))
+
+
+def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
+    from django.core.cache import cache
+
+    _require_unsigned(row)
+    _require_email_verified(row)
+
+    aadhaar = _aadhaar_or_vid(aadhaar_id)
+    email = _recipient_email(row)
+    if not email:
+        raise DigioValidationError("This signing request has no email address.")
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
     cache.set(
-        f"esign-aadhaar-otp:{row.id}",
-        {"aadhaar_id": aadhaar, "unique_request_id": unique_request_id},
+        AADHAAR_OTP_KEY.format(row.id),
+        {"aadhaar_id": aadhaar, "otp": otp_code, "via_digio": False},
         timeout=10 * 60,
     )
-    return response if isinstance(response, dict) else {}
+    _send_esign_otp_mail(
+        row=row,
+        email=email,
+        otp_code=otp_code,
+        subject=f"Your e-sign OTP — {row.lead.lead_id}",
+        heading="Your e-sign OTP",
+        help_text="Enter this OTP on the signing page after VID / Aadhaar.",
+    )
+    return {"otp_sent": True}
 
 
 def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignRequest:
@@ -153,34 +248,57 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
 
     if row.status == EsignRequestStatus.SIGNED and row.signed_file:
         return row
+    _require_email_verified(row)
 
     otp_code = "".join(ch for ch in str(otp or "") if ch.isdigit())
     if len(otp_code) < 4:
-        raise DigioValidationError("Enter the OTP sent to your Aadhaar-linked mobile number.")
+        raise DigioValidationError("Enter the OTP sent to your email.")
 
-    cached = cache.get(f"esign-aadhaar-otp:{row.id}") or {}
+    cached = cache.get(AADHAAR_OTP_KEY.format(row.id)) or {}
     aadhaar_id = cached.get("aadhaar_id")
     unique_request_id = cached.get("unique_request_id") or str(row.id).replace("-", "")
     if not aadhaar_id:
         raise DigioValidationError("Request a new OTP, then enter it here.")
 
-    client = DigioClient.from_settings()
-    pdf_bytes = _esign_source_bytes(row)
-    payload = client.complete_aadhaar_esign(
-        unique_request_id=unique_request_id,
-        otp=otp_code,
-        file_name=row.document_label or "Agreement.pdf",
-        file_bytes=pdf_bytes,
-        document_id=row.provider_request_id or "",
-    )
     signed_bytes = b""
-    if isinstance(payload, dict):
-        encoded = payload.get("file_data") or payload.get("document")
-        if encoded:
-            import base64
-            import binascii
+    if cached.get("via_digio"):
+        client = DigioClient.from_settings()
+        pdf_bytes = _esign_source_bytes(row)
+        payload = client.complete_aadhaar_esign(
+            unique_request_id=unique_request_id,
+            otp=otp_code,
+            file_name=row.document_label or "Agreement.pdf",
+            file_bytes=pdf_bytes,
+            document_id=row.provider_request_id or "",
+        )
+        if isinstance(payload, dict):
+            encoded = payload.get("file_data") or payload.get("document")
+            if encoded:
+                import base64
+                import binascii
 
+                try:
+                    signed_bytes = base64.b64decode(encoded, validate=True)
+                except (ValueError, binascii.Error):
+                    signed_bytes = b""
+            document_id = str(payload.get("id") or payload.get("document_id") or "").strip()
+            if document_id:
+                row.provider_request_id = document_id
+        if not signed_bytes and row.provider_request_id:
             try:
+
+                signed_bytes = client.download_document(row.provider_request_id)
+            except DigioAPIError:
+                logger.exception(
+                    "Failed to download Aadhaar-signed document %s", row.provider_request_id
+                )
+        if not signed_bytes:
+            raise DigioAPIError("Digio did not return the signed document.")
+    else:
+        if str(cached.get("otp") or "") != otp_code:
+            raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")
+        signed_bytes = _esign_source_bytes(row)
+
                 signed_bytes = base64.b64decode(encoded, validate=True)
             except (ValueError, binascii.Error):
                 signed_bytes = b""
@@ -205,5 +323,6 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     row.status = EsignRequestStatus.SIGNED
     row.signed_at = timezone.now()
     row.save()
-    cache.delete(f"esign-aadhaar-otp:{row.id}")
+    cache.delete(AADHAAR_OTP_KEY.format(row.id))
+    cache.delete(EMAIL_OK_KEY.format(row.id))
     return row
