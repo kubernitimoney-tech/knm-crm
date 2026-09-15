@@ -6,9 +6,8 @@ import { useTitle } from '@/hooks/useTitle';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 const EMAIL_OTP_SECONDS = 180;
-const DIGIO_FULLSCREEN_STYLE_ID = 'digio-esign-fullscreen';
 
-type Step = 'send_code' | 'email_otp' | 'document' | 'digio';
+type Step = 'send_code' | 'email_otp' | 'document' | 'returning';
 
 interface PublicEsignSession {
   id: string;
@@ -21,6 +20,7 @@ interface PublicEsignSession {
   email_hint?: string;
   email_verified?: boolean;
   company_name?: string;
+  company_url?: string;
   company_email?: string;
   reason?: string;
   city?: string;
@@ -29,76 +29,6 @@ interface PublicEsignSession {
   transaction_id?: string;
   status?: string;
   signing_url?: string;
-  document_id?: string;
-  identifier?: string;
-  access_token?: string;
-  environment?: string;
-  sdk_url?: string;
-}
-
-interface DigioInstance {
-  init: () => void;
-  submit: (documentId: string, identifier: string, token?: string) => void;
-}
-
-interface DigioConstructor {
-  new (options: {
-    environment: string;
-    is_iframe?: boolean;
-    callback: (response: { error_code?: string; message?: string }) => void;
-  }): DigioInstance;
-}
-
-function getDigioConstructor(): DigioConstructor | undefined {
-  return (window as unknown as { Digio?: DigioConstructor }).Digio;
-}
-
-function loadDigioSdk(src: string): Promise<DigioConstructor> {
-  const current = getDigioConstructor();
-  if (current) return Promise.resolve(current);
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-      const loaded = getDigioConstructor();
-      if (loaded) resolve(loaded);
-      else reject(new Error('Digio e-sign failed to load.'));
-    };
-    script.onerror = () => reject(new Error('Digio e-sign failed to load.'));
-    document.body.appendChild(script);
-  });
-}
-
-function installDigioFullscreenStyles() {
-  if (document.getElementById(DIGIO_FULLSCREEN_STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = DIGIO_FULLSCREEN_STYLE_ID;
-  style.textContent = `
-    [id^="parentdigio-ifm-"] {
-      inset: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      background: #eef3fb !important;
-    }
-    [id^="wrapperdigio-ifm-"] {
-      inset: 0 !important;
-      left: 0 !important;
-      top: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      max-width: none !important;
-      max-height: none !important;
-      border-radius: 0 !important;
-    }
-    iframe[id^="digio-ifm-"] {
-      top: 0 !important;
-      left: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-    }
-  `;
-  document.head.appendChild(style);
 }
 
 function digitsOnly(value: string) {
@@ -236,11 +166,25 @@ function ErrorText({ message }: { message: string }) {
   return <p className="text-center text-sm text-red-600">{message}</p>;
 }
 
+function BrandLink({ name, url }: { name: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="font-medium text-[#4c6fff] underline-offset-2 hover:underline"
+    >
+      {name}
+    </a>
+  );
+}
+
 export function PublicEsignPage() {
   useTitle('E-Agreements');
   const { esignId } = useParams<{ esignId: string }>();
+  const returningFromEsp = new URLSearchParams(window.location.search).get('done') === '1';
   const [session, setSession] = useState<PublicEsignSession | null>(null);
-  const [step, setStep] = useState<Step>('send_code');
+  const [step, setStep] = useState<Step>(returningFromEsp ? 'returning' : 'send_code');
   const [error, setError] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -249,59 +193,59 @@ export function PublicEsignPage() {
   const [secondsLeft, setSecondsLeft] = useState(EMAIL_OTP_SECONDS);
   const [otpRound, setOtpRound] = useState(0);
 
-  const load = useCallback(async () => {
-    if (!esignId) return null;
-    const { data } = await axios.get<{ success: boolean; data: PublicEsignSession; message?: string }>(
-      `${API_BASE_URL}/leads/esign/${esignId}/`,
-    );
-    if (!data.success) {
-      throw new Error(data.message || 'Could not load the signing request.');
-    }
-    setSession(data.data);
-    if (data.data.signed) return data.data;
-    if (data.data.email_verified) {
-      setStep((current) =>
-        current === 'send_code' || current === 'email_otp' ? 'document' : current,
-      );
-    }
-    return data.data;
-  }, [esignId]);
-
-  const waitUntilSigned = useCallback(async () => {
-    for (let attempt = 0; attempt < 15; attempt += 1) {
-      const row = await load().catch(() => null);
-      if (row?.signed) return true;
-      await sleep(2000);
-    }
-    return false;
-  }, [load]);
+  const load = useCallback(
+    async (sync = false) => {
+      if (!esignId) return null;
+      const suffix = sync ? '?sync=1' : '';
+      const { data } = await axios.get<{
+        success: boolean;
+        data: PublicEsignSession;
+        message?: string;
+      }>(`${API_BASE_URL}/leads/esign/${esignId}/${suffix}`);
+      if (!data.success) {
+        throw new Error(data.message || 'Could not load the signing request.');
+      }
+      setSession(data.data);
+      return data.data;
+    },
+    [esignId],
+  );
 
   useEffect(() => {
     setIsLoading(true);
-    load()
+    load(returningFromEsp)
+      .then((row) => {
+        if (!row) return;
+        if (row.signed) return;
+        if (returningFromEsp) return;
+        if (row.email_verified) setStep('document');
+      })
       .catch((err: unknown) => {
         setError(apiError(err, 'Could not load the signing request.'));
       })
       .finally(() => setIsLoading(false));
-  }, [load]);
+  }, [load, returningFromEsp]);
 
   useEffect(() => {
-    const done = new URLSearchParams(window.location.search).get('done') === '1';
-    if (!done) return;
+    if (!returningFromEsp) return;
     let cancelled = false;
-    setStep('document');
     void (async () => {
-      const signed = await waitUntilSigned();
-      if (!cancelled && !signed) {
-        setError('Signing was submitted. Refresh this page in a moment if the status has not updated.');
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (cancelled) return;
+        const row = await load(true).catch(() => null);
+        if (row?.signed) return;
+        await sleep(2000);
+      }
+      if (!cancelled) {
+        setError('Signing is still processing. Refresh this page in a moment.');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [waitUntilSigned]);
+  }, [load, returningFromEsp]);
 
-  const showDocument = step === 'document';
+  const showDocument = step === 'document' && !returningFromEsp;
 
   useEffect(() => {
     if (!session?.document_url || session.signed || !showDocument) {
@@ -377,58 +321,16 @@ export function PublicEsignPage() {
     }
   };
 
-  const startDigioSign = async () => {
-    if (!session) return;
-    setError('');
-    if (session.signing_url && (!session.document_id || !session.identifier || !session.sdk_url)) {
-      window.location.assign(session.signing_url);
+  const startAadhaarEsign = () => {
+    if (!session?.signing_url) {
+      setError('This signing request is missing the Aadhaar eSign link. Ask the team to send a new request.');
       return;
     }
-    if (!session.document_id || !session.identifier || !session.sdk_url) {
-      setError('This signing request is missing Digio details. Ask the team to send a new link.');
-      return;
-    }
-    setBusy(true);
-    setStep('digio');
-    try {
-      installDigioFullscreenStyles();
-      const Digio = await loadDigioSdk(session.sdk_url);
-      const digio = new Digio({
-        environment: session.environment || 'production',
-        is_iframe: true,
-        callback: (response) => {
-          if (response?.error_code) {
-            setError(response.message || 'Signing was not completed.');
-            setStep('document');
-            setBusy(false);
-            return;
-          }
-          void waitUntilSigned()
-            .then((signed) => {
-              if (!signed) {
-                setError(
-                  'Signing was submitted. Refresh this page in a moment if the status has not updated.',
-                );
-                setStep('document');
-              }
-            })
-            .finally(() => setBusy(false));
-        },
-      });
-      digio.init();
-      digio.submit(session.document_id, session.identifier, session.access_token || undefined);
-    } catch (err: unknown) {
-      if (session.signing_url) {
-        window.location.assign(session.signing_url);
-        return;
-      }
-      setError(apiError(err, 'Could not open Digio e-sign.'));
-      setStep('document');
-      setBusy(false);
-    }
+    window.location.assign(session.signing_url);
   };
 
   const brand = session?.company_name || 'Kuberniti Money';
+  const brandUrl = session?.company_url || 'https://kubernitimoney.com';
   const reason = session?.reason || session?.document_name || 'Loan Agreement';
   const stamp = formatStamp(session?.signed_at || session?.created_at);
 
@@ -459,6 +361,11 @@ export function PublicEsignPage() {
           <SuccessBadge />
           <p className="mt-4 text-lg font-medium text-[#7dcec0]">Signed Successfully</p>
         </div>
+      ) : returningFromEsp ? (
+        <div className="flex min-h-screen flex-col items-center justify-center px-4">
+          <p className="text-sm text-slate-500">Confirming Aadhaar eSign…</p>
+          <ErrorText message={error} />
+        </div>
       ) : step === 'send_code' ? (
         <div className="flex min-h-screen items-center justify-center px-4">
           <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-8 py-10 text-center shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
@@ -477,7 +384,7 @@ export function PublicEsignPage() {
             </button>
             <p className="mt-6 flex items-center justify-center gap-1 text-xs text-slate-700">
               <Lock className="h-3.5 w-3.5" />
-              Secured By <span className="font-medium text-[#4c6fff]">{brand}</span>
+              Secured By : <BrandLink name={brand} url={brandUrl} />
             </p>
           </div>
         </div>
@@ -514,10 +421,6 @@ export function PublicEsignPage() {
             <p className="mt-5 text-xs text-slate-500">Time Remaining: {formatCountdown(secondsLeft)}</p>
           </div>
         </div>
-      ) : step === 'digio' ? (
-        <p className="px-4 py-24 text-center text-sm text-slate-500">
-          Opening Aadhaar eSign. OTP will be sent to the mobile number linked with Aadhaar.
-        </p>
       ) : (
         <div className="mx-auto max-w-2xl px-4 py-6">
           <h1 className="text-lg font-bold text-slate-900">{brand}</h1>
@@ -545,17 +448,16 @@ export function PublicEsignPage() {
           </div>
           <div className="mt-4">{documentFrame}</div>
           <p className="mt-6 text-center text-sm text-slate-800">
-            By continuing, I agree to do eKyc using Aadhaar to eSign with the ESPs (NSDL e-Gov).{' '}
-            {brand} is registered as ASP.
+            Sign Now opens Aadhaar eSign. OTP is sent to the mobile number linked with Aadhaar.
           </p>
           <ErrorText message={error} />
           <button
             type="button"
             disabled={busy}
-            onClick={() => void startDigioSign()}
+            onClick={startAadhaarEsign}
             className="mx-auto mt-4 block rounded-full bg-[#4caf82] px-10 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {busy ? 'Opening…' : 'Sign Now'}
+            Sign Now
           </button>
         </div>
       )}

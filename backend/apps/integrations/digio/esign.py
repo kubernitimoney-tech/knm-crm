@@ -27,8 +27,8 @@ SIGN_TYPES = frozenset({"aadhaar", "electronic"})
 
 
 def resolve_esign_sign_type(sign_type: str = "") -> str:
-    """Prefer DIGIO_ESIGN_SIGN_TYPE so Request e-Sign matches backend/.env."""
-    value = (settings.DIGIO_ESIGN_SIGN_TYPE or sign_type or "aadhaar").strip().lower()
+    """Aadhaar/Protean is the CRM e-sign path. An explicit request value wins."""
+    value = (sign_type or settings.DIGIO_ESIGN_SIGN_TYPE or "aadhaar").strip().lower()
     if value not in SIGN_TYPES:
         raise DigioConfigurationError(
             f"DIGIO_ESIGN_SIGN_TYPE must be one of {sorted(SIGN_TYPES)}, got '{value}'."
@@ -60,6 +60,7 @@ def create_lead_esign_request(
         signer_name=customer.full_name or identifier,
         identifier=identifier,
         sign_type=sign_type,
+        reason="Loan Agreement",
         redirect_url=f"{review_url}?done=1",
     )
     entity_id, access_token, request_url = gateway_from_payload(
