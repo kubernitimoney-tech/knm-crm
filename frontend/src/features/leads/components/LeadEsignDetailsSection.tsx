@@ -104,8 +104,8 @@ export function LeadEsignDetailsSection({
       toast({
         title: 'E-sign request sent',
         description: customerEmail
-          ? `Signing link emailed to ${customerEmail}. Customer previews Agreement.pdf, then signs with Aadhaar/VID OTP.`
-          : 'Signing link created. Customer previews Agreement.pdf, then signs with Aadhaar/VID OTP.',
+          ? `Signing link emailed to ${customerEmail}. Customer previews Agreement.pdf, then signs with Aadhaar OTP on the Aadhaar-linked mobile.`
+          : 'Signing link created. Customer previews Agreement.pdf, then signs with Aadhaar OTP on the Aadhaar-linked mobile.',
         variant: 'success',
       });
     } catch (err) {

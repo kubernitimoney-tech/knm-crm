@@ -224,24 +224,31 @@ def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
     _require_email_verified(row)
 
     aadhaar = _aadhaar_or_vid(aadhaar_id)
-    email = _recipient_email(row)
-    if not email:
-        raise DigioValidationError("This signing request has no email address.")
-    otp_code = f"{secrets.randbelow(1_000_000):06d}"
+    customer = getattr(row.lead, "customer", None)
+    signer_name = (getattr(customer, "full_name", "") or "").strip()
+    if not signer_name:
+        raise DigioValidationError(
+            "Customer name is required to send the Aadhaar OTP. Update the profile and try again."
+        )
+
+    unique_request_id = f"{str(row.id).replace('-', '')}{secrets.token_hex(3)}"
+    client = DigioClient.from_settings()
+    client.generate_aadhaar_esign_otp(
+        aadhaar_id=aadhaar,
+        unique_request_id=unique_request_id,
+        name=signer_name,
+        document_id=row.provider_request_id or "",
+    )
     cache.set(
         AADHAAR_OTP_KEY.format(row.id),
-        {"aadhaar_id": aadhaar, "otp": otp_code, "via_digio": False},
+        {
+            "aadhaar_id": aadhaar,
+            "via_digio": True,
+            "unique_request_id": unique_request_id,
+        },
         timeout=10 * 60,
     )
-    _send_esign_otp_mail(
-        row=row,
-        email=email,
-        otp_code=otp_code,
-        subject=f"Your e-sign OTP — {row.lead.lead_id}",
-        heading="Your e-sign OTP",
-        help_text="Enter this OTP on the signing page after VID / Aadhaar.",
-    )
-    return {"otp_sent": True}
+    return {"otp_sent": True, "otp_channel": "aadhaar_mobile"}
 
 
 def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignRequest:
@@ -254,7 +261,7 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
 
     otp_code = "".join(ch for ch in str(otp or "") if ch.isdigit())
     if len(otp_code) < 4:
-        raise DigioValidationError("Enter the OTP sent to your email.")
+        raise DigioValidationError("Enter the OTP sent to the Aadhaar-linked mobile number.")
 
     cached = cache.get(AADHAAR_OTP_KEY.format(row.id)) or {}
     aadhaar_id = cached.get("aadhaar_id")
