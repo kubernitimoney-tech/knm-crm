@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -280,9 +280,9 @@ class NotificationEventTests(TestCase):
             interest_amount=Decimal("13200"),
             total_repayable=Decimal("53200"),
             product_snapshot={"interest_rate": "1"},
-            due_date=timezone.localdate() + timedelta(days=33),
+            due_date=date(2026, 8, 3),
             status=LoanStatus.ACTIVE,
-            disbursed_at=timezone.now(),
+            disbursed_at=timezone.make_aware(datetime(2026, 7, 1, 10, 0, 0)),
         )
 
         captured = {}
