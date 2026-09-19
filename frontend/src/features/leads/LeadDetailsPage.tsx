@@ -671,15 +671,25 @@ export const LeadDetailsPage = () => {
     if (!id) return;
     setIsRequestingTimelineEsign(true);
     try {
-      await sendLeadEsignRequest(id, 'aadhaar');
+      const created = await sendLeadEsignRequest(id, 'aadhaar');
       setEsignKycRefresh((n) => n + 1);
-      toast({
-        title: 'E-sign request sent',
-        description: customerEmailForRequests
-          ? `Signing request email dispatched to ${customerEmailForRequests}.`
-          : 'Signing request email has been queued.',
-        variant: 'success',
-      });
+      if (created.email_sent === false) {
+        toast({
+          title: 'E-sign created, email not sent',
+          description:
+            created.email_error
+            || 'Check SMTP settings and the customer inbox or spam folder.',
+          variant: 'error',
+        });
+      } else {
+        toast({
+          title: 'E-sign request sent',
+          description: customerEmailForRequests
+            ? `Signing request email dispatched to ${customerEmailForRequests}.`
+            : 'Signing request email has been queued.',
+          variant: 'success',
+        });
+      }
     } catch (err) {
       toast({
         title: 'Request failed',
