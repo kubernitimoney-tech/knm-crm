@@ -380,6 +380,11 @@ class ApplicationService:
                     application=application,
                 )
             NotificationService.notify_application_approved(application)
+            NotificationService.send_sanction_approved_email(
+                application,
+                decision=decision_record,
+                raise_on_error=False,
+            )
             try:
                 LoanService.create_from_application(user=user, application=application)
             except LoanServiceError as exc:

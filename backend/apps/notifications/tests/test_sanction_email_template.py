@@ -69,6 +69,20 @@ class SanctionEmailTemplateTests(TestCase):
         assert "Kuberniti Money" in message.from_email
         assert "<" in message.from_email
 
+    def test_send_html_uses_explicit_from_email(self):
+        sent = EmailService.send_html(
+            subject="Sanction Approval",
+            template="sanction_approved",
+            context={"customer_name": "Naveen", "application_number": "APP-1"},
+            recipients=["customer@example.com"],
+            from_email="sanction@kubernitimoney.com",
+        )
+
+        assert sent == 1
+        assert len(mail.outbox) == 1
+        assert "sanction@kubernitimoney.com" in mail.outbox[0].from_email
+        assert "Kuberniti Money" in mail.outbox[0].from_email
+
 
 class LoanDisbursedEmailTemplateTests(TestCase):
     _context = {
@@ -127,6 +141,7 @@ class LoanDisbursedEmailTemplateTests(TestCase):
             context=self._context,
             recipients=["rohit.dhingra200@gmail.com"],
             cc=["confirmation@kubernitimoney.com"],
+            from_email="disbursal@kubernitimoney.com",
         )
 
         assert sent == 1
@@ -135,6 +150,7 @@ class LoanDisbursedEmailTemplateTests(TestCase):
         assert message.subject == "Kuberniti Money - Loan Disbursed"
         assert message.to == ["rohit.dhingra200@gmail.com"]
         assert message.cc == ["confirmation@kubernitimoney.com"]
+        assert "disbursal@kubernitimoney.com" in message.from_email
         html, content_type = message.alternatives[0]
         assert content_type == "text/html"
         assert "Kuberniti Money" in html
