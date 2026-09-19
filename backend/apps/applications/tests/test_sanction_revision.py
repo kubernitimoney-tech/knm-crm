@@ -120,7 +120,7 @@ class TestSanctionRevision:
         assert "rm@example.com" not in captured["cc"]
         assert "cm@example.com" not in captured["cc"]
 
-    def test_sanction_email_ccs_official_email(self):
+    def test_sanction_email_sends_to_official_email(self):
         user = UserFactory()
         _assign_role(user, "admin")
         customer = customer_factory(email="personal@example.com")
@@ -161,13 +161,12 @@ class TestSanctionRevision:
 
         assert captured["recipients"] == [
             "personal@example.com",
+            "official@company.com",
             "sanction@kubernitimoney.com",
         ]
         assert "sanction@kubernitimoney.com" in captured["from_email"]
-        assert captured["cc"] == [
-            "confirmation@kubernitimoney.com",
-            "official@company.com",
-        ]
+        assert captured["cc"] == ["confirmation@kubernitimoney.com"]
+        assert "official@company.com" not in captured["cc"]
 
     def test_sanction_email_requires_customer_email(self):
         customer = customer_factory()

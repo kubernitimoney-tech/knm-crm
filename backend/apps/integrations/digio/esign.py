@@ -86,6 +86,8 @@ def create_lead_esign_request(
         created_by=requested_by,
         updated_by=requested_by,
     )
+    email_sent = False
+    email_error = ""
     if (row.recipient_email or "").strip():
         from apps.notifications.services.notification_service import NotificationService
 
@@ -96,8 +98,14 @@ def create_lead_esign_request(
                 recipient_email=row.recipient_email,
                 sign_type=sign_type,
             )
-        except Exception:
+            email_sent = True
+        except Exception as exc:
             logger.exception("Failed to email e-sign guest link for lead %s", lead.lead_id)
+            email_error = str(exc) or "SMTP could not send the e-sign email."
+    else:
+        email_error = "This customer has no email address."
+    row.email_sent = email_sent
+    row.email_error = email_error
     return row
 
 
