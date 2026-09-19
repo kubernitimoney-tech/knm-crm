@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, ExternalLink, Mail } from 'lucide-react';
+import { Download, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
@@ -37,8 +37,6 @@ export interface LeadEsignEntry {
   requestedOn: string;
   signedOn: string;
   signedFileUrl: string | null;
-  reviewUrl: string | null;
-  signType: ApiLeadEsignRequest['sign_type'];
 }
 
 interface LeadEsignDetailsSectionProps {
@@ -57,8 +55,6 @@ function mapApiEntry(entry: ApiLeadEsignRequest): LeadEsignEntry {
     requestedOn: entry.requested_on,
     signedOn: entry.signed_on,
     signedFileUrl: entry.signed_file_url,
-    reviewUrl: entry.review_url || null,
-    signType: entry.sign_type,
   };
 }
 
@@ -144,7 +140,6 @@ export function LeadEsignDetailsSection({
           <TableRow className="hover:bg-transparent">
             <TableHead className={sectionHeadClassName()}>Status</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested By</TableHead>
-            <TableHead className={sectionHeadClassName()}>Method</TableHead>
             <TableHead className={sectionHeadClassName()}>Documents</TableHead>
             <TableHead className={sectionHeadClassName()}>Requested On</TableHead>
             <TableHead className={sectionHeadClassName()}>Signed On</TableHead>
@@ -152,16 +147,12 @@ export function LeadEsignDetailsSection({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableLoadingRow colSpan={6} message="Loading e-sign requests…" compact />
+            <TableLoadingRow colSpan={5} message="Loading e-sign requests…" compact />
           ) : entries.length === 0 ? (
-            <EmptyTableRow colSpan={6} message="No e-sign requests sent yet." />
+            <EmptyTableRow colSpan={5} message="No e-sign requests sent yet." />
           ) : (
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
-              const canOpenSigningLink =
-                Boolean(entry.reviewUrl) &&
-                entry.status !== 'signed' &&
-                entry.status !== 'expired';
               return (
               <TableRow key={entry.id} className="border-b border-slate-50 dark:border-slate-850">
                 <TableCell>
@@ -172,27 +163,8 @@ export function LeadEsignDetailsSection({
                 <TableCell className={sectionCellClassName}>
                   {formatPersonName(entry.requestedBy)}
                 </TableCell>
-                <TableCell className={sectionCellClassName}>
-                  {entry.signType === 'aadhaar' ? 'Aadhaar / VID OTP' : 'Email OTP'}
-                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {canOpenSigningLink && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open document review, then Aadhaar/VID OTP"
-                        onClick={() => {
-                          if (entry.reviewUrl) {
-                            window.open(entry.reviewUrl, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                      >
-                        <ExternalLink size={12} className="mr-1" />
-                        Open
-                      </Button>
-                    )}
                     {canViewDocument && (
                       <RowViewButton
                         title="View"
@@ -217,7 +189,7 @@ export function LeadEsignDetailsSection({
                         Download
                       </Button>
                     )}
-                    {!canOpenSigningLink && !canViewDocument && !canDownloadDocument && (
+                    {!canViewDocument && !canDownloadDocument && (
                       <span className="text-[11px] text-slate-400">—</span>
                     )}
                   </div>
