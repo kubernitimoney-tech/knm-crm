@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -152,6 +152,30 @@ class NotificationEventTests(TestCase):
             NotificationService.EVENT_APPLICATION_APPROVED,
         )
 
+    def test_application_approved_sends_sanction_email(self):
+        approver = UserFactory(email="approver.mail@example.com")
+        _assign_role(approver, "admin")
+        customer = customer_factory(email="sanction.borrower@example.com")
+        rm = UserFactory(email="rm.sanction@example.com")
+        cm = UserFactory(email="cm.sanction@example.com")
+        lead = _create_lead(lead_code="NTF-SANC", customer=customer, rm=rm, cm=cm)
+        application = _create_application(customer=customer, lead=lead, cm=cm)
+
+        with patch.object(NotificationService, "send_sanction_approved_email") as send_email:
+            ApplicationService.decide(
+                user=approver,
+                application=application,
+                decision="approved",
+                approved_amount=Decimal("50000"),
+                approved_tenure_value=30,
+                interest_rate=Decimal("1"),
+                processing_fee=Decimal("1000"),
+            )
+
+        send_email.assert_called_once()
+        self.assertEqual(send_email.call_args.args[0], application)
+        self.assertFalse(send_email.call_args.kwargs["raise_on_error"])
+
     def test_disbursal_sheet_sent_notifies_account_finance(self):
         from unittest.mock import patch
 
@@ -256,14 +280,16 @@ class NotificationEventTests(TestCase):
             interest_amount=Decimal("13200"),
             total_repayable=Decimal("53200"),
             product_snapshot={"interest_rate": "1"},
-            due_date=timezone.localdate() + timedelta(days=33),
+            due_date=date(2026, 8, 3),
             status=LoanStatus.ACTIVE,
-            disbursed_at=timezone.now(),
+            disbursed_at=timezone.make_aware(datetime(2026, 7, 1, 10, 0, 0)),
         )
 
         captured = {}
 
-        def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
             captured.update(
                 {
                     "subject": subject,
@@ -271,6 +297,7 @@ class NotificationEventTests(TestCase):
                     "context": context,
                     "recipients": recipients,
                     "cc": cc,
+                    "from_email": from_email,
                 }
             )
 
@@ -285,6 +312,7 @@ class NotificationEventTests(TestCase):
         self.assertEqual(captured["template"], "loan_disbursed")
         self.assertEqual(captured["recipients"], ["rohit.dhingra200@gmail.com"])
         self.assertEqual(captured["cc"], ["confirmation@kubernitimoney.com"])
+        self.assertIn("disbursal@kubernitimoney.com", captured["from_email"])
         self.assertNotIn("rm.disburse@example.com", captured["cc"])
         self.assertNotIn("cm.disburse@example.com", captured["cc"])
         self.assertEqual(captured["context"]["loan_number"], "LDR573689062731")

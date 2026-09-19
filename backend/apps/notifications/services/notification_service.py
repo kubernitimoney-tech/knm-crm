@@ -106,6 +106,17 @@ class NotificationService:
         return emails
 
     @staticmethod
+    def _as_decimal(value, default="0") -> Decimal:
+        if value in (None, ""):
+            return Decimal(default)
+        if isinstance(value, Decimal):
+            return value
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return Decimal(default)
+
+    @staticmethod
     def _format_amount(value) -> str:
         if value in (None, ""):
             return ""
@@ -245,8 +256,8 @@ class NotificationService:
             elif application.tenure_value:
                 tenure_days = application.tenure_value
 
-        principal = approved_amount or Decimal("0")
-        roi = interest_rate or Decimal("0")
+        principal = cls._as_decimal(approved_amount)
+        roi = cls._as_decimal(interest_rate)
         metrics = LoanCalculationService.compute_summary(
             principal_amount=principal,
             roi_percent=roi,
@@ -292,6 +303,17 @@ class NotificationService:
         }
 
     @classmethod
+    def _from_email(cls, setting_name: str, default: str) -> str:
+        from email.utils import formataddr, parseaddr
+
+        raw = cls._mailbox_email(setting_name, default) or default
+        name, addr = parseaddr(raw)
+        if not addr:
+            return raw
+        brand = getattr(settings, "BRAND_NAME", "Kuberniti Money")
+        return formataddr((name or brand, addr))
+
+    @classmethod
     def _send_email_on_commit(
         cls,
         *,
@@ -300,6 +322,7 @@ class NotificationService:
         context,
         recipients,
         cc=None,
+        from_email=None,
         raise_on_error=False,
     ) -> None:
         """Send an email once the surrounding DB transaction commits.
@@ -325,6 +348,7 @@ class NotificationService:
                     context=context or {},
                     recipients=recipients,
                     cc=cc,
+                    from_email=from_email,
                 )
                 if sent:
                     logger.info(
@@ -437,29 +461,47 @@ class NotificationService:
         cls.notify_users(managers, title=title, body=body, metadata=metadata)
 
     @classmethod
-    def send_sanction_approved_email(cls, application, *, decision=None) -> None:
-        """Email the customer and internal sanction/confirmation mailboxes (manual trigger)."""
+    def send_sanction_approved_email(
+        cls, application, *, decision=None, raise_on_error=True
+    ) -> None:
+        """Email the customer and internal sanction/confirmation mailboxes."""
         if decision is None:
             decision = (
                 application.decisions.filter(decision="approved").order_by("-decided_at").first()
             )
         customer_email = cls._customer_email(application)
         if not customer_email:
-            raise ValueError(
+            message = (
                 "This customer has no email address. Add one before sending the sanction email."
             )
-        context = cls._sanction_letter_context(application, decision=decision)
-        cls._send_email_on_commit(
-            subject=(
-                f"Sanction Approval by Credit Team of Kuberniti Money — "
-                f"{application.application_number}"
-            ),
-            template="sanction_approved",
-            context=context,
-            recipients=cls._sanction_to_addresses(application),
-            cc=cls._sanction_cc_addresses(application, decision=decision),
-            raise_on_error=True,
-        )
+            if raise_on_error:
+                raise ValueError(message)
+            logger.info(
+                "Skipping sanction email; no customer email for application %s",
+                getattr(application, "application_number", application.pk),
+            )
+            return
+        try:
+            context = cls._sanction_letter_context(application, decision=decision)
+            cls._send_email_on_commit(
+                subject=(
+                    f"Sanction Approval by Credit Team of Kuberniti Money — "
+                    f"{application.application_number}"
+                ),
+                template="sanction_approved",
+                context=context,
+                recipients=cls._sanction_to_addresses(application),
+                cc=cls._sanction_cc_addresses(application, decision=decision),
+                from_email=cls._from_email("SANCTION_FROM_EMAIL", "sanction@kubernitimoney.com"),
+                raise_on_error=raise_on_error,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send sanction email for application %s",
+                getattr(application, "application_number", application.pk),
+            )
+            if raise_on_error:
+                raise
 
     @classmethod
     def send_esign_request_email(
@@ -595,6 +637,7 @@ class NotificationService:
                     "confirmation@kubernitimoney.com",
                 )
             ],
+            from_email=cls._from_email("DISBURSAL_FROM_EMAIL", "disbursal@kubernitimoney.com"),
         )
 
     @classmethod

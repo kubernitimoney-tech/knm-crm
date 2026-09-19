@@ -251,11 +251,20 @@ BRAND_SECONDARY_COLOR = env("BRAND_SECONDARY_COLOR", default="#424665")
 BRAND_BG_COLOR = env("BRAND_BG_COLOR", default="#F4F6F9")
 EMAIL_LOGO_PATH = env("EMAIL_LOGO_PATH", default=str(BASE_DIR / "static" / "emails" / "logo.png"))
 SANCTION_MAILBOX_EMAIL = _env_str("SANCTION_MAILBOX_EMAIL") or "sanction@kubernitimoney.com"
+DISBURSAL_MAILBOX_EMAIL = _env_str("DISBURSAL_MAILBOX_EMAIL") or "disbursal@kubernitimoney.com"
 CONFIRMATION_MAILBOX_EMAIL = (
     _env_str("CONFIRMATION_MAILBOX_EMAIL") or "confirmation@kubernitimoney.com"
 )
 DEFAULT_FROM_EMAIL = _named_from_email(DEFAULT_FROM_EMAIL, BRAND_NAME)
 SERVER_EMAIL = _named_from_email(SERVER_EMAIL, BRAND_NAME)
+SANCTION_FROM_EMAIL = _named_from_email(
+    _env_str("SANCTION_FROM_EMAIL") or SANCTION_MAILBOX_EMAIL,
+    BRAND_NAME,
+)
+DISBURSAL_FROM_EMAIL = _named_from_email(
+    _env_str("DISBURSAL_FROM_EMAIL") or DISBURSAL_MAILBOX_EMAIL,
+    BRAND_NAME,
+)
 
 # Optional SMS for Video KYC invitation links (customer mobile).
 # Fast2SMS: SMS_PROVIDER=fast2sms and SMS_API_KEY=<authorization key>
