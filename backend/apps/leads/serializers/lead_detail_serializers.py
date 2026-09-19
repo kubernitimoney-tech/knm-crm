@@ -321,6 +321,8 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
     signed_on = serializers.SerializerMethodField()
     signed_file_url = serializers.SerializerMethodField()
     review_url = serializers.SerializerMethodField()
+    email_sent = serializers.SerializerMethodField()
+    email_error = serializers.SerializerMethodField()
 
     class Meta:
         model = LeadEsignRequest
@@ -337,6 +339,8 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
             "request_url",
             "review_url",
             "provider_request_id",
+            "email_sent",
+            "email_error",
         ]
         read_only_fields = fields
 
@@ -360,6 +364,12 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
         from apps.integrations.digio.gateway import customer_esign_review_url
 
         return customer_esign_review_url(obj.id)
+
+    def get_email_sent(self, obj):
+        return getattr(obj, "email_sent", None)
+
+    def get_email_error(self, obj):
+        return getattr(obj, "email_error", "") or ""
 
 
 class LeadVideoKycRequestSerializer(serializers.ModelSerializer):

@@ -101,6 +101,8 @@ export interface ApiLeadEsignRequest {
   request_url?: string | null;
   review_url?: string | null;
   provider_request_id?: string | null;
+  email_sent?: boolean | null;
+  email_error?: string | null;
 }
 
 export interface ApiLeadVideoKycRequest {

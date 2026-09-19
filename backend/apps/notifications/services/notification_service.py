@@ -63,11 +63,10 @@ class NotificationService:
         return cls._normalize_email(details.get("official_email") or details.get("officialEmail"))
 
     @classmethod
-    def _sanction_to_addresses(cls, application) -> list[str]:
+    def _unique_emails(cls, *emails) -> list[str]:
         addresses: list[str] = []
         seen: set[str] = set()
-        mailbox = cls._mailbox_email("SANCTION_MAILBOX_EMAIL", "sanction@kubernitimoney.com")
-        for email in (cls._customer_email(application), mailbox):
+        for email in emails:
             if not email:
                 continue
             key = email.lower()
@@ -77,21 +76,24 @@ class NotificationService:
         return addresses
 
     @classmethod
-    def _sanction_cc_addresses(cls, application, *, decision=None) -> list[str]:
-        addresses: list[str] = []
-        seen: set[str] = set()
-        confirmation = cls._mailbox_email(
-            "CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"
+    def _sanction_to_addresses(cls, application, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._customer_email(application),
+            cls._official_email(application, decision=decision),
+            cls._mailbox_email("SANCTION_MAILBOX_EMAIL", "sanction@kubernitimoney.com"),
         )
-        official = cls._official_email(application, decision=decision)
-        for email in (confirmation, official):
-            if not email:
-                continue
-            key = email.lower()
-            if key not in seen:
-                seen.add(key)
-                addresses.append(email)
-        return addresses
+
+    @classmethod
+    def _sanction_cc_addresses(cls, application=None, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._mailbox_email("CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"),
+        )
+
+    @classmethod
+    def _disbursal_cc_addresses(cls, application=None, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._mailbox_email("CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"),
+        )
 
     @staticmethod
     def _assigned_officer_emails(application) -> list[str]:
@@ -490,8 +492,8 @@ class NotificationService:
                 ),
                 template="sanction_approved",
                 context=context,
-                recipients=cls._sanction_to_addresses(application),
-                cc=cls._sanction_cc_addresses(application, decision=decision),
+                recipients=cls._sanction_to_addresses(application, decision=decision),
+                cc=cls._sanction_cc_addresses(),
                 from_email=cls._from_email("SANCTION_FROM_EMAIL", "sanction@kubernitimoney.com"),
                 raise_on_error=raise_on_error,
             )
@@ -629,14 +631,7 @@ class NotificationService:
                 "repayment_amount_words": indian_amount_in_words(repayment_amount),
             },
             recipients=[customer_email],
-            cc=cls._sanction_cc_addresses(application)
-            if application
-            else [
-                cls._mailbox_email(
-                    "CONFIRMATION_MAILBOX_EMAIL",
-                    "confirmation@kubernitimoney.com",
-                )
-            ],
+            cc=cls._disbursal_cc_addresses(),
             from_email=cls._from_email("DISBURSAL_FROM_EMAIL", "disbursal@kubernitimoney.com"),
         )
 

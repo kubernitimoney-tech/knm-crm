@@ -622,9 +622,17 @@ class LeadDetailActionsMixin:
         except DigioAPIError as exc:
             return error_response(message=str(exc), status_code=status.HTTP_502_BAD_GATEWAY)
 
+        email_sent = bool(getattr(row, "email_sent", False))
+        email_error = (getattr(row, "email_error", "") or "").strip()
+        message = "E-sign request sent"
+        if not email_sent:
+            message = (
+                email_error
+                or "E-sign was created, but the email could not be sent. Check SMTP settings."
+            )
         return success_response(
             data=self._serialize(LeadEsignRequestSerializer, row).data,
-            message="E-sign request sent",
+            message=message,
             status_code=status.HTTP_201_CREATED,
         )
 

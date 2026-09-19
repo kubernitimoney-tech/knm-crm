@@ -97,13 +97,23 @@ export function LeadEsignDetailsSection({
     try {
       const created = await sendLeadEsignRequest(leadId, 'aadhaar');
       setEntries((prev) => [mapApiEntry(created), ...prev]);
-      toast({
-        title: 'E-sign request sent',
-        description: customerEmail
-          ? `Signing link emailed to ${customerEmail}. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.`
-          : 'Signing link created. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.',
-        variant: 'success',
-      });
+      if (created.email_sent === false) {
+        toast({
+          title: 'E-sign created, email not sent',
+          description:
+            created.email_error
+            || 'Check SMTP settings (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD) and the customer inbox or spam folder.',
+          variant: 'error',
+        });
+      } else {
+        toast({
+          title: 'E-sign request sent',
+          description: customerEmail
+            ? `Signing link emailed to ${customerEmail}. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.`
+            : 'Signing link created. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.',
+          variant: 'success',
+        });
+      }
     } catch (err) {
       toast({
         title: 'Request failed',

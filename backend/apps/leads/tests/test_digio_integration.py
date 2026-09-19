@@ -102,6 +102,40 @@ class TestDigioEsignAndVideoKyc:
         assert "MENIKA KUMARI" not in text
         assert "pankajanand702@gmail.com" not in text
         assert "/AcroForm" not in reader.trailer["/Root"]
+        assert response.data["data"]["email_sent"] is True
+
+    def test_send_esign_reports_email_failure(self):
+        admin = UserFactory(email="admin-digio-esign-mailfail@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        mock_client = MagicMock()
+        mock_client.upload_pdf.return_value = {
+            "id": "DIDMAILFAIL123456",
+            "access_token": {"id": "tok-mailfail"},
+        }
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with (
+            patch(
+                "apps.integrations.digio.esign.DigioClient.from_settings",
+                return_value=mock_client,
+            ),
+            patch(
+                "apps.notifications.services.email_service.EmailService.send_html",
+                side_effect=RuntimeError("SMTP authentication failed"),
+            ),
+        ):
+            response = client.post(
+                reverse("lead-esign-requests", kwargs={"pk": lead.id}),
+                {"sign_type": "aadhaar"},
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert LeadEsignRequest.objects.filter(lead=lead).count() == 1
+        assert response.data["data"]["email_sent"] is False
+        assert "SMTP authentication failed" in response.data["data"]["email_error"]
+        assert "SMTP authentication failed" in response.data["message"]
 
     def test_send_esign_uses_configured_sign_type(self):
         admin = UserFactory(email="admin-digio-email-otp@test.com")
