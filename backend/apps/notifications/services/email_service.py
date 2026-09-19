@@ -409,6 +409,22 @@ class EmailService:
         message.attach(image)
         message.mixed_subtype = "related"
 
+    @staticmethod
+    def _resolve_from_email(from_email: str | None = None) -> str:
+        from email.utils import formataddr, parseaddr
+
+        raw = (from_email or getattr(settings, "DEFAULT_FROM_EMAIL", None) or "").strip()
+        if not raw:
+            raise ValueError(
+                "DEFAULT_FROM_EMAIL / EMAIL_HOST_USER is empty. Set them in backend/.env "
+                "and recreate the Django container."
+            )
+        name, addr = parseaddr(raw)
+        if not addr:
+            return raw
+        brand = getattr(settings, "BRAND_NAME", "Kuberniti Money")
+        return formataddr((name or brand, addr))
+
     @classmethod
     def send_html(
         cls,
@@ -418,6 +434,7 @@ class EmailService:
         context: dict,
         recipients,
         cc=None,
+        from_email: str | None = None,
     ) -> int:
         """Send a multipart email (plain text + HTML) for the given template key."""
         to_addresses = cls._clean_recipients(recipients)
@@ -428,12 +445,7 @@ class EmailService:
         to_lower = {address.lower() for address in to_addresses}
         cc_addresses = [address for address in cc_addresses if address.lower() not in to_lower]
 
-        from_email = (getattr(settings, "DEFAULT_FROM_EMAIL", None) or "").strip()
-        if not from_email:
-            raise ValueError(
-                "DEFAULT_FROM_EMAIL / EMAIL_HOST_USER is empty. Set them in backend/.env "
-                "and recreate the Django container."
-            )
+        from_email = cls._resolve_from_email(from_email)
 
         payload = context or {}
         text_body = cls.render_plain_text(template=template, context=payload)

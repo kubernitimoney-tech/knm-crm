@@ -95,9 +95,12 @@ class TestSanctionRevision:
 
         captured = {}
 
-        def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
             captured["recipients"] = recipients
             captured["cc"] = cc
+            captured["from_email"] = from_email
 
         with patch.object(
             NotificationService,
@@ -111,6 +114,7 @@ class TestSanctionRevision:
             "sanction@kubernitimoney.com",
         ]
         assert captured["cc"] == ["confirmation@kubernitimoney.com"]
+        assert "sanction@kubernitimoney.com" in captured["from_email"]
         assert "rm@example.com" not in captured["recipients"]
         assert "cm@example.com" not in captured["recipients"]
         assert "rm@example.com" not in captured["cc"]
@@ -141,9 +145,12 @@ class TestSanctionRevision:
 
         captured = {}
 
-        def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
             captured["recipients"] = recipients
             captured["cc"] = cc
+            captured["from_email"] = from_email
 
         with patch.object(
             NotificationService,
@@ -156,6 +163,7 @@ class TestSanctionRevision:
             "personal@example.com",
             "sanction@kubernitimoney.com",
         ]
+        assert "sanction@kubernitimoney.com" in captured["from_email"]
         assert captured["cc"] == [
             "confirmation@kubernitimoney.com",
             "official@company.com",

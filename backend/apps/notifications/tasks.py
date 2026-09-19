@@ -18,7 +18,7 @@ def send_notification_task(recipient_id, title, body, metadata=None):
 
 
 @shared_task(queue="notifications")
-def send_email_task(subject, template, context, recipients, cc=None):
+def send_email_task(subject, template, context, recipients, cc=None, from_email=None):
     from apps.notifications.services.email_service import EmailService
 
     return EmailService.send_html(
@@ -27,6 +27,7 @@ def send_email_task(subject, template, context, recipients, cc=None):
         context=context or {},
         recipients=recipients or [],
         cc=cc or [],
+        from_email=from_email,
     )
 
 

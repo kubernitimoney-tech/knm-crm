@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, ExternalLink, Mail } from 'lucide-react';
+import { Download, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
@@ -158,9 +158,6 @@ export function LeadVideoKycDetailsSection({
           ) : (
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
-              const canOpenKycSession =
-                entry.status !== 'completed' &&
-                entry.status !== 'expired';
               return (
               <TableRow key={entry.id} className="border-b border-slate-50 dark:border-slate-850">
                 <TableCell>
@@ -173,25 +170,6 @@ export function LeadVideoKycDetailsSection({
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {canOpenKycSession && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open Digio Aadhaar, PAN and selfie KYC session"
-                        onClick={() => {
-                          window.open(`/verify-kyc/${entry.id}`, '_blank', 'noopener,noreferrer');
-                          toast({
-                            title: 'KYC workflow opened',
-                            description: 'Complete the Aadhaar, PAN, selfie and OCR steps in Digio.',
-                            variant: 'success',
-                          });
-                        }}
-                      >
-                        <ExternalLink size={12} className="mr-1" />
-                        Open
-                      </Button>
-                    )}
                     {canViewDocument && (
                       <RowViewButton
                         title="View video KYC details"
@@ -219,7 +197,7 @@ export function LeadVideoKycDetailsSection({
                         Download
                       </Button>
                     )}
-                    {!canOpenKycSession && !canViewDocument && !canDownloadDocument && (
+                    {!canViewDocument && !canDownloadDocument && (
                       <span className="text-[11px] text-slate-400">—</span>
                     )}
                   </div>
