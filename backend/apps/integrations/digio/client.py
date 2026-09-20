@@ -231,7 +231,15 @@ class DigioClient:
         expire_in_days: int = 10,
         redirect_url: str = "",
         reason: str = "Loan Agreement",
+        display_on_page: str = "custom",
+        sign_coordinates: dict | None = None,
     ) -> dict:
+        signer = {
+            "identifier": identifier,
+            "name": signer_name,
+            "sign_type": sign_type,
+            "reason": reason,
+        }
         payload = {
             "file_name": file_name,
             "file_data": base64.b64encode(file_bytes).decode("ascii"),
@@ -240,15 +248,13 @@ class DigioClient:
             # We email the LMS /sign/ page instead.
             "notify_signers": False,
             "generate_access_token": True,
-            "signers": [
-                {
-                    "identifier": identifier,
-                    "name": signer_name,
-                    "sign_type": sign_type,
-                    "reason": reason,
-                }
-            ],
+            "display_on_page": display_on_page,
+            "signers": [signer],
         }
+        if sign_coordinates:
+            # Digio requires coordinates keyed by signer identifier when
+            # display_on_page is custom.
+            payload["sign_coordinates"] = {identifier: sign_coordinates}
         if redirect_url:
             payload["redirect_url"] = redirect_url
         return self.request(

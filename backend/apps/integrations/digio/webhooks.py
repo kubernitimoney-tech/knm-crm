@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from apps.integrations.digio.client import DigioClient, coerce_pdf_bytes
 from apps.integrations.digio.exceptions import DigioAPIError, DigioError
+from apps.integrations.digio.pdf import apply_completed_signature_marks
 from apps.leads.models import (
     EsignRequestStatus,
     LeadEsignRequest,
@@ -116,7 +117,24 @@ def _is_failure_event(event: str) -> bool:
 
 
 def _is_success_event(event: str) -> bool:
-    return any(token in event for token in ("signed", "complete", "approved", "success"))
+    return any(
+        token in (event or "").lower()
+        for token in ("signed", "complete", "approved", "success")
+    )
+
+
+def _document_is_signed(document: dict, *, event: str = "") -> bool:
+    if _is_success_event(event):
+        return True
+    blobs = [
+        str(document.get("agreement_status") or ""),
+        str(document.get("status") or ""),
+        str(document.get("document_status") or ""),
+    ]
+    for party in document.get("signing_parties") or document.get("signers") or []:
+        if isinstance(party, dict):
+            blobs.append(str(party.get("status") or ""))
+    return _is_success_event(" ".join(blobs))
 
 
 def _handle_esign(document_id: str, *, event: str) -> bool:
@@ -147,17 +165,7 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
         document = {}
     if not isinstance(document, dict):
         document = {}
-    document_status = str(document.get("agreement_status") or document.get("status") or "").lower()
-    should_complete = (
-        already_signed
-        or _is_success_event(event)
-        or document_status
-        in {
-            "completed",
-            "signed",
-            "success",
-        }
-    )
+    should_complete = already_signed or _document_is_signed(document, event=event)
     if not should_complete:
         return True
 
@@ -178,6 +186,7 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
             if attempt < 2:
                 time.sleep(1)
     if pdf_bytes:
+        pdf_bytes = apply_completed_signature_marks(pdf_bytes)
         row.signed_file.save(f"{document_id}.pdf", ContentFile(pdf_bytes), save=False)
     row.status = EsignRequestStatus.SIGNED
     if not row.signed_at:
@@ -190,14 +199,14 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     return True
 
 
-def refresh_esign_from_provider(row: LeadEsignRequest) -> LeadEsignRequest:
+def refresh_esign_from_provider(row: LeadEsignRequest, *, force: bool = False) -> LeadEsignRequest:
     """After Protean redirects back, copy Digio's completed PDF if the webhook has not arrived yet."""
     provider_id = (row.provider_request_id or "").strip()
     if not provider_id:
         return row
     if row.status == EsignRequestStatus.SIGNED and row.signed_file:
         return row
-    event = "doc.signed" if row.status == EsignRequestStatus.SIGNED else ""
+    event = "doc.signed" if force or row.status == EsignRequestStatus.SIGNED else ""
     try:
         _handle_esign(provider_id, event=event)
     except DigioError:
