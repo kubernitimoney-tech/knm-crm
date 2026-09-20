@@ -122,7 +122,7 @@ class PublicEsignAPIView(APIView):
     def get(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
         sync = str(request.query_params.get("sync") or "").strip().lower() in {"1", "true", "yes"}
-        if sync and row.status != EsignRequestStatus.SIGNED:
+        if sync and (row.status != EsignRequestStatus.SIGNED or not row.signed_file):
             from apps.integrations.digio.webhooks import refresh_esign_from_provider
 
             row = refresh_esign_from_provider(row)
@@ -219,6 +219,10 @@ class PublicEsignDocumentAPIView(APIView):
 
     def get(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
+        if row.status == EsignRequestStatus.SIGNED and not row.signed_file:
+            from apps.integrations.digio.webhooks import refresh_esign_from_provider
+
+            row = refresh_esign_from_provider(row)
         filename = "Agreement.pdf"
         if row.status == EsignRequestStatus.SIGNED and row.signed_file:
             return FileResponse(

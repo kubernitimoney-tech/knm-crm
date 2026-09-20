@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.http import FileResponse
@@ -26,6 +28,7 @@ from apps.integrations.digio.exceptions import (
 )
 from apps.integrations.digio.vkyc import create_lead_video_kyc_request
 from apps.leads.models import (
+    EsignRequestStatus,
     LeadEsignRequest,
     LeadVideoKycRequest,
 )
@@ -48,6 +51,8 @@ from apps.leads.serializers import (
 )
 from apps.leads.services.lead_conversion_service import LeadConversionService
 from apps.loans.models import Loan
+
+logger = logging.getLogger(__name__)
 
 
 class LeadDetailActionsMixin:
@@ -86,6 +91,8 @@ class LeadDetailActionsMixin:
         lead = get_lead_detail(pk)
 
         customer = lead.customer
+
+        self._sync_signed_esign_files(lead)
 
         payload = {
             "lead": lead,
@@ -592,12 +599,28 @@ class LeadDetailActionsMixin:
 
         return FileResponse(version.file.open("rb"), as_attachment=True, filename=version.file_name)
 
+    @staticmethod
+    def _sync_signed_esign_files(lead):
+        from apps.integrations.digio.webhooks import refresh_esign_from_provider
+
+        missing = LeadEsignRequest.objects.filter(
+            lead=lead,
+            status=EsignRequestStatus.SIGNED,
+            signed_file="",
+        )
+        for row in missing:
+            try:
+                refresh_esign_from_provider(row)
+            except Exception:
+                logger.exception("Could not fetch signed e-sign PDF for request %s", row.pk)
+
     @rbac_permission("lead.view")
     @action(detail=True, methods=["get", "post"], url_path="esign-requests")
     def esign_requests(self, request, pk=None):
         lead = self.get_object()
 
         if request.method == "GET":
+            self._sync_signed_esign_files(lead)
             rows = LeadEsignRequest.objects.filter(lead=lead).select_related("requested_by")
 
             return success_response(
@@ -634,6 +657,48 @@ class LeadDetailActionsMixin:
             data=self._serialize(LeadEsignRequestSerializer, row).data,
             message=message,
             status_code=status.HTTP_201_CREATED,
+        )
+
+    @rbac_any_permission("document.view", "document.download")
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path=r"esign-requests/(?P<request_id>[^/.]+)/file",
+    )
+    def esign_request_file(self, request, pk=None, request_id=None):
+        lead = self.get_object()
+        row = LeadEsignRequest.objects.filter(lead=lead, pk=request_id).first()
+        if row is None:
+            return error_response(message="E-sign request not found", status_code=404)
+        if row.status != EsignRequestStatus.SIGNED:
+            return error_response(
+                message="Signed document is not available yet.",
+                status_code=404,
+            )
+        if not row.signed_file:
+            from apps.integrations.digio.webhooks import refresh_esign_from_provider
+
+            try:
+                refresh_esign_from_provider(row)
+                row.refresh_from_db()
+            except Exception:
+                logger.exception("Could not fetch signed e-sign PDF for request %s", row.pk)
+        if not row.signed_file:
+            return error_response(
+                message="Signed document could not be retrieved from Digio. Try again shortly.",
+                status_code=404,
+            )
+        filename = row.signed_file.name.rsplit("/", 1)[-1] or "Signed-Agreement.pdf"
+        as_attachment = str(request.query_params.get("download") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        return FileResponse(
+            row.signed_file.open("rb"),
+            as_attachment=as_attachment,
+            filename=filename,
+            content_type="application/pdf",
         )
 
     @rbac_permission("lead.view")

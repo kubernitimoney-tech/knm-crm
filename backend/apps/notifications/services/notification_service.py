@@ -325,6 +325,7 @@ class NotificationService:
         recipients,
         cc=None,
         from_email=None,
+        attachments=None,
         raise_on_error=False,
     ) -> None:
         """Send an email once the surrounding DB transaction commits.
@@ -351,6 +352,7 @@ class NotificationService:
                     recipients=recipients,
                     cc=cc,
                     from_email=from_email,
+                    attachments=attachments,
                 )
                 if sent:
                     logger.info(
@@ -523,7 +525,7 @@ class NotificationService:
         if not (request_url or "").strip():
             raise ValueError("E-sign signing link is missing.")
         cls._send_email_on_commit(
-            subject=f"Please e-sign your loan agreement — {lead.lead_id}",
+            subject="Please complete KYC process of Kuberniti Money with Har Shreejee Finance & Leasing Company Limited.",
             template="esign_request",
             context={
                 "customer_name": customer_label,
@@ -534,6 +536,54 @@ class NotificationService:
                 ),
             },
             recipients=[email],
+            raise_on_error=True,
+        )
+
+    @staticmethod
+    def esign_document_reference(row) -> str:
+        raw = (getattr(row, "provider_request_id", "") or "").strip() or str(
+            getattr(row, "id", "") or ""
+        )
+        cleaned = "".join(ch for ch in raw if ch.isalnum())
+        return cleaned or "SignedDocument"
+
+    @classmethod
+    def _format_esign_signed_date(cls, value) -> str:
+        if value is None:
+            value = timezone.localtime()
+        if isinstance(value, datetime):
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
+            return f"{value.strftime('%B')} {value.day}, {value.year}"
+        if isinstance(value, date):
+            return f"{value.strftime('%B')} {value.day}, {value.year}"
+        return str(value)
+
+    @classmethod
+    def send_esign_signed_copy_email(cls, *, row, pdf_bytes: bytes) -> None:
+        """Email the customer a copy of the executed e-sign PDF."""
+        if not pdf_bytes:
+            raise ValueError("Signed document bytes are missing.")
+        lead = getattr(row, "lead", None)
+        customer = getattr(lead, "customer", None)
+        email = (
+            getattr(row, "recipient_email", "") or getattr(customer, "email", "") or ""
+        ).strip()
+        if not email:
+            raise ValueError("This customer has no email address.")
+        reference = cls.esign_document_reference(row)
+        filename = f"{reference}_signedFinal.pdf"
+        cls._send_email_on_commit(
+            subject="Document Successfully Signed",
+            template="esign_signed",
+            context={
+                "customer_name": cls._customer_label(customer),
+                "document_reference": reference,
+                "signed_date": cls._format_esign_signed_date(getattr(row, "signed_at", None)),
+                "attachment_name": filename,
+            },
+            recipients=[email],
+            attachments=[(filename, pdf_bytes, "application/pdf")],
             raise_on_error=True,
         )
 

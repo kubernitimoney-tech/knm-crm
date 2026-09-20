@@ -155,35 +155,80 @@ class EmailService:
 
         if template == "esign_request":
             signing_url = (ctx.get("signing_url") or "").strip()
-            lead_id = (ctx.get("lead_id") or "").strip()
-            sign_method = (ctx.get("sign_method") or "electronic signature OTP").strip()
+            website_url = (ctx.get("website_url") or "https://www.kubernitimoney.com").rstrip("/")
             lines = [
-                "Please e-sign your loan agreement.",
+                f"Dear {customer_name or 'Customer'},",
                 "",
-                f"Dear {customer_name.title() if customer_name else 'Customer'},",
+                (
+                    "To maintain security during the entire financial operations, we require "
+                    "the completion of your Know Your Customer (KYC) verification which is "
+                    "mandatory to ensure security during the accomplishment of all transactions "
+                    "and account activities."
+                ),
                 "",
-                f"Please review Agreement.pdf, then continue with {sign_method}.",
+                "Initiate your verification process seamlessly by clicking below:",
             ]
-            if lead_id:
-                lines.extend(["", f"Lead: {lead_id}"])
             if signing_url:
-                lines.extend(
-                    [
-                        "",
-                        f"Click here to review the document, then sign with {sign_method}:",
-                        signing_url,
-                    ]
-                )
+                lines.extend(["", "Start KYC Process", signing_url])
             lines.extend(
                 [
                     "",
-                    "If the button in another email asks you to log in to Digio Drive, ignore it.",
-                    f"Thank you for choosing {brand_name}.",
+                    (
+                        "Our support team is always available to assist you while proceeding "
+                        "with any documentation. They are always ready to assist you with all "
+                        "the technical guidance during the KYC process"
+                    ),
                     "",
-                    footer,
+                    (
+                        "Security Notice: Never share verification codes or credentials. "
+                        "Kuberniti Money representatives will never request sensitive information via email."
+                    ),
+                    "",
+                    "Best regards,",
+                    "Compliance Team",
+                    "Kuberniti Money",
+                    "",
+                    "© 2025 Har Shreejee Finance and Leasing Company Ltd",
+                    f"Contact Support: {website_url}/contact",
+                    f"Privacy Policy: {website_url}/privacy",
                 ]
             )
             return "\n".join(lines)
+
+        if template == "esign_signed":
+            document_reference = (ctx.get("document_reference") or "").strip()
+            signed_date = (ctx.get("signed_date") or "").strip()
+            website_url = (ctx.get("website_url") or "https://www.kubernitimoney.com").rstrip("/")
+            return "\n".join(
+                [
+                    f"Dear {customer_name or 'Customer'},",
+                    "",
+                    "Document Successfully Signed",
+                    "",
+                    "Transaction Details:",
+                    f"Document Reference:{document_reference}",
+                    f"Signed Date: {signed_date}",
+                    "Legal Binding: Effective Immediately",
+                    "",
+                    (
+                        "We confirm receipt of your signed document. The executed copy is "
+                        "attached for your records and will be securely archived in your account."
+                    ),
+                    "",
+                    "Next Steps:",
+                    "",
+                    "Retain this confirmation for future reference",
+                    "Access documents anytime in your portal",
+                    "Contact legal support for any discrepancies",
+                    "",
+                    (
+                        "© 2025 Har Shreejee Finance and Leasing Company Ltd  "
+                        "| Secured Document Management"
+                    ),
+                    f"Contact Support: {website_url}/contact",
+                    f"Privacy Policy: {website_url}/privacy",
+                ]
+            )
 
         if template == "video_kyc_request":
             kyc_url = (ctx.get("kyc_url") or "").strip()
@@ -435,6 +480,7 @@ class EmailService:
         recipients,
         cc=None,
         from_email: str | None = None,
+        attachments=None,
     ) -> int:
         """Send a multipart email (plain text + HTML) for the given template key."""
         to_addresses = cls._clean_recipients(recipients)
@@ -446,14 +492,19 @@ class EmailService:
         cc_addresses = [address for address in cc_addresses if address.lower() not in to_lower]
 
         from_email = cls._resolve_from_email(from_email)
+        file_attachments = [
+            item for item in (attachments or []) if item and len(item) >= 2 and item[1]
+        ]
 
         payload = context or {}
         text_body = cls.render_plain_text(template=template, context=payload)
+        # Keep the logo as a data URL when a PDF is attached so the file is not
+        # nested under multipart/related (some clients then hide the attachment).
         html_body = cls.render_html(
             template=template,
             context=payload,
             subject=subject,
-            for_send=True,
+            for_send=not file_attachments,
         )
         message = EmailMultiAlternatives(
             subject=subject,
@@ -463,5 +514,10 @@ class EmailService:
             cc=cc_addresses or None,
         )
         message.attach_alternative(html_body, "text/html")
-        cls._attach_inline_logo(message)
+        if not file_attachments:
+            cls._attach_inline_logo(message)
+        for item in file_attachments:
+            filename, content = item[0], item[1]
+            mimetype = item[2] if len(item) > 2 else "application/octet-stream"
+            message.attach(filename, content, mimetype)
         return message.send(fail_silently=False)

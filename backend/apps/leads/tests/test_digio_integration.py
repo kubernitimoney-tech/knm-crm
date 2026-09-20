@@ -84,7 +84,13 @@ class TestDigioEsignAndVideoKyc:
 
         assert len(mail.outbox) == 1
         assert f"/sign/{row.id}" in mail.outbox[0].body
-        assert "Aadhaar" in mail.outbox[0].body
+        assert mail.outbox[0].subject == (
+            "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+            "& Leasing Company Limited."
+        )
+        assert "Start KYC Process" in mail.outbox[0].body
+        assert "Know Your Customer (KYC)" in mail.outbox[0].body
+        assert "Compliance Team" in mail.outbox[0].body
         from io import BytesIO
 
         from pypdf import PdfReader
@@ -95,10 +101,11 @@ class TestDigioEsignAndVideoKyc:
         reader = PdfReader(BytesIO(pdf))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         assert len(reader.pages) == 28
-        assert "LAXMI" in text
         assert lead.customer.full_name in text
-        assert "Naman Commodities" not in text
-        assert "NCPL" not in text
+        assert "Naman Commodities" in text
+        assert "LendingRupee" in text
+        assert "DEFINATION AND INTERPRETATION" in text
+        assert "LAXMI" not in text
         assert "MENIKA KUMARI" not in text
         assert "pankajanand702@gmail.com" not in text
         assert "/AcroForm" not in reader.trailer["/Root"]
@@ -461,6 +468,40 @@ class TestDigioEsignAndVideoKyc:
         row.refresh_from_db()
         assert row.status == EsignRequestStatus.SIGNED
         assert row.signed_file
+        from django.core import mail
+
+        signed_mails = [
+            item for item in mail.outbox if item.subject == "Document Successfully Signed"
+        ]
+        assert len(signed_mails) == 1
+        message = signed_mails[0]
+        assert lead.customer.email in message.to
+        assert "Document Successfully Signed" in message.body
+        assert "Document Reference:DID1234567890ABCD" in message.body
+        assert "Legal Binding: Effective Immediately" in message.body
+        assert "Secured Document Management" in message.body
+        assert message.attachments
+        filename, content, mimetype = message.attachments[0]
+        assert filename == "DID1234567890ABCD_signedFinal.pdf"
+        assert content == b"%PDF-1.4 signed"
+        assert mimetype == "application/pdf"
+
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            again = api.generic(
+                "POST",
+                reverse("digio-webhook"),
+                data=body,
+                content_type="application/json",
+                HTTP_X_DIGIO_SIGNATURE=_hmac(body),
+            )
+        assert again.status_code == status.HTTP_200_OK
+        assert (
+            len([item for item in mail.outbox if item.subject == "Document Successfully Signed"])
+            == 1
+        )
 
     def test_webhook_marks_kyc_completed(self):
         lead = _create_lead()
@@ -710,6 +751,120 @@ class TestDigioEsignAndVideoKyc:
         assert row.signed_file
         assert verify_response.data["data"]["signed"] is True
         mock_client.complete_aadhaar_esign.assert_called()
+        from django.core import mail
+
+        signed_mails = [
+            item for item in mail.outbox if item.subject == "Document Successfully Signed"
+        ]
+        assert len(signed_mails) == 1
+        filename, content, _mimetype = signed_mails[0].attachments[0]
+        assert filename == "DIDAADHAAROTP1234_signedFinal.pdf"
+        assert content == b"%PDF-signed"
+
+    def test_staff_can_download_signed_esign_file(self):
+        from django.core.files.base import ContentFile
+
+        admin = UserFactory(email="admin-esign-file@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SIGNED,
+            provider_request_id="DIDFILE1234567890AB",
+        )
+        row.signed_file.save("DIDFILE1234567890AB.pdf", ContentFile(b"%PDF-staff"), save=True)
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        response = client.get(
+            reverse(
+                "lead-esign-request-file",
+                kwargs={"pk": lead.id, "request_id": row.id},
+            )
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response["Content-Type"].startswith("application/pdf")
+        assert b"".join(response.streaming_content) == b"%PDF-staff"
+
+    def test_signed_file_endpoint_retries_digio_when_pdf_missing(self):
+        admin = UserFactory(email="admin-esign-retry@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SIGNED,
+            provider_request_id="DIDRETRY1234567890A",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {"status": "completed"}
+        mock_client.download_document.return_value = b"%PDF-retry"
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(
+                reverse(
+                    "lead-esign-request-file",
+                    kwargs={"pk": lead.id, "request_id": row.id},
+                )
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert b"".join(response.streaming_content) == b"%PDF-retry"
+        row.refresh_from_db()
+        assert row.signed_file
+
+    def test_esign_list_exposes_authenticated_signed_file_url(self):
+        admin = UserFactory(email="admin-esign-url@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SIGNED,
+            provider_request_id="DIDURL1234567890ABCD",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {"status": "completed"}
+        mock_client.download_document.return_value = b"%PDF-list"
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(reverse("lead-esign-requests", kwargs={"pk": lead.id}))
+
+        assert response.status_code == status.HTTP_200_OK
+        payload = response.data["data"][0]
+        assert payload["status"] == "signed"
+        assert f"/esign-requests/{row.id}/file/" in payload["signed_file_url"]
+        row.refresh_from_db()
+        assert row.signed_file
+
+    def test_signed_esign_file_requires_auth(self):
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SIGNED,
+            provider_request_id="DIDUNAUTH1234567890",
+        )
+        client = APIClient()
+        response = client.get(
+            reverse(
+                "lead-esign-request-file",
+                kwargs={"pk": lead.id, "request_id": row.id},
+            )
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 class TestDigioClientResponseHandling:
