@@ -83,6 +83,20 @@ class SanctionEmailTemplateTests(TestCase):
         assert "sanction@kubernitimoney.com" in mail.outbox[0].from_email
         assert "Kuberniti Money" in mail.outbox[0].from_email
 
+    def test_smtp_keeps_mailbox_on_from_header(self):
+        from django.test import override_settings
+
+        visible = EmailService._resolve_from_email("sanction@kubernitimoney.com")
+        with override_settings(
+            EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+            EMAIL_HOST_USER="info@kubernitimoney.com",
+        ):
+            envelope, headers = EmailService._delivery_addresses(visible)
+
+        assert envelope == "info@kubernitimoney.com"
+        assert "sanction@kubernitimoney.com" in headers["From"]
+        assert "Kuberniti Money" in headers["From"]
+
 
 class LoanDisbursedEmailTemplateTests(TestCase):
     _context = {
