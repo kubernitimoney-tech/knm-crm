@@ -22,6 +22,7 @@ from apps.integrations.digio.gateway import (
     customer_esign_review_url,
     customer_identifier,
     digio_web_sdk,
+    esign_signing_url,
 )
 from apps.integrations.digio.pdf import build_agreement_pdf
 from apps.leads.models import EsignRequestStatus, LeadEsignRequest
@@ -52,7 +53,7 @@ def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
         "document_name": row.document_label or "Loan Agreement",
         "customer_name": customer.full_name if customer else "",
         "review_url": customer_esign_review_url(row.id),
-        "signing_url": row.request_url,
+        "signing_url": esign_signing_url(row),
         "document_id": row.provider_request_id,
         "identifier": customer_identifier(customer=customer, recipient_email=row.recipient_email),
         "access_token": row.access_token or "",
