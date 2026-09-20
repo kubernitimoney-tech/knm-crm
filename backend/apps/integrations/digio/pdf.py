@@ -157,7 +157,9 @@ def _agreement_values(lead) -> AgreementValues:
         gst = (_decimal(processing_fee) * Decimal("0.18")).quantize(Decimal("0.01"))
     disbursal = _first_value(details, "amount_to_be_disbursed", "disbursal_amount")
     if disbursal is None:
-        disbursal = max(Decimal("0"), _decimal(principal) - _decimal(processing_fee) - _decimal(gst))
+        disbursal = max(
+            Decimal("0"), _decimal(principal) - _decimal(processing_fee) - _decimal(gst)
+        )
     repayment = (
         _first_value(details, "repay_amount", "repayment_amount")
         or getattr(loan, "total_repayable", None)
@@ -439,15 +441,21 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
         _replace(pdf, x=details_x, top=292, width=details_w, text=values.email, height=30)
         _replace(pdf, x=details_x, top=328, width=details_w, text=values.mobile, height=16)
         _replace(pdf, x=details_x, top=413, width=details_w, text=values.execution_date, height=16)
-        _replace(pdf, x=details_x, top=435, width=details_w, text=values.application_number, height=16)
+        _replace(
+            pdf, x=details_x, top=435, width=details_w, text=values.application_number, height=16
+        )
         _replace(pdf, x=details_x, top=458, width=details_w, text=values.sanction_date, height=16)
         _replace(pdf, x=details_x, top=480, width=details_w, text=values.principal, height=16)
         _replace(pdf, x=details_x, top=503, width=details_w, text=values.interest_rate, height=16)
         _replace(pdf, x=details_x, top=525, width=details_w, text=values.processing_fee, height=16)
         _replace(pdf, x=details_x, top=548, width=details_w, text=values.gst, height=16)
-        _replace(pdf, x=details_x, top=570, width=details_w, text=values.disbursal_amount, height=16)
+        _replace(
+            pdf, x=details_x, top=570, width=details_w, text=values.disbursal_amount, height=16
+        )
         _replace(pdf, x=details_x, top=592, width=details_w, text=values.repayment_date, height=16)
-        _replace(pdf, x=details_x, top=615, width=details_w, text=values.repayment_amount, height=16)
+        _replace(
+            pdf, x=details_x, top=615, width=details_w, text=values.repayment_amount, height=16
+        )
         _replace(pdf, x=details_x, top=637, width=details_w, text=values.tenure_days, height=16)
         _replace(pdf, x=details_x, top=696, width=details_w, text=values.borrower_name, height=16)
     elif index == 9:

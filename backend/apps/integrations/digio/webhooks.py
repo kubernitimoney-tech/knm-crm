@@ -118,8 +118,7 @@ def _is_failure_event(event: str) -> bool:
 
 def _is_success_event(event: str) -> bool:
     return any(
-        token in (event or "").lower()
-        for token in ("signed", "complete", "approved", "success")
+        token in (event or "").lower() for token in ("signed", "complete", "approved", "success")
     )
 
 
