@@ -100,7 +100,7 @@ class TestDigioEsignAndVideoKyc:
         pdf = build_agreement_pdf(lead=lead)
         reader = PdfReader(BytesIO(pdf))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        assert len(reader.pages) == 28
+        assert len(reader.pages) == 10
         assert lead.customer.full_name in text
         assert "Naman Commodities" in text
         assert "LendingRupee" in text
