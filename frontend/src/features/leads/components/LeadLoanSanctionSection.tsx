@@ -767,7 +767,11 @@ export function LeadLoanSanctionSection({
         loanPurpose: form.loanPurpose,
         remarks: form.remarks.trim(),
         salaryBanks: bankIdsToApiSalaryBanks(form.salaryBankIds, banks),
-      }, { product: productPricing, applicationId: applicationId ?? undefined });
+      }, {
+        product: productPricing,
+        applicationId: applicationId ?? undefined,
+        bankHolidayLabels,
+      });
       if (record.application_id) {
         setResolvedApplicationId(record.application_id);
       }

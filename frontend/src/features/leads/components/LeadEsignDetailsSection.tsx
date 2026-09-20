@@ -17,13 +17,13 @@ import {
   downloadAuthenticatedFile,
   fetchLeadEsignRequests,
   getLeadEsignFileUrl,
+  openAuthenticatedFileInNewTab,
   sendLeadEsignRequest,
   type ApiLeadEsignRequest,
 } from '@/lib/leadDetailsApi';
 import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
 import { formatPersonName } from '@/lib/utils';
 import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
-import { leadEsignViewPath } from '@/lib/leadNavigation';
 import {
   EmptyTableRow,
   SectionTable,
@@ -48,6 +48,7 @@ interface LeadEsignDetailsSectionProps {
   customerEmail?: string;
   canSendRequest?: boolean;
   refreshToken?: number;
+  onEsignCompleted?: (completed: boolean) => void;
 }
 
 function signedAgreementFileName(documents: string): string {
@@ -72,6 +73,7 @@ export function LeadEsignDetailsSection({
   customerEmail,
   canSendRequest = false,
   refreshToken = 0,
+  onEsignCompleted,
 }: LeadEsignDetailsSectionProps) {
   const { hasPermission } = usePermissions();
   const canViewDocument = hasPermission('document.view');
@@ -86,6 +88,7 @@ export function LeadEsignDetailsSection({
     try {
       const data = await fetchLeadEsignRequests(leadId);
       setEntries(data.map(mapApiEntry));
+      onEsignCompleted?.(data.some((row) => row.status === 'signed'));
     } catch (err) {
       toast({
         title: 'Failed to load e-sign requests',
@@ -95,7 +98,7 @@ export function LeadEsignDetailsSection({
     } finally {
       setIsLoading(false);
     }
-  }, [leadId, refreshToken]);
+  }, [leadId, refreshToken, onEsignCompleted]);
 
   useEffect(() => {
     loadEntries();
@@ -190,8 +193,20 @@ export function LeadEsignDetailsSection({
                         title="View"
                         aria-label="View signed document"
                         disabled={!canOpenSigned}
-                        to={leadEsignViewPath(leadId, entry.id)}
-                        newTab
+                        onClick={async () => {
+                          try {
+                            await openAuthenticatedFileInNewTab(
+                              getLeadEsignFileUrl(leadId, entry.id),
+                            );
+                          } catch (err) {
+                            toast({
+                              title: 'Could not open document',
+                              description:
+                                err instanceof Error ? err.message : 'Please try again.',
+                              variant: 'error',
+                            });
+                          }
+                        }}
                       />
                     )}
                     {canDownloadDocument && (

@@ -79,6 +79,7 @@ import {
   fetchLeadAddresses,
   fetchLeadDisbursal,
   fetchLeadEmployments,
+  fetchLeadEsignRequests,
   sendLeadEsignRequest,
   sendLeadVideoKycRequest,
   videoKycDispatchMessage,
@@ -135,6 +136,7 @@ const POST_SANCTION_APPLICATION_STATUSES = new Set([
 const WORKFLOW_STEP_TAB: Record<string, string> = {
   Customer: 'customer',
   Sanction: 'sanction',
+  'E-sign': 'customer',
   Disbursal: 'disbursed',
 };
 
@@ -193,6 +195,7 @@ export const LeadDetailsPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sanctionAccordionValue, setSanctionAccordionValue] = useState('');
+  const [customerAccordionValue, setCustomerAccordionValue] = useState('');
   const [workflowRefresh, setWorkflowRefresh] = useState(0);
   const [hasSanction, setHasSanction] = useState(false);
   const [hasRejection, setHasRejection] = useState(false);
@@ -218,18 +221,20 @@ export const LeadDetailsPage = () => {
       const sanctionPromise = options?.freshSanction !== undefined
         ? Promise.resolve(options.freshSanction)
         : fetchLeadSanction(id).catch(() => null);
-      const [documents, addresses, disbursal, sanction, rejection, employments] = await Promise.all([
-        fetchLeadDocuments(id).catch(() => []),
-        fetchLeadAddresses(id).catch(() => []),
-        fetchLeadDisbursal(id).catch(() => ({
-          stage: 'none',
-          disbursal: null,
-          loan_summary: {},
-        })),
-        sanctionPromise,
-        fetchLeadRejection(id).catch(() => null),
-        fetchLeadEmployments(id).catch(() => []),
-      ]);
+      const [documents, addresses, disbursal, sanction, rejection, employments, esignRequests] =
+        await Promise.all([
+          fetchLeadDocuments(id).catch(() => []),
+          fetchLeadAddresses(id).catch(() => []),
+          fetchLeadDisbursal(id).catch(() => ({
+            stage: 'none',
+            disbursal: null,
+            loan_summary: {},
+          })),
+          sanctionPromise,
+          fetchLeadRejection(id).catch(() => null),
+          fetchLeadEmployments(id).catch(() => []),
+          fetchLeadEsignRequests(id).catch(() => []),
+        ]);
       const applicationStatus = apiLead?.application_status ?? '';
       const rejected = Boolean(rejection) || applicationStatus === 'rejected';
       const sanctioned =
@@ -248,9 +253,12 @@ export const LeadDetailsPage = () => {
         setSanctionAccordionValue('sanction_item');
       }
       setWorkflowReadiness({
-        hasDocuments: documents.length > 0,
-        hasAddress: addresses.length > 0,
+        hasDocuments: documents.some((doc) => Boolean(doc.file_url || doc.file_name?.trim())),
+        hasAddress: addresses.some((addr) =>
+          Boolean(addr.address?.trim() || addr.pincode?.trim() || addr.city?.trim()),
+        ),
         hasSanction: sanctioned,
+        hasEsignCompleted: esignRequests.some((row) => row.status === 'signed'),
         hasDisbursal,
       });
     } finally {
@@ -390,6 +398,9 @@ export const LeadDetailsPage = () => {
       penny: getTabAccess('penny', workflowReadiness),
       disbursed: getTabAccess('disbursed', workflowReadiness),
       collection: getTabAccess('collection', workflowReadiness),
+      recovery: getTabAccess('recovery', workflowReadiness),
+      communication: getTabAccess('communication', workflowReadiness),
+      refund: getTabAccess('refund', workflowReadiness),
     };
     const applicationStatus = apiLead?.application_status ?? '';
     const isDisbursedLead =
@@ -405,10 +416,20 @@ export const LeadDetailsPage = () => {
     return base;
   }, [workflowReadiness, isCollectionOfficer, apiLead?.application_status]);
 
+  const handleEsignCompleted = useCallback((completed: boolean) => {
+    setWorkflowReadiness((prev) =>
+      prev.hasEsignCompleted === completed ? prev : { ...prev, hasEsignCompleted: completed },
+    );
+  }, []);
+
   const goToWorkflowStep = useCallback((step?: string) => {
     if (!step) return;
     const tab = WORKFLOW_STEP_TAB[step];
-    if (tab) setActiveTab(tab);
+    if (!tab) return;
+    setActiveTab(tab);
+    if (step === 'E-sign') {
+      setCustomerAccordionValue('esign');
+    }
   }, []);
 
   const loadCallLogs = useCallback(() => {
@@ -472,7 +493,7 @@ export const LeadDetailsPage = () => {
       freshSanction: freshSanction ?? undefined,
       silent: freshSanction != null,
     });
-  }, [id, loading, workflowRefresh, loadWorkflowReadiness]);
+  }, [id, loading, workflowRefresh, esignKycRefresh, activeTab, loadWorkflowReadiness]);
 
   const leadTimelineItems = useMemo(
     () =>
@@ -656,7 +677,8 @@ export const LeadDetailsPage = () => {
   }, [customerProfile, id]);
 
   const canLogCall = canLogCallOnLeadTimeline(apiLead, hasPermission('call_log.create'));
-  const canRequestEsignVideoKyc = canRequestEsignAndVideoKyc(apiLead?.application_status);
+  const canRequestEsignVideoKyc =
+    hasSanction || canRequestEsignAndVideoKyc(apiLead?.application_status);
   const hideCustomerSectionActions = shouldHideCustomerSectionActions(
     apiLead?.application_status,
     apiLead?.status,
@@ -946,7 +968,13 @@ export const LeadDetailsPage = () => {
 
             {/* Customer */}
             <TabsContent value="customer" className="mt-0 animate-in slide-in-from-bottom-2 duration-300 space-y-4">
-              <Accordion type="single" collapsible className="space-y-4">
+              <Accordion
+                type="single"
+                collapsible
+                value={customerAccordionValue}
+                onValueChange={setCustomerAccordionValue}
+                className="space-y-4"
+              >
                 <AccordionItem value="docs" className="border border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 px-5 overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
                     <div className="flex items-center gap-3">
@@ -1035,6 +1063,8 @@ export const LeadDetailsPage = () => {
                   </AccordionContent>
                 </AccordionItem>
 
+                {canRequestEsignVideoKyc ? (
+                  <>
                 <AccordionItem value="esign" className="border border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 px-5 overflow-hidden shadow-sm">
                   <AccordionTrigger className="hover:no-underline py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
                     <div className="flex items-center gap-3">
@@ -1051,6 +1081,7 @@ export const LeadDetailsPage = () => {
                         customerEmail={customerEmailForRequests}
                         canSendRequest={customerCanAdd(canRequestEsignVideoKyc)}
                         refreshToken={esignKycRefresh}
+                        onEsignCompleted={handleEsignCompleted}
                       />
                     )}
                   </AccordionContent>
@@ -1077,6 +1108,8 @@ export const LeadDetailsPage = () => {
                     )}
                   </AccordionContent>
                 </AccordionItem>
+                  </>
+                ) : null}
               </Accordion>
             </TabsContent>
 
@@ -1283,6 +1316,13 @@ export const LeadDetailsPage = () => {
 
             {/* Recovery approval */}
             <TabsContent value="recovery" className="mt-0 animate-in slide-in-from-bottom-2 duration-300">
+              {!tabAccess.recovery.allowed ? (
+                <LeadWorkflowPendingBanner
+                  message={tabAccess.recovery.pendingMessage ?? 'Complete the previous step first.'}
+                  previousStep={tabAccess.recovery.previousStep}
+                  onGoToPrevious={() => goToWorkflowStep(tabAccess.recovery.previousStep)}
+                />
+              ) : (
               <Card className="p-6 border border-slate-200/85 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 space-y-5">
                 <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-3">
@@ -1319,10 +1359,18 @@ export const LeadDetailsPage = () => {
                   </Button>
                 </div>
               </Card>
+              )}
             </TabsContent>
 
             {/* Communication */}
             <TabsContent value="communication" className="mt-0 animate-in slide-in-from-bottom-2 duration-300">
+              {!tabAccess.communication.allowed ? (
+                <LeadWorkflowPendingBanner
+                  message={tabAccess.communication.pendingMessage ?? 'Complete the previous step first.'}
+                  previousStep={tabAccess.communication.previousStep}
+                  onGoToPrevious={() => goToWorkflowStep(tabAccess.communication.previousStep)}
+                />
+              ) : (
               <Card className="p-6 border border-slate-200/85 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 space-y-5">
                 <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-3">
@@ -1352,10 +1400,18 @@ export const LeadDetailsPage = () => {
                   </Button>
                 </div>
               </Card>
+              )}
             </TabsContent>
 
             {/* Refund */}
             <TabsContent value="refund" className="mt-0 animate-in slide-in-from-bottom-2 duration-300">
+              {!tabAccess.refund.allowed ? (
+                <LeadWorkflowPendingBanner
+                  message={tabAccess.refund.pendingMessage ?? 'Complete the previous step first.'}
+                  previousStep={tabAccess.refund.previousStep}
+                  onGoToPrevious={() => goToWorkflowStep(tabAccess.refund.previousStep)}
+                />
+              ) : (
               <Card className="p-6 border border-slate-200/85 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 space-y-5">
                 <div className="flex justify-between items-start gap-4 pb-4 border-b border-slate-100 dark:border-slate-800/80">
                   <div className="flex items-center gap-3">
@@ -1392,6 +1448,7 @@ export const LeadDetailsPage = () => {
                   </Button>
                 </div>
               </Card>
+              )}
             </TabsContent>
       </Tabs>
 

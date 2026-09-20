@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -35,6 +36,9 @@ HEADER_MASK_HEIGHT = 62
 
 _LOGO_PNG: bytes | None = None
 _LOGO_READY = False
+_BRANDED_TEMPLATE: bytes | None = None
+_BRANDED_LOCK = threading.Lock()
+_DATA_PAGES = frozenset({0, 21, 22, 23, 24, 25})
 
 
 @dataclass(frozen=True)
@@ -271,11 +275,41 @@ def _replace(
     pdf.drawString(x + 2, y, str(text))
 
 
-def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
-    """Cover the source logo and stamp lead-specific blanks onto the original page."""
+def _logo_overlay_bytes() -> bytes:
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     _draw_brand_logo(pdf)
+    pdf.showPage()
+    pdf.save()
+    return stream.getvalue()
+
+
+def _branded_template_bytes() -> bytes:
+    """Template with the KNM header stamped on every page (built once per process)."""
+    global _BRANDED_TEMPLATE
+    if _BRANDED_TEMPLATE is not None:
+        return _BRANDED_TEMPLATE
+    with _BRANDED_LOCK:
+        if _BRANDED_TEMPLATE is not None:
+            return _BRANDED_TEMPLATE
+        if not TEMPLATE_PATH.is_file():
+            raise FileNotFoundError(f"Agreement template not found: {TEMPLATE_PATH}")
+        logo_bytes = _logo_overlay_bytes()
+        reader = PdfReader(str(TEMPLATE_PATH))
+        writer = PdfWriter()
+        for page in reader.pages:
+            page.merge_page(PdfReader(BytesIO(logo_bytes)).pages[0])
+            writer.add_page(page)
+        output = BytesIO()
+        writer.write(output)
+        _BRANDED_TEMPLATE = output.getvalue()
+        return _BRANDED_TEMPLATE
+
+
+def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
+    """Stamp lead-specific blanks onto a branded template page."""
+    stream = BytesIO()
+    pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
 
     if index == 0:
         _replace(
@@ -372,15 +406,13 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
 
 def build_agreement_pdf(*, lead) -> bytes:
     """Return the original 28-page template with only the lead's blanks filled in."""
-    if not TEMPLATE_PATH.is_file():
-        raise FileNotFoundError(f"Agreement template not found: {TEMPLATE_PATH}")
-
     values = _agreement_values(lead)
-    reader = PdfReader(str(TEMPLATE_PATH))
+    reader = PdfReader(BytesIO(_branded_template_bytes()))
     writer = PdfWriter()
     for index, page in enumerate(reader.pages):
-        overlay = _overlay_for_page(index, values)
-        page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
+        if index in _DATA_PAGES:
+            overlay = _overlay_for_page(index, values)
+            page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
         writer.add_page(page)
 
     writer.add_metadata(

@@ -203,3 +203,32 @@ class TestSanctionRevision:
         assert sent["subject"] == "Test subject"
         assert sent["recipients"] == ["customer@example.com"]
         assert sent["cc"] == ["rm@example.com"]
+
+    def test_send_email_on_commit_queues_smtp_without_blocking(self):
+        from unittest.mock import patch
+
+        from django.test import override_settings
+
+        queued = []
+
+        class FakeThread:
+            def __init__(self, target=None, name=None, daemon=None):
+                queued.append(target)
+
+            def start(self):
+                return None
+
+        with override_settings(EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend"):
+            with patch(
+                "apps.notifications.services.notification_service.threading.Thread",
+                FakeThread,
+            ):
+                with patch("django.db.transaction.on_commit", lambda callback: callback()):
+                    NotificationService._send_email_on_commit(
+                        subject="Test subject",
+                        template="sanction_approved",
+                        context={"customer_name": "Test"},
+                        recipients=["customer@example.com"],
+                    )
+
+        assert len(queued) == 1
