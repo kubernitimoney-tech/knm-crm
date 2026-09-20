@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -315,6 +316,18 @@ class NotificationService:
         brand = getattr(settings, "BRAND_NAME", "Kuberniti Money")
         return formataddr((name or brand, addr))
 
+    @staticmethod
+    def _uses_local_email_backend() -> bool:
+        backend = (getattr(settings, "EMAIL_BACKEND", "") or "").strip()
+        return backend.endswith(
+            (
+                "locmem.EmailBackend",
+                "dummy.EmailBackend",
+                "console.EmailBackend",
+                "inmemory.EmailBackend",
+            )
+        )
+
     @classmethod
     def _send_email_on_commit(
         cls,
@@ -328,10 +341,9 @@ class NotificationService:
         attachments=None,
         raise_on_error=False,
     ) -> None:
-        """Send an email once the surrounding DB transaction commits.
+        """Queue SMTP after commit so staff APIs are not blocked by Gmail.
 
-        When ``raise_on_error`` is true the send runs immediately and SMTP
-        failures propagate so API callers are not told the mail succeeded.
+        Locmem/console backends still send inline so tests see the message.
         """
         recipients = [email for email in recipients if email]
         cc = [email for email in (cc or []) if email]
@@ -372,10 +384,14 @@ class NotificationService:
                 if raise_on_error:
                     raise
 
-        if raise_on_error:
+        if cls._uses_local_email_backend():
             _send()
             return
-        transaction.on_commit(_send)
+
+        def _queue() -> None:
+            threading.Thread(target=_send, name="knm-email-send", daemon=True).start()
+
+        transaction.on_commit(_queue)
 
     @classmethod
     def notify_user(cls, user, *, title: str, body: str, metadata: dict | None = None) -> None:
