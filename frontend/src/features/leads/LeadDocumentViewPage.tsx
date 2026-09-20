@@ -10,7 +10,9 @@ import {
   downloadAuthenticatedFile,
   fetchAuthenticatedFileBlob,
   fetchLeadDocuments,
+  fetchLeadEsignRequests,
   getLeadDocumentDownloadUrl,
+  getLeadEsignFileUrl,
 } from '@/lib/leadDetailsApi';
 import { leadDetailsPath } from '@/lib/leadNavigation';
 
@@ -22,8 +24,17 @@ function isInlinePreviewType(contentType: string, fileName: string): boolean {
   return /\.(pdf|png|jpe?g|gif|webp|bmp|svg)$/i.test(lower);
 }
 
+function signedAgreementFileName(documents?: string): string {
+  const base = (documents || 'Signed Agreement').trim() || 'Signed Agreement';
+  return /\.pdf$/i.test(base) ? base : `${base}.pdf`;
+}
+
 export function LeadDocumentViewPage() {
-  const { leadId, documentId } = useParams<{ leadId: string; documentId: string }>();
+  const { leadId, documentId, requestId } = useParams<{
+    leadId: string;
+    documentId?: string;
+    requestId?: string;
+  }>();
   const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const canDownload = hasPermission('document.download');
@@ -36,7 +47,7 @@ export function LeadDocumentViewPage() {
   useTitle(fileName);
 
   const loadDocument = useCallback(async () => {
-    if (!leadId || !documentId) return;
+    if (!leadId || (!documentId && !requestId)) return;
     setIsLoading(true);
     setLoadError('');
     setObjectUrl((current) => {
@@ -45,14 +56,22 @@ export function LeadDocumentViewPage() {
     });
 
     try {
-      const documents = await fetchLeadDocuments(leadId);
-      const document = documents.find((item) => item.id === documentId);
-      const resolvedName = document?.file_name || 'Document';
+      let resolvedName = 'Document';
+      let fileUrl = '';
+      if (requestId) {
+        const requests = await fetchLeadEsignRequests(leadId);
+        const entry = requests.find((item) => item.id === requestId);
+        resolvedName = signedAgreementFileName(entry?.documents);
+        fileUrl = getLeadEsignFileUrl(leadId, requestId);
+      } else if (documentId) {
+        const documents = await fetchLeadDocuments(leadId);
+        const document = documents.find((item) => item.id === documentId);
+        resolvedName = document?.file_name || 'Document';
+        fileUrl = getLeadDocumentDownloadUrl(leadId, documentId);
+      }
       setFileName(resolvedName);
 
-      const blob = await fetchAuthenticatedFileBlob(
-        getLeadDocumentDownloadUrl(leadId, documentId),
-      );
+      const blob = await fetchAuthenticatedFileBlob(fileUrl);
       setContentType(blob.type || 'application/octet-stream');
       setObjectUrl(URL.createObjectURL(blob));
     } catch (err) {
@@ -61,7 +80,7 @@ export function LeadDocumentViewPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [leadId, documentId]);
+  }, [leadId, documentId, requestId]);
 
   useEffect(() => {
     loadDocument();
@@ -74,12 +93,12 @@ export function LeadDocumentViewPage() {
   }, [loadDocument]);
 
   const handleDownload = async () => {
-    if (!leadId || !documentId) return;
+    if (!leadId || (!documentId && !requestId)) return;
     try {
-      await downloadAuthenticatedFile(
-        getLeadDocumentDownloadUrl(leadId, documentId),
-        fileName,
-      );
+      const fileUrl = requestId
+        ? getLeadEsignFileUrl(leadId, requestId)
+        : getLeadDocumentDownloadUrl(leadId, documentId as string);
+      await downloadAuthenticatedFile(fileUrl, fileName);
     } catch (err) {
       toast({
         title: 'Download failed',

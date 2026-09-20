@@ -21,6 +21,7 @@ import {
 } from '@/lib/leadDetailsApi';
 import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
 import { formatPersonName } from '@/lib/utils';
+import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import {
   EmptyTableRow,
   SectionTable,
@@ -55,8 +56,8 @@ function mapApiEntry(entry: ApiLeadVideoKycRequest): LeadVideoKycEntry {
     status: entry.status,
     requestedBy: entry.requested_by_name,
     videoLabel: entry.video,
-    requestedOn: entry.requested_on,
-    signedOn: entry.signed_on,
+    requestedOn: formatAppDateTimeOrFallback(entry.requested_on),
+    signedOn: formatAppDateTimeOrFallback(entry.signed_on),
     recordingFileUrl: entry.recording_file_url,
     selfieFileUrl: entry.selfie_file_url,
   };

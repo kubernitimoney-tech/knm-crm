@@ -311,7 +311,19 @@ export async function fetchAuthenticatedFileBlob(url: string): Promise<Blob> {
     headers: tokens?.access ? { Authorization: `Bearer ${tokens.access}` } : {},
   });
   if (!response.ok) {
-    throw new Error('Failed to load file');
+    let message = 'Failed to load file';
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const payload = await response.json();
+        if (typeof payload?.message === 'string' && payload.message.trim()) {
+          message = payload.message;
+        }
+      } catch {
+        // keep default
+      }
+    }
+    throw new Error(message);
   }
   return response.blob();
 }
@@ -323,6 +335,11 @@ export async function deleteLeadDocument(leadId: string, documentId: string): Pr
 export function getLeadDocumentDownloadUrl(leadId: string, documentId: string): string {
   const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
   return `${base}/leads/${leadId}/documents/${documentId}/download/`;
+}
+
+export function getLeadEsignFileUrl(leadId: string, requestId: string): string {
+  const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+  return `${base}/leads/${leadId}/esign-requests/${requestId}/file/`;
 }
 
 export async function fetchLeadAddresses(leadId: string): Promise<ApiLeadAddress[]> {

@@ -123,9 +123,13 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     if row is None:
         logger.info("Digio e-sign webhook for unknown document %s", document_id)
         return False
-    if row.status == EsignRequestStatus.SIGNED and row.signed_file:
+    already_signed = row.status == EsignRequestStatus.SIGNED
+    if already_signed and row.signed_file:
+        from apps.integrations.digio.esign import notify_esign_signed_copy
+
+        notify_esign_signed_copy(row)
         return True
-    if _is_failure_event(event):
+    if _is_failure_event(event) and not already_signed:
         row.status = EsignRequestStatus.EXPIRED
         row.save(update_fields=["status", "updated_at"])
         return True
@@ -136,11 +140,16 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     except DigioError:
         document = {}
     document_status = str(document.get("agreement_status") or document.get("status") or "").lower()
-    should_complete = _is_success_event(event) or document_status in {
-        "completed",
-        "signed",
-        "success",
-    }
+    should_complete = (
+        already_signed
+        or _is_success_event(event)
+        or document_status
+        in {
+            "completed",
+            "signed",
+            "success",
+        }
+    )
     if not should_complete:
         return True
 
@@ -152,8 +161,13 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     if pdf_bytes:
         row.signed_file.save(f"{document_id}.pdf", ContentFile(pdf_bytes), save=False)
     row.status = EsignRequestStatus.SIGNED
-    row.signed_at = timezone.now()
+    if not row.signed_at:
+        row.signed_at = timezone.now()
     row.save()
+    if row.signed_file:
+        from apps.integrations.digio.esign import notify_esign_signed_copy
+
+        notify_esign_signed_copy(row, pdf_bytes=pdf_bytes)
     return True
 
 
@@ -164,7 +178,11 @@ def refresh_esign_from_provider(row: LeadEsignRequest) -> LeadEsignRequest:
         return row
     if row.status == EsignRequestStatus.SIGNED and row.signed_file:
         return row
-    _handle_esign(provider_id, event="")
+    event = "doc.signed" if row.status == EsignRequestStatus.SIGNED else ""
+    try:
+        _handle_esign(provider_id, event=event)
+    except DigioError:
+        logger.exception("Could not refresh e-sign %s from Digio", provider_id)
     row.refresh_from_db()
     return row
 

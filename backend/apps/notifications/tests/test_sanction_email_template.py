@@ -158,3 +158,56 @@ class LoanDisbursedEmailTemplateTests(TestCase):
         assert "Kuberniti Money" in message.body
         assert "Lending Rupee" not in message.body
         assert "Kuberniti Money" in message.from_email
+
+
+class EsignSignedCopyEmailTests(TestCase):
+    def test_html_and_attachment_use_confirmation_copy(self):
+        html = EmailService.render_html(
+            template="esign_signed",
+            context={
+                "customer_name": "Naveen Kumar",
+                "document_reference": "250720261697JOB542541900",
+                "signed_date": "September 20, 2026",
+            },
+            subject="Document Successfully Signed",
+        )
+        assert "Dear Naveen Kumar," in html
+        assert "Document Successfully Signed" in html
+        assert "Document Reference:250720261697JOB542541900" in html
+        assert "Signed Date: September 20, 2026" in html
+        assert "Legal Binding: Effective Immediately" in html
+        assert "executed copy is attached" in html
+        assert "Retain this confirmation for future reference" in html
+        assert "Access documents anytime in your portal" in html
+        assert "Contact legal support for any discrepancies" in html
+        assert "Secured Document Management" in html
+        assert "Contact Support" in html
+        assert "Privacy Policy" in html
+        assert "© 2025 Har Shreejee Finance and Leasing Company Ltd" in html
+
+        sent = EmailService.send_html(
+            subject="Document Successfully Signed",
+            template="esign_signed",
+            context={
+                "customer_name": "Naveen Kumar",
+                "document_reference": "250720261697JOB542541900",
+                "signed_date": "September 20, 2026",
+            },
+            recipients=["customer@example.com"],
+            attachments=[
+                (
+                    "250720261697JOB542541900_signedFinal.pdf",
+                    b"%PDF-signed-copy",
+                    "application/pdf",
+                )
+            ],
+        )
+        assert sent == 1
+        message = mail.outbox[0]
+        assert message.subject == "Document Successfully Signed"
+        assert message.to == ["customer@example.com"]
+        filename, content, mimetype = message.attachments[0]
+        assert filename == "250720261697JOB542541900_signedFinal.pdf"
+        assert content == b"%PDF-signed-copy"
+        assert mimetype == "application/pdf"
+        assert "Document Reference:250720261697JOB542541900" in message.body

@@ -14,12 +14,16 @@ import {
 import { toast } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
+  downloadAuthenticatedFile,
   fetchLeadEsignRequests,
+  getLeadEsignFileUrl,
   sendLeadEsignRequest,
   type ApiLeadEsignRequest,
 } from '@/lib/leadDetailsApi';
 import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
 import { formatPersonName } from '@/lib/utils';
+import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
+import { leadEsignViewPath } from '@/lib/leadNavigation';
 import {
   EmptyTableRow,
   SectionTable,
@@ -46,14 +50,19 @@ interface LeadEsignDetailsSectionProps {
   refreshToken?: number;
 }
 
+function signedAgreementFileName(documents: string): string {
+  const base = (documents || 'Signed Agreement').trim() || 'Signed Agreement';
+  return /\.pdf$/i.test(base) ? base : `${base}.pdf`;
+}
+
 function mapApiEntry(entry: ApiLeadEsignRequest): LeadEsignEntry {
   return {
     id: entry.id,
     status: entry.status,
     requestedBy: entry.requested_by_name,
     documents: entry.documents,
-    requestedOn: entry.requested_on,
-    signedOn: entry.signed_on,
+    requestedOn: formatAppDateTimeOrFallback(entry.requested_on),
+    signedOn: formatAppDateTimeOrFallback(entry.signed_on),
     signedFileUrl: entry.signed_file_url,
   };
 }
@@ -163,6 +172,7 @@ export function LeadEsignDetailsSection({
           ) : (
             entries.map((entry) => {
               const statusDisplay = esignRequestStatusDisplay(entry.status);
+              const canOpenSigned = entry.status === 'signed';
               return (
               <TableRow key={entry.id} className="border-b border-slate-50 dark:border-slate-850">
                 <TableCell>
@@ -179,8 +189,9 @@ export function LeadEsignDetailsSection({
                       <RowViewButton
                         title="View"
                         aria-label="View signed document"
-                        disabled={entry.status !== 'signed' || !entry.signedFileUrl}
-                        href={entry.signedFileUrl}
+                        disabled={!canOpenSigned}
+                        to={leadEsignViewPath(leadId, entry.id)}
+                        newTab
                       />
                     )}
                     {canDownloadDocument && (
@@ -188,10 +199,20 @@ export function LeadEsignDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        disabled={entry.status !== 'signed' || !entry.signedFileUrl}
-                        onClick={() => {
-                          if (entry.signedFileUrl) {
-                            window.open(entry.signedFileUrl, '_blank', 'noopener,noreferrer');
+                        disabled={!canOpenSigned}
+                        onClick={async () => {
+                          try {
+                            await downloadAuthenticatedFile(
+                              getLeadEsignFileUrl(leadId, entry.id),
+                              signedAgreementFileName(entry.documents),
+                            );
+                          } catch (err) {
+                            toast({
+                              title: 'Download failed',
+                              description:
+                                err instanceof Error ? err.message : 'Please try again.',
+                              variant: 'error',
+                            });
                           }
                         }}
                       >

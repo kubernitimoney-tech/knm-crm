@@ -29,6 +29,11 @@ export function leadDocumentViewPath(leadId: string, documentId: string): string
   return `/leads/all/${leadId}/documents/${documentId}/view`;
 }
 
+/** In-app signed e-sign PDF viewer. */
+export function leadEsignViewPath(leadId: string, requestId: string): string {
+  return `/leads/all/${leadId}/esign/${requestId}/view`;
+}
+
 /** Read list return context from the current lead-details URL (for related-lead links). */
 export function leadListReturnToFromSearchParams(
   params: Pick<URLSearchParams, 'get'>,

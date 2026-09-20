@@ -93,6 +93,7 @@ const router = createBrowserRouter([
       { path: 'leads/all', element: <LeadsPage /> },
       { path: 'leads/all/:leadId/video-kyc/:requestId', element: <VideoKycDetailPage /> },
       { path: 'leads/all/:leadId/documents/:documentId/view', element: <LeadDocumentViewPage /> },
+      { path: 'leads/all/:leadId/esign/:requestId/view', element: <LeadDocumentViewPage /> },
       { path: 'leads/all/:id', element: <LeadDetailsPage /> },
       { path: 'customers/:id', element: <CustomerDetailsPage /> },
       // Sanctions

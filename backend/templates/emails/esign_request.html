@@ -1,24 +1,36 @@
 {% extends "emails/base_email.html" %}
 {% block content %}
-<h1 style="margin:0 0 16px;font-size:22px;color:#0f172a;">Please e-sign your loan agreement.</h1>
-<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | title }},</p>
-<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
-  Please review Agreement.pdf, then continue with {{ sign_method }}.
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | default:"Customer" }},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+  To maintain security during the entire financial operations, we require the completion of your Know Your Customer (KYC) verification which is mandatory to ensure security during the accomplishment of all transactions and account activities.
 </p>
-{% if lead_id %}
-<p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Lead: {{ lead_id }}</p>
-{% endif %}
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+  Initiate your verification process seamlessly by clicking below:
+</p>
 {% if signing_url %}
 <p style="margin:0 0 24px;">
-  <a href="{{ signing_url }}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:8px;">Click Here</a>
-</p>
-<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:#6b7280;">
-  This link opens Document Signing. You do not need a Digio account or password.
-  If the link does not open, copy this URL into your browser:<br />
-  <span style="word-break:break-all;">{{ signing_url }}</span>
+  <a href="{{ signing_url }}" style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 28px;border-radius:8px;">Start KYC Process</a>
 </p>
 {% endif %}
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+  Our support team is always available to assist you while proceeding with any documentation. They are always ready to assist you with all the technical guidance during the KYC process
+</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6;">
+  <strong>Security Notice:</strong> Never share verification codes or credentials. Kuberniti Money representatives will never request sensitive information via email.
+</p>
 <p style="margin:0;font-size:15px;line-height:1.6;">
-  Thank you for choosing {{ brand_name }}.
+  Best regards,<br />
+  Compliance Team<br />
+  Kuberniti Money
+</p>
+{% endblock %}
+{% block footer %}
+<p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+  © 2025 Har Shreejee Finance and Leasing Company Ltd
+</p>
+<p style="margin:0;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+  <a href="{{ website_url|default:'https://www.kubernitimoney.com' }}/contact" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">Contact Support</a>
+  &nbsp;|&nbsp;
+  <a href="{{ website_url|default:'https://www.kubernitimoney.com' }}/privacy" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">Privacy Policy</a>
 </p>
 {% endblock %}
