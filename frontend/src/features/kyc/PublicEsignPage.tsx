@@ -230,18 +230,20 @@ export function PublicEsignPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [signedPreviewUrl, setSignedPreviewUrl] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(EMAIL_OTP_SECONDS);
   const [otpRound, setOtpRound] = useState(0);
+  const [awaitingSigned, setAwaitingSigned] = useState(returningFromEsp);
 
   const load = useCallback(
-    async (sync = false) => {
+    async (sync = false, force = false) => {
       if (!esignId) return null;
-      const suffix = sync ? '?sync=1' : '';
+      const query = sync ? `?sync=1${force ? '&force=1' : ''}` : '';
       const { data } = await axios.get<{
         success: boolean;
         data: PublicEsignSession;
         message?: string;
-      }>(`${API_BASE_URL}/leads/esign/${esignId}/${suffix}`);
+      }>(`${API_BASE_URL}/leads/esign/${esignId}/${query}`);
       if (!data.success) {
         throw new Error(data.message || 'Could not load the signing request.');
       }
@@ -267,25 +269,54 @@ export function PublicEsignPage() {
   }, [load, returningFromEsp]);
 
   useEffect(() => {
-    if (!returningFromEsp) return;
+    if (session?.signed || (!awaitingSigned && !busy)) return;
     let cancelled = false;
     void (async () => {
-      for (let attempt = 0; attempt < 20; attempt += 1) {
+      for (let attempt = 0; attempt < 45; attempt += 1) {
         if (cancelled) return;
-        const row = await load(true).catch(() => null);
-        if (row?.signed) return;
+        const row = await load(true, awaitingSigned && attempt > 0).catch(() => null);
+        if (row?.signed) {
+          setBusy(false);
+          return;
+        }
         await sleep(2000);
       }
       if (!cancelled) {
+        setBusy(false);
         setError('Signing is still processing. Refresh this page in a moment.');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [load, returningFromEsp]);
+  }, [load, awaitingSigned, busy, session?.signed]);
 
-  const showDocument = step === 'document' && !returningFromEsp;
+  const showDocument = step === 'document' && !awaitingSigned && !session?.signed;
+
+  useEffect(() => {
+    if (!session?.signed) {
+      setSignedPreviewUrl('');
+      return;
+    }
+    const url = session.document_url;
+    if (!url) return;
+    let objectUrl = '';
+    let cancelled = false;
+    axios
+      .get(url, { responseType: 'blob' })
+      .then(({ data }) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(data);
+        setSignedPreviewUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setSignedPreviewUrl(url);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [session?.signed, session?.signed_file_url, session?.document_url]);
 
   useEffect(() => {
     if (!session?.document_url || session.signed || !showDocument) {
@@ -373,13 +404,17 @@ export function PublicEsignPage() {
       const returnUrl = `${window.location.origin}${window.location.pathname}?done=1`;
       const digio = new Digio({
         environment: session.environment || 'production',
-        is_redirection_approach: true,
+        is_redirection_approach: false,
         redirect_url: returnUrl,
         callback: (response) => {
           if (response?.error_code) {
+            setAwaitingSigned(false);
             setError(response.message || 'Signing was not completed.');
             setBusy(false);
+            return;
           }
+          setBusy(false);
+          setAwaitingSigned(true);
         },
       });
       digio.init();
@@ -422,13 +457,50 @@ export function PublicEsignPage() {
       ) : error && !session ? (
         <p className="px-4 py-24 text-center text-sm text-red-600">{error}</p>
       ) : session?.signed ? (
+        <div className="mx-auto max-w-2xl px-4 py-10">
+          <SuccessBadge />
+          <p className="mt-4 text-center text-xl font-semibold text-[#2f9e86]">eSign completed</p>
+          <p className="mt-2 text-center text-sm text-slate-600">
+            Thank you. The loan agreement has been signed with Aadhaar OTP. A signed copy has been
+            emailed to you.
+          </p>
+          <div className="mt-6 rounded-md border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-slate-800">
+            <p>
+              Status :{' '}
+              <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                Completed
+              </span>
+            </p>
+            <p className="mt-1">Name : {session.customer_name || '—'}</p>
+            <p>Signed At : {stamp || '—'}</p>
+          </div>
+          <a
+            href={session.document_url}
+            download="Signed-Agreement.pdf"
+            className="mx-auto mt-4 block w-fit rounded-md bg-[#4caf82] px-5 py-2 text-sm font-semibold text-white"
+          >
+            Download signed PDF
+          </a>
+          <div className="mt-4">
+            {signedPreviewUrl ? (
+              <iframe
+                title="Signed agreement"
+                src={signedPreviewUrl}
+                className="h-[70vh] min-h-[420px] w-full rounded-sm border border-slate-200 bg-white"
+              />
+            ) : (
+              <p className="py-10 text-center text-sm text-slate-500">Loading signed document…</p>
+            )}
+          </div>
+        </div>
+      ) : awaitingSigned ? (
         <div className="flex min-h-screen flex-col items-center justify-center px-4">
           <SuccessBadge />
-          <p className="mt-4 text-lg font-medium text-[#7dcec0]">Signed Successfully</p>
-        </div>
-      ) : returningFromEsp ? (
-        <div className="flex min-h-screen flex-col items-center justify-center px-4">
-          <p className="text-sm text-slate-500">Confirming Aadhaar eSign…</p>
+          <p className="mt-4 text-center text-xl font-semibold text-[#2f9e86]">eSign completed</p>
+          <p className="mt-2 text-center text-sm text-slate-600">
+            Fetching your signed agreement and sending a copy to your email…
+          </p>
           <ErrorText message={error} />
         </div>
       ) : step === 'send_code' ? (

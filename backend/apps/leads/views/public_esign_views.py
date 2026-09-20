@@ -62,7 +62,9 @@ def _public_esign_payload(request, row: LeadEsignRequest) -> dict:
         "document_url": request.build_absolute_uri(f"/api/v1/leads/esign/{row.id}/document/"),
         "signed": signed,
         "signed_file_url": (
-            request.build_absolute_uri(row.signed_file.url) if row.signed_file else None
+            request.build_absolute_uri(f"/api/v1/leads/esign/{row.id}/document/")
+            if signed
+            else None
         ),
         "mobile_hint": _mask_mobile(customer.mobile_number if customer else ""),
         "email_hint": _mask_email(row.recipient_email or (customer.email if customer else "")),
@@ -122,10 +124,11 @@ class PublicEsignAPIView(APIView):
     def get(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
         sync = str(request.query_params.get("sync") or "").strip().lower() in {"1", "true", "yes"}
+        force = str(request.query_params.get("force") or "").strip().lower() in {"1", "true", "yes"}
         if sync and (row.status != EsignRequestStatus.SIGNED or not row.signed_file):
             from apps.integrations.digio.webhooks import refresh_esign_from_provider
 
-            row = refresh_esign_from_provider(row)
+            row = refresh_esign_from_provider(row, force=force)
         return success_response(data=_public_esign_payload(request, row))
 
 
