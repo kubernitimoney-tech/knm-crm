@@ -305,6 +305,22 @@ export async function downloadAuthenticatedFile(url: string, filename: string): 
   URL.revokeObjectURL(objectUrl);
 }
 
+export async function openAuthenticatedFileInNewTab(url: string): Promise<void> {
+  const preview = window.open('about:blank', '_blank');
+  try {
+    const blob = await fetchAuthenticatedFileBlob(url);
+    const objectUrl = URL.createObjectURL(blob);
+    if (preview && !preview.closed) {
+      preview.location.replace(objectUrl);
+      return;
+    }
+    window.open(objectUrl, '_blank', 'noopener');
+  } catch (error) {
+    preview?.close();
+    throw error;
+  }
+}
+
 export async function fetchAuthenticatedFileBlob(url: string): Promise<Blob> {
   const tokens = getStoredTokens();
   const response = await fetch(url, {
@@ -1156,25 +1172,32 @@ export async function createLeadSanction(
     remarks: string;
     salaryBanks?: ApiSanctionSalaryBank[];
   },
-  options?: { product?: ApiLoanProduct | null; applicationId?: string | null },
+  options?: {
+    product?: ApiLoanProduct | null;
+    applicationId?: string | null;
+    bankHolidayLabels?: Record<string, string>;
+  },
 ): Promise<ApiLeadSanction> {
-  let application: NonNullable<Awaited<ReturnType<typeof getLeadApplication>>>;
-  if (options?.applicationId) {
-    application = await fetchApplication(options.applicationId);
-  } else {
-    ({ application } = await ensureLeadApplication(leadId, {
-      requestedAmount: payload.loanAmount,
-      productId: payload.productId,
-    }));
-  }
-  const submitted = await submitApplicationIfNeeded(application);
+  const applicationPromise = options?.applicationId
+    ? fetchApplication(options.applicationId)
+    : ensureLeadApplication(leadId, {
+        requestedAmount: payload.loanAmount,
+        productId: payload.productId,
+      }).then((result) => result.application);
+  const productPromise = options?.product
+    ? Promise.resolve(options.product)
+    : fetchProducts().then((items) => items.find((item) => item.id === payload.productId) ?? null);
+  const holidaysPromise = options?.bankHolidayLabels
+    ? Promise.resolve(options.bankHolidayLabels)
+    : fetchBankHolidayLabelMap();
+  const [loadedApplication, product, bankHolidayLabels] = await Promise.all([
+    applicationPromise,
+    productPromise,
+    holidaysPromise,
+  ]);
+  const submitted = await submitApplicationIfNeeded(loadedApplication);
   const sanctionDetails = buildSanctionDetailsPayload(payload);
-  const product =
-    options?.product ??
-    (await fetchProducts()).find((item) => item.id === payload.productId) ??
-    null;
   const tenureLimits = resolveRepaymentTenureLimits(product);
-  const bankHolidayLabels = await fetchBankHolidayLabelMap();
   const repaymentValidationError = validateSanctionRepaymentDate(
     payload.repaymentDate,
     tenureLimits,
