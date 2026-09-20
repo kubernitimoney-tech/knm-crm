@@ -9,9 +9,7 @@ from io import BytesIO
 from pathlib import Path
 
 from django.utils import timezone
-from PIL import Image
 from pypdf import PdfReader, PdfWriter
-from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -22,7 +20,6 @@ ASSET_DIR = Path(__file__).resolve().parent / "assets"
 TEMPLATE_PATH = ASSET_DIR / "loan-agreement-static.pdf"
 PAGE_WIDTH = 595.304
 PAGE_HEIGHT = 841.89
-PAGE_BACKGROUNDS = {index: ASSET_DIR / f"agreement-page-{index + 1:02d}.jpg" for index in range(28)}
 
 
 @dataclass(frozen=True)
@@ -210,134 +207,11 @@ def _replace(
     pdf.drawString(x + 2, y, str(text))
 
 
-def _whiteout(pdf: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
-    pdf.setFillColorRGB(1, 1, 1)
-    pdf.rect(x, y, width, height, fill=1, stroke=0)
-
-
-def _draw_wrapped(
-    pdf: canvas.Canvas,
-    text: str,
-    *,
-    x: float,
-    y: float,
-    width: float,
-    size: float = 11,
-    leading: float = 28,
-) -> None:
-    words = text.split()
-    lines: list[str] = []
-    line = ""
-    for word in words:
-        candidate = f"{line} {word}".strip()
-        if stringWidth(candidate, "Times-Roman", size) <= width:
-            line = candidate
-        else:
-            lines.append(line)
-            line = word
-    if line:
-        lines.append(line)
-    pdf.setFillColorRGB(0, 0, 0)
-    pdf.setFont("Times-Roman", size)
-    for item in lines:
-        pdf.drawString(x, y, item)
-        y -= leading
-
-
-def _draw_laxmi_branding(pdf: canvas.Canvas, index: int) -> None:
-    blue = (0.04, 0.25, 0.52)
-
-    # Replace the NCPL logo and Naman banner on every page.
-    _whiteout(pdf, 28, 775, 190, 55)
-    pdf.setFillColorRGB(*blue)
-    pdf.setFont("Helvetica-Bold", 30)
-    pdf.drawString(36, 793, "LAXMI")
-    _whiteout(pdf, 280, 775, 315, 52)
-    pdf.setFillColorRGB(*blue)
-    pdf.rect(300, 797, 295, 22, fill=1, stroke=0)
-    pdf.setFillColorRGB(1, 1, 1)
-    pdf.setFont("Helvetica-Bold", 13)
-    pdf.drawCentredString(447, 803, "LAXMI")
-
-    # Replace the NCPL website in the common footer.
-    _whiteout(pdf, 338, 88, 155, 26)
-    pdf.setFillColorRGB(0, 0, 0)
-    pdf.setFont("Helvetica", 8)
-    pdf.drawString(354, 98, "LAXMI")
-
-    replacements: dict[int, list[tuple[float, float, float, str]]] = {
-        0: [(66, 627, 470, "M/s LAXMI, having its registered address in GF")],
-        4: [
-            (72, 644, 470, "LAXMI, a company incorporated under the laws of India and"),
-            (72, 540, 470, "conditions to the potential customer referred to by LAXMI."),
-            (99, 405, 440, "are tied to the loan offer accepted by the borrower of LAXMI."),
-            (
-                99,
-                389,
-                440,
-                "The loan offer terms (agreement execution date, loan, sanction date, amount",
-            ),
-        ],
-        5: [
-            (126, 383, 410, "LAXMI (LendingRupee) will also accept payment"),
-            (126, 321, 410, "that it shall provide NACH document to LAXMI"),
-        ],
-        6: [
-            (
-                126,
-                686,
-                410,
-                "amount/interest or charges/fees associated with the loan, further LAXMI",
-            ),
-            (126, 670, 410, "(LendingRupee) shall not be held liable for the same."),
-            (126, 603, 410, "The records maintained by LAXMI shall be"),
-        ],
-        15: [
-            (95, 729, 440, "LAXMI, an RBI registered NBFC, follows extant rules"),
-            (95, 666, 440, "The course of action adopted by LAXMI post default by the"),
-            (117, 555, 415, "LAXMI has an in-house recovery team whose members are"),
-        ],
-        19: [
-            (68, 711, 470, "The repayment schedule/payment advice that you receive from LAXMI"),
-            (68, 695, 470, "is a document that helps you to know the repayment dates."),
-            (68, 679, 470, "You must pay interest, principal and applicable charges to LAXMI"),
-            (68, 663, 470, "for the loan availed and meet all obligations in a timely manner."),
-        ],
-    }
-    page_replacements = replacements.get(index, [])
-    for x, y, width, _text in page_replacements:
-        _whiteout(pdf, x, y - 5, width, 18)
-    pdf.setFillColorRGB(0, 0, 0)
-    pdf.setFont("Times-Roman", 12)
-    for x, y, width, text in page_replacements:
-        pdf.setFont("Times-Roman", _fit_text(text, width - 4, font="Times-Roman", size=12))
-        pdf.drawString(x + 2, y, text)
-
-
-def _compressed_background(path: Path) -> ImageReader:
-    image = Image.open(path).convert("RGB")
-    image.thumbnail((1000, 1414), Image.Resampling.LANCZOS)
-    buffer = BytesIO()
-    image.save(buffer, format="JPEG", quality=45, optimize=True)
-    buffer.seek(0)
-    return ImageReader(buffer)
-
-
-def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
+def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
+    """Stamp only lead-specific blanks; original page content is left unchanged."""
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
-    background = PAGE_BACKGROUNDS.get(index)
-    if background and background.is_file():
-        pdf.drawImage(
-            _compressed_background(background),
-            0,
-            0,
-            width=PAGE_WIDTH,
-            height=PAGE_HEIGHT,
-            preserveAspectRatio=False,
-        )
-
-    _draw_laxmi_branding(pdf, index)
+    drew = False
 
     if index == 0:
         _replace(
@@ -350,6 +224,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             font="Times-Roman",
             size=11,
         )
+        drew = True
     elif index == 21:
         for y, text in zip(
             (671, 646, 622, 597, 573),
@@ -372,6 +247,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             strict=True,
         ):
             _replace(pdf, x=301, y=y, width=225, text=text)
+        drew = True
     elif index == 22:
         for y, text in zip(
             (745, 721, 696, 672, 647),
@@ -385,8 +261,8 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             strict=True,
         ):
             _replace(pdf, x=301, y=y, width=225, text=text)
+        drew = True
     elif index == 23:
-        _whiteout(pdf, 370, 668, 165, 40)
         for y, text in (
             (521, values.borrower_name),
             (496, values.address),
@@ -397,6 +273,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             (242, values.execution_date),
         ):
             _replace(pdf, x=283, y=y, width=235, text=text)
+        drew = True
     elif index == 24:
         for y, text in (
             (745, values.principal),
@@ -414,6 +291,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             (422, "Rs. 1,000.00 /-"),
         ):
             _replace(pdf, x=342, y=y, width=180, text=text, font="Helvetica-Bold")
+        drew = True
     elif index == 25:
         _replace(
             pdf,
@@ -425,27 +303,19 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             font="Times-Bold",
             size=10,
         )
-        _whiteout(pdf, 68, 512, 470, 190)
-        declaration = (
-            f"I, {values.borrower_name}, hereinafter referred to as “Borrower”, bearing "
-            f"Application number {values.application_number}, have taken a personal loan from "
-            "Lending Rupee, a unit of LAXMI, hereinafter "
-            "referred to as “Lender”, do hereby solemnly affirm, declare, and undertake that "
-            "I shall repay the entire loan amount availed under this Agreement, together with "
-            "all applicable interest, charges, and other dues, strictly in accordance with the "
-            "terms and timelines agreed herein, without any delay or default."
-        )
-        _draw_wrapped(pdf, declaration, x=72, y=678, width=445, size=11, leading=24.5)
-    elif index == 27:
-        _whiteout(pdf, 300, 514, 160, 42)
+        _replace(pdf, x=88, y=678, width=150, text=values.borrower_name, height=16)
+        _replace(pdf, x=318, y=654, width=120, text=values.application_number, height=16)
+        drew = True
 
+    if not drew:
+        return None
     pdf.showPage()
     pdf.save()
     return stream.getvalue()
 
 
 def build_agreement_pdf(*, lead) -> bytes:
-    """Return the unsigned template personalized with the current lead's sanctioned values."""
+    """Return the original 28-page template with only the lead's blanks filled in."""
     if not TEMPLATE_PATH.is_file():
         raise FileNotFoundError(f"Agreement template not found: {TEMPLATE_PATH}")
 
@@ -453,18 +323,14 @@ def build_agreement_pdf(*, lead) -> bytes:
     reader = PdfReader(str(TEMPLATE_PATH))
     writer = PdfWriter()
     for index, page in enumerate(reader.pages):
-        if index in PAGE_BACKGROUNDS:
-            personalized_page = PdfReader(BytesIO(_overlay_for_page(index, values))).pages[0]
-            writer.add_page(personalized_page)
-            continue
-        if "/Annots" in page:
-            del page["/Annots"]
+        overlay = _overlay_for_page(index, values)
+        if overlay:
+            page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
         writer.add_page(page)
 
     writer.add_metadata(
         {
             "/Title": f"Loan Agreement - {values.application_number}",
-            "/Author": "LAXMI",
             "/Subject": f"Unsigned agreement for {values.borrower_name}",
         }
     )

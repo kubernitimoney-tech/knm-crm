@@ -101,10 +101,11 @@ class TestDigioEsignAndVideoKyc:
         reader = PdfReader(BytesIO(pdf))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         assert len(reader.pages) == 28
-        assert "LAXMI" in text
         assert lead.customer.full_name in text
-        assert "Naman Commodities" not in text
-        assert "NCPL" not in text
+        assert "Naman Commodities" in text
+        assert "LendingRupee" in text
+        assert "DEFINATION AND INTERPRETATION" in text
+        assert "LAXMI" not in text
         assert "MENIKA KUMARI" not in text
         assert "pankajanand702@gmail.com" not in text
         assert "/AcroForm" not in reader.trailer["/Root"]
