@@ -300,7 +300,9 @@ class TestDigioEsignAndVideoKyc:
         payload = response.data["data"]
         assert payload["id"] == str(row.id)
         assert payload["sign_type"] == row.sign_type
-        assert payload["signing_url"] == row.request_url
+        assert payload["document_id"] in payload["signing_url"]
+        assert payload["identifier"] in payload["signing_url"]
+        assert payload["access_token"] in payload["signing_url"]
         assert payload["document_id"] == "DIDPUBLIC123456789"
         assert payload["identifier"] == lead.customer.email
         assert payload["access_token"] == "tok-public"
@@ -353,6 +355,21 @@ class TestDigioEsignAndVideoKyc:
         assert "drive.digio.in" not in url
         assert url.endswith("/#/gateway/login/DIDDRIVE123456789/customer@example.com/tok-guest")
         assert "%40" not in url
+
+    def test_gateway_rebuilds_incomplete_guest_url_with_identifier(self):
+        from apps.integrations.digio.gateway import gateway_from_payload
+
+        entity_id, token, url = gateway_from_payload(
+            payload={
+                "id": "DIDINCOMPLETE123456",
+                "access_token": {"id": "tok-inc"},
+                "url": "https://app.digio.in/#/gateway/login/DIDINCOMPLETE123456",
+            },
+            identifier="customer@example.com",
+        )
+        assert entity_id == "DIDINCOMPLETE123456"
+        assert token == "tok-inc"
+        assert url.endswith("/#/gateway/login/DIDINCOMPLETE123456/customer@example.com/tok-inc")
 
     def test_webhook_accepts_shared_token_in_url(self):
         lead = _create_lead()
