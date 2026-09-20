@@ -249,6 +249,13 @@ export function esignRequestStatusDisplay(status: string): { label: string; clas
   return { label: 'Requested', className: esignStatusBadgeClass(status) };
 }
 
+export function videoKycRequestStatusDisplay(status: string): { label: string; className: string } {
+  if (status === 'completed') {
+    return { label: 'Completed', className: esignStatusBadgeClass(status) };
+  }
+  return { label: 'Requested', className: esignStatusBadgeClass(status) };
+}
+
 export function enachStatusBadgeClass(status: string, className?: string): string {
   switch (status) {
     case 'Registered':

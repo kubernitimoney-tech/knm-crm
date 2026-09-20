@@ -604,12 +604,38 @@ class NotificationService:
         if not (request_url or "").strip():
             raise ValueError("Video KYC link is missing.")
         cls._send_email_on_commit(
-            subject=f"Complete your Aadhaar, PAN and selfie KYC — {lead.lead_id}",
-            template="video_kyc_request",
+            subject=(
+                "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+                "& Leasing Company Limited."
+            ),
+            template="esign_request",
             context={
                 "customer_name": customer_label,
                 "lead_id": lead.lead_id,
-                "kyc_url": request_url.strip(),
+                "signing_url": request_url.strip(),
+            },
+            recipients=[email],
+            raise_on_error=True,
+        )
+
+    @classmethod
+    def send_video_kyc_completed_email(cls, *, row) -> None:
+        """Email the customer after Video KYC is completed."""
+        lead = getattr(row, "lead", None)
+        customer = getattr(lead, "customer", None)
+        email = (
+            getattr(row, "recipient_email", "") or getattr(customer, "email", "") or ""
+        ).strip()
+        if not email:
+            raise ValueError("This customer has no email address.")
+        reference = cls.esign_document_reference(row)
+        cls._send_email_on_commit(
+            subject="Video KYC Successfully Completed",
+            template="video_kyc_completed",
+            context={
+                "customer_name": cls._customer_label(customer),
+                "document_reference": reference,
+                "signed_date": cls._format_esign_signed_date(getattr(row, "completed_at", None)),
             },
             recipients=[email],
             raise_on_error=True,
