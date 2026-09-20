@@ -470,6 +470,30 @@ class EmailService:
         brand = getattr(settings, "BRAND_NAME", "Kuberniti Money")
         return formataddr((name or brand, addr))
 
+    @staticmethod
+    def _delivery_addresses(visible_from: str) -> tuple[str, dict[str, str]]:
+        """Split SMTP envelope from the visible From header.
+
+        Gmail (and similar hosts) authenticate as EMAIL_HOST_USER. If MAIL FROM
+        is a different mailbox they rewrite the message so recipients see
+        info@ instead of sanction@ / disbursal@. Keep login as the envelope
+        sender and put the intended mailbox on the From header.
+        """
+        from email.utils import parseaddr
+
+        backend = (getattr(settings, "EMAIL_BACKEND", "") or "").lower()
+        smtp_user = (getattr(settings, "EMAIL_HOST_USER", None) or "").strip()
+        smtp_addr = parseaddr(smtp_user)[1]
+        visible_addr = parseaddr(visible_from)[1]
+        if (
+            "smtp" not in backend
+            or not smtp_addr
+            or not visible_addr
+            or smtp_addr.lower() == visible_addr.lower()
+        ):
+            return visible_from, {}
+        return smtp_addr, {"From": visible_from}
+
     @classmethod
     def send_html(
         cls,
@@ -492,6 +516,7 @@ class EmailService:
         cc_addresses = [address for address in cc_addresses if address.lower() not in to_lower]
 
         from_email = cls._resolve_from_email(from_email)
+        envelope_from, from_headers = cls._delivery_addresses(from_email)
         file_attachments = [
             item for item in (attachments or []) if item and len(item) >= 2 and item[1]
         ]
@@ -509,9 +534,11 @@ class EmailService:
         message = EmailMultiAlternatives(
             subject=subject,
             body=text_body,
-            from_email=from_email,
+            from_email=envelope_from,
             to=to_addresses,
             cc=cc_addresses or None,
+            headers=from_headers or None,
+            reply_to=[from_email] if from_headers else None,
         )
         message.attach_alternative(html_body, "text/html")
         if not file_attachments:

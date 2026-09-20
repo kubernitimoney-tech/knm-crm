@@ -503,6 +503,41 @@ class TestDigioEsignAndVideoKyc:
             == 1
         )
 
+    def test_webhook_saves_pdf_from_document_file_data(self):
+        import base64
+
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SENT,
+            provider_request_id="DIDFILEDATA7890ABCD",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {
+            "status": "completed",
+            "file_data": base64.b64encode(b"%PDF-inline").decode(),
+        }
+
+        body = b'{"event":"doc.signed","id":"DIDFILEDATA7890ABCD"}'
+        api = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = api.generic(
+                "POST",
+                reverse("digio-webhook"),
+                data=body,
+                content_type="application/json",
+                HTTP_X_DIGIO_SIGNATURE=_hmac(body),
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.signed_file
+        mock_client.download_document.assert_not_called()
+
     def test_webhook_marks_kyc_completed(self):
         lead = _create_lead()
         row = LeadVideoKycRequest.objects.create(
@@ -972,3 +1007,46 @@ class TestDigioClientResponseHandling:
         with patch.object(client, "_open", side_effect=error):
             with pytest.raises(DigioAPIError, match="redirected"):
                 client.get_document("DID123")
+
+    def test_download_document_does_not_request_json(self):
+        from apps.integrations.digio.client import DigioClient
+
+        captured = {}
+        client = DigioClient(
+            base_url="https://api.digio.in", client_id="id", client_secret="secret"
+        )
+        response = MagicMock()
+        response.read.return_value = b"%PDF-1.4 signed"
+        response.status = 200
+        response.headers = {"Content-Type": "application/pdf"}
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+
+        def fake_open(request, timeout=None):
+            captured["accept"] = request.get_header("Accept")
+            return response
+
+        with patch.object(client, "_open", side_effect=fake_open):
+            pdf = client.download_document("DIDPDFACCEPT1")
+        assert pdf.startswith(b"%PDF")
+        assert captured["accept"] == "*/*"
+
+    def test_download_document_falls_back_to_file_data(self):
+        import base64
+
+        from apps.integrations.digio.client import DigioClient
+        from apps.integrations.digio.exceptions import DigioAPIError
+
+        encoded = base64.b64encode(b"%PDF-from-json").decode()
+        client = DigioClient(
+            base_url="https://api.digio.in", client_id="id", client_secret="secret"
+        )
+
+        def fake_request(method, path, payload=None, *, raw=False):
+            if "download" in path:
+                raise DigioAPIError("not found", status_code=404)
+            return {"status": "completed", "file_data": encoded}
+
+        with patch.object(client, "request", side_effect=fake_request):
+            pdf = client.download_document("DIDFILEDATA123")
+        assert pdf == b"%PDF-from-json"

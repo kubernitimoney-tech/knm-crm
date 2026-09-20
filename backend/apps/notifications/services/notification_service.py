@@ -356,8 +356,9 @@ class NotificationService:
                 )
                 if sent:
                     logger.info(
-                        "Sent email %r to %s (cc=%s)",
+                        "Sent email %r from %s to %s (cc=%s)",
                         subject,
+                        from_email,
                         recipients,
                         cc or [],
                     )

@@ -6,13 +6,14 @@ import hashlib
 import hmac
 import logging
 import re
+import time
 from typing import Any
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from apps.integrations.digio.client import DigioClient
+from apps.integrations.digio.client import DigioClient, coerce_pdf_bytes
 from apps.integrations.digio.exceptions import DigioAPIError, DigioError
 from apps.leads.models import (
     EsignRequestStatus,
@@ -136,8 +137,15 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
 
     client = DigioClient.from_settings()
     try:
-        document = client.get_document(document_id)
+        document = client.get_document(document_id, include_file=True)
+    except TypeError:
+        try:
+            document = client.get_document(document_id)
+        except DigioError:
+            document = {}
     except DigioError:
+        document = {}
+    if not isinstance(document, dict):
         document = {}
     document_status = str(document.get("agreement_status") or document.get("status") or "").lower()
     should_complete = (
@@ -153,11 +161,22 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
     if not should_complete:
         return True
 
-    try:
-        pdf_bytes = client.download_document(document_id)
-    except DigioAPIError:
-        logger.exception("Failed to download Digio signed document %s", document_id)
-        pdf_bytes = b""
+    pdf_bytes = coerce_pdf_bytes(document)
+    if not pdf_bytes:
+        for attempt in range(3):
+            try:
+                pdf_bytes = coerce_pdf_bytes(client.download_document(document_id))
+            except DigioAPIError:
+                logger.exception(
+                    "Failed to download Digio signed document %s (attempt %s)",
+                    document_id,
+                    attempt + 1,
+                )
+                pdf_bytes = b""
+            if pdf_bytes:
+                break
+            if attempt < 2:
+                time.sleep(1)
     if pdf_bytes:
         row.signed_file.save(f"{document_id}.pdf", ContentFile(pdf_bytes), save=False)
     row.status = EsignRequestStatus.SIGNED

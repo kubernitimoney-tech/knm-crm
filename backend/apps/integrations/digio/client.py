@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import logging
 import urllib.error
 import urllib.request
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from django.conf import settings
 
@@ -32,6 +33,43 @@ def _preview(text: str, limit: int = 180) -> str:
 def _looks_like_html(text: str) -> bool:
     start = (text or "").lstrip().lower()
     return start.startswith("<!doctype") or start.startswith("<html") or "<head" in start[:200]
+
+
+def coerce_pdf_bytes(payload) -> bytes:
+    """Return PDF bytes from a Digio download body or document JSON payload."""
+    if payload in (None, "", b"", {}, []):
+        return b""
+    if isinstance(payload, dict):
+        encoded = (
+            payload.get("file_data")
+            or payload.get("document")
+            or payload.get("file")
+            or payload.get("pdf")
+        )
+        if not encoded and isinstance(payload.get("file"), dict):
+            encoded = payload["file"].get("file_data") or payload["file"].get("data")
+        if not encoded:
+            return b""
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error, TypeError):
+            return b""
+        return data if data.lstrip().startswith(b"%PDF") else b""
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8", errors="ignore")
+    if not isinstance(payload, (bytes, bytearray)):
+        return b""
+    data = bytes(payload)
+    stripped = data.lstrip()
+    if stripped.startswith(b"%PDF"):
+        return data
+    if stripped.startswith(b"{") or stripped.startswith(b'"'):
+        try:
+            parsed = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return b""
+        return coerce_pdf_bytes(parsed)
+    return b""
 
 
 class DigioClient:
@@ -95,7 +133,8 @@ class DigioClient:
         token = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
         headers = {
             "Authorization": f"Basic {token}",
-            "Accept": "application/json",
+            # Signed-PDF downloads must not ask for JSON; Digio then omits the file.
+            "Accept": "*/*" if raw else "application/json",
             "User-Agent": "kuberniti-lms-digio",
         }
         if body is not None:
@@ -218,26 +257,39 @@ class DigioClient:
             payload,
         )
 
-    def get_document(self, document_id: str) -> dict:
-        return self.request("GET", f"/v2/client/document/{document_id}")
+    def get_document(self, document_id: str, *, include_file: bool = False) -> dict:
+        path = f"/v2/client/document/{document_id}"
+        if include_file:
+            path = f"{path}?file_data=true"
+        payload = self.request("GET", path)
+        return payload if isinstance(payload, dict) else {}
 
     def download_document(self, document_id: str) -> bytes:
-        content = self.request("GET", f"/v2/client/document/download/{document_id}", raw=True)
-        if isinstance(content, dict):
-            encoded = content.get("file_data") or content.get("document")
-            if encoded:
-                return base64.b64decode(encoded)
-            raise DigioAPIError("Digio download did not include a document.")
-        text = content[:32]
-        if text.lstrip().startswith(b"{") or text.lstrip().startswith(b'"'):
+        document_id = (document_id or "").strip()
+        if not document_id:
+            raise DigioAPIError("Document id is missing.")
+        last_error: DigioAPIError | None = None
+        for path in (
+            f"/v2/client/document/download/{document_id}",
+            f"/v2/client/document/download?document_id={quote(document_id)}",
+        ):
             try:
-                parsed = json.loads(content.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                return content
-            encoded = parsed.get("file_data") or parsed.get("document")
-            if encoded:
-                return base64.b64decode(encoded)
-        return content
+                content = self.request("GET", path, raw=True)
+            except DigioAPIError as exc:
+                last_error = exc
+                continue
+            pdf = coerce_pdf_bytes(content)
+            if pdf:
+                return pdf
+        try:
+            document = self.get_document(document_id, include_file=True)
+        except DigioAPIError as exc:
+            last_error = exc
+            document = {}
+        pdf = coerce_pdf_bytes(document)
+        if pdf:
+            return pdf
+        raise last_error or DigioAPIError("Digio download did not include a signed PDF.")
 
     def create_kyc_request(
         self,
