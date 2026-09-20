@@ -8,8 +8,11 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 
+from django.conf import settings
 from django.utils import timezone
+from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 
@@ -20,6 +23,18 @@ ASSET_DIR = Path(__file__).resolve().parent / "assets"
 TEMPLATE_PATH = ASSET_DIR / "loan-agreement-static.pdf"
 PAGE_WIDTH = 595.304
 PAGE_HEIGHT = 841.89
+# Cover NCPL + Naman header on every page, then stamp the KNM logo.
+HEADER_LOGO_X = 24
+HEADER_LOGO_Y = 772
+HEADER_LOGO_WIDTH = 210
+HEADER_LOGO_HEIGHT = 50
+HEADER_MASK_X = 18
+HEADER_MASK_Y = 768
+HEADER_MASK_WIDTH = 560
+HEADER_MASK_HEIGHT = 62
+
+_LOGO_PNG: bytes | None = None
+_LOGO_READY = False
 
 
 @dataclass(frozen=True)
@@ -189,6 +204,55 @@ def _fit_text(text: str, width: float, *, font: str = "Helvetica", size: float =
     return size
 
 
+def _logo_path() -> Path | None:
+    candidates = (
+        Path(getattr(settings, "EMAIL_LOGO_PATH", "") or ""),
+        Path(getattr(settings, "BASE_DIR", "")) / "static" / "emails" / "logo.png",
+        ASSET_DIR / "knm-logo.png",
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _logo_png_bytes() -> bytes | None:
+    global _LOGO_PNG, _LOGO_READY
+    if _LOGO_READY:
+        return _LOGO_PNG
+    _LOGO_READY = True
+    path = _logo_path()
+    if path is None:
+        return None
+    image = Image.open(path).convert("RGBA")
+    pixels = image.load()
+    width, height = image.size
+    for row in range(height):
+        for col in range(width):
+            red, green, blue, alpha = pixels[col, row]
+            if alpha and red < 40 and green < 40 and blue < 40:
+                pixels[col, row] = (red, green, blue, 0)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    _LOGO_PNG = buffer.getvalue()
+    return _LOGO_PNG
+
+
+def _draw_brand_logo(pdf: canvas.Canvas) -> None:
+    pdf.setFillColorRGB(1, 1, 1)
+    pdf.rect(HEADER_MASK_X, HEADER_MASK_Y, HEADER_MASK_WIDTH, HEADER_MASK_HEIGHT, fill=1, stroke=0)
+    logo = _logo_png_bytes()
+    if not logo:
+        return
+    pdf.drawImage(
+        ImageReader(BytesIO(logo)),
+        HEADER_LOGO_X,
+        HEADER_LOGO_Y,
+        width=HEADER_LOGO_WIDTH,
+        height=HEADER_LOGO_HEIGHT,
+        preserveAspectRatio=True,
+        mask="auto",
+        anchor="sw",
+    )
+
+
 def _replace(
     pdf: canvas.Canvas,
     *,
@@ -207,11 +271,11 @@ def _replace(
     pdf.drawString(x + 2, y, str(text))
 
 
-def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
-    """Stamp only lead-specific blanks; original page content is left unchanged."""
+def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
+    """Cover the source logo and stamp lead-specific blanks onto the original page."""
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
-    drew = False
+    _draw_brand_logo(pdf)
 
     if index == 0:
         _replace(
@@ -224,7 +288,6 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
             font="Times-Roman",
             size=11,
         )
-        drew = True
     elif index == 21:
         for y, text in zip(
             (671, 646, 622, 597, 573),
@@ -247,7 +310,6 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
             strict=True,
         ):
             _replace(pdf, x=301, y=y, width=225, text=text)
-        drew = True
     elif index == 22:
         for y, text in zip(
             (745, 721, 696, 672, 647),
@@ -261,7 +323,6 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
             strict=True,
         ):
             _replace(pdf, x=301, y=y, width=225, text=text)
-        drew = True
     elif index == 23:
         for y, text in (
             (521, values.borrower_name),
@@ -273,7 +334,6 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
             (242, values.execution_date),
         ):
             _replace(pdf, x=283, y=y, width=235, text=text)
-        drew = True
     elif index == 24:
         for y, text in (
             (745, values.principal),
@@ -291,7 +351,6 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
             (422, "Rs. 1,000.00 /-"),
         ):
             _replace(pdf, x=342, y=y, width=180, text=text, font="Helvetica-Bold")
-        drew = True
     elif index == 25:
         _replace(
             pdf,
@@ -305,10 +364,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes | None:
         )
         _replace(pdf, x=88, y=678, width=150, text=values.borrower_name, height=16)
         _replace(pdf, x=318, y=654, width=120, text=values.application_number, height=16)
-        drew = True
 
-    if not drew:
-        return None
     pdf.showPage()
     pdf.save()
     return stream.getvalue()
@@ -324,8 +380,7 @@ def build_agreement_pdf(*, lead) -> bytes:
     writer = PdfWriter()
     for index, page in enumerate(reader.pages):
         overlay = _overlay_for_page(index, values)
-        if overlay:
-            page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
+        page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
         writer.add_page(page)
 
     writer.add_metadata(
