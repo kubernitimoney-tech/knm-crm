@@ -100,15 +100,18 @@ class TestDigioEsignAndVideoKyc:
         pdf = build_agreement_pdf(lead=lead)
         reader = PdfReader(BytesIO(pdf))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        assert len(reader.pages) == 28
+        assert len(reader.pages) == 10
         assert lead.customer.full_name in text
-        assert "Naman Commodities" in text
-        assert "LendingRupee" in text
-        assert "DEFINATION AND INTERPRETATION" in text
+        assert "Har Shreejee" in text
+        assert "BORROWER'S LOAN AGREEMENT" in text or "BORROWER’S LOAN AGREEMENT" in text
+        assert "Naman Commodities" not in text
         assert "LAXMI" not in text
         assert "MENIKA KUMARI" not in text
         assert "pankajanand702@gmail.com" not in text
         assert "/AcroForm" not in reader.trailer["/Root"]
+        assert mock_client.upload_pdf.call_args.kwargs["display_on_page"] == "custom"
+        assert "8" in mock_client.upload_pdf.call_args.kwargs["sign_coordinates"]
+        assert "10" in mock_client.upload_pdf.call_args.kwargs["sign_coordinates"]
         assert response.data["data"]["email_sent"] is True
 
     def test_send_esign_reports_email_failure(self):
@@ -345,6 +348,86 @@ class TestDigioEsignAndVideoKyc:
         row.refresh_from_db()
         assert row.status == EsignRequestStatus.SIGNED
         assert row.signed_file
+
+    def test_public_esign_sync_marks_signed_from_signing_party(self):
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SENT,
+            provider_request_id="DIDPARTYSIGNED12345",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {
+            "agreement_status": "requested",
+            "signing_parties": [{"status": "signed"}],
+        }
+        mock_client.download_document.return_value = b"%PDF-signed-party"
+
+        client = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(reverse("public-esign", kwargs={"pk": row.id}), {"sync": "1"})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["signed"] is True
+        assert response.data["data"]["signed_file_url"].endswith(
+            f"/api/v1/leads/esign/{row.id}/document/"
+        )
+        row.refresh_from_db()
+        assert row.status == EsignRequestStatus.SIGNED
+
+    def test_public_esign_force_sync_downloads_after_sdk_success(self):
+        lead = _create_lead()
+        row = LeadEsignRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=EsignRequestStatus.SENT,
+            provider_request_id="DIDFORCESYNC1234567",
+        )
+        mock_client = MagicMock()
+        mock_client.get_document.return_value = {"agreement_status": "requested"}
+        mock_client.download_document.return_value = b"%PDF-forced"
+
+        client = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(
+                reverse("public-esign", kwargs={"pk": row.id}),
+                {"sync": "1", "force": "1"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["signed"] is True
+        row.refresh_from_db()
+        assert row.status == EsignRequestStatus.SIGNED
+        assert row.signed_file
+
+    def test_agreement_pdf_swaps_footer_logo_and_ticks_only_after_sign(self):
+        from io import BytesIO
+
+        from pypdf import PdfReader
+
+        from apps.integrations.digio.pdf import (
+            LAST_THREE_SIGN_COORDINATES,
+            apply_completed_signature_marks,
+            build_agreement_pdf,
+        )
+
+        lead = _create_lead()
+        unsigned = build_agreement_pdf(lead=lead)
+        unsigned_size = len(unsigned)
+        signed = apply_completed_signature_marks(unsigned)
+        assert len(PdfReader(BytesIO(unsigned)).pages) == 10
+        assert len(PdfReader(BytesIO(signed)).pages) == 10
+        assert len(signed) != unsigned_size
+        box = LAST_THREE_SIGN_COORDINATES["10"][0]
+        assert box["urx"] - box["llx"] >= 200
+        assert box["ury"] - box["lly"] >= 80
 
     def test_gateway_ignores_digio_drive_login_url(self):
         from apps.integrations.digio.gateway import gateway_from_payload
@@ -923,6 +1006,28 @@ class TestDigioClientResponseHandling:
         assert payload["notify_customer"] is True
         assert payload["generate_access_token"] is False
         assert payload["transaction_id"] == "0123456789abcdef0123456789abcdef"
+
+    def test_upload_pdf_sends_sign_coordinates_keyed_by_identifier(self):
+        from apps.integrations.digio.client import DigioClient
+
+        client = DigioClient(
+            base_url="https://api.digio.in", client_id="id", client_secret="secret"
+        )
+        boxes = {"8": [{"llx": 390, "lly": 410, "urx": 560, "ury": 535}]}
+        with patch.object(client, "request", return_value={"id": "DID1"}) as request:
+            client.upload_pdf(
+                file_name="a.pdf",
+                file_bytes=b"%PDF-1.4",
+                signer_name="Test",
+                identifier="test@example.com",
+                sign_type="aadhaar",
+                display_on_page="custom",
+                sign_coordinates=boxes,
+            )
+
+        payload = request.call_args.args[2]
+        assert payload["display_on_page"] == "custom"
+        assert payload["sign_coordinates"] == {"test@example.com": boxes}
 
     def test_digistudio_details_uses_post_with_detailed_response(self):
         from apps.integrations.digio.client import DigioClient

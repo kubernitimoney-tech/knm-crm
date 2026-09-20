@@ -1,4 +1,4 @@
-"""Create an unsigned, lead-specific agreement from the approved 28-page template."""
+"""Create an unsigned, lead-specific agreement from the 10-page KNM template."""
 
 from __future__ import annotations
 
@@ -21,20 +21,27 @@ from apps.customers.services.customer_service import CustomerService
 
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
 TEMPLATE_PATH = ASSET_DIR / "loan-agreement-static.pdf"
-PAGE_WIDTH = 595.304
-PAGE_HEIGHT = 841.89
-# Cover NCPL + Naman header on every page, then stamp the KNM logo.
-HEADER_LOGO_X = 24
-HEADER_LOGO_Y = 772
-HEADER_LOGO_WIDTH = 210
-HEADER_LOGO_HEIGHT = 50
-HEADER_MASK_X = 18
-HEADER_MASK_Y = 768
-HEADER_MASK_WIDTH = 560
-HEADER_MASK_HEIGHT = 62
+PAGE_WIDTH = 595.0
+PAGE_HEIGHT = 842.0
+
+# Digio stamps the Aadhaar block on these pages only after the customer completes eSign.
+# Boxes are wide enough for Digio's green tick plus the signed-by text.
+LAST_THREE_SIGN_COORDINATES = {
+    "8": [{"llx": 330, "lly": 400, "urx": 575, "ury": 545}],
+    "9": [{"llx": 330, "lly": 48, "urx": 580, "ury": 170}],
+    "10": [{"llx": 330, "lly": 48, "urx": 580, "ury": 170}],
+}
+
+# Extra green tick drawn on the signed PDF (last three pages, left of the Digio text).
+_COMPLETED_TICKS = (
+    (7, 400, 442, 36),
+    (8, 418, 54, 36),
+    (9, 418, 54, 36),
+)
 
 _LOGO_PNG: bytes | None = None
 _LOGO_READY = False
+_WHITE_PNG: bytes | None = None
 
 
 @dataclass(frozen=True)
@@ -65,22 +72,25 @@ def _money(value) -> str:
         amount = Decimal(str(value or "0"))
     except Exception:
         amount = Decimal("0")
-    return f"Rs. {amount:,.2f} /-"
+    return f"Rs. {amount:,.2f}"
 
 
 def _date(value) -> str:
+    parsed = _as_date(value)
+    return parsed.strftime("%d/%m/%Y") if parsed else "—"
+
+
+def _as_date(value) -> date | None:
     if not value:
-        return "—"
+        return None
     if isinstance(value, datetime):
         value = timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
     if isinstance(value, date):
-        day = value.day
-        suffix = "th" if 10 < day % 100 < 14 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-        return value.strftime(f"{day}{suffix} %b, %Y")
+        return value
     try:
-        return _date(date.fromisoformat(str(value)[:10]))
+        return date.fromisoformat(str(value)[:10])
     except ValueError:
-        return str(value)
+        return None
 
 
 def _decimal(value, default: Decimal = Decimal("0")) -> Decimal:
@@ -92,9 +102,9 @@ def _decimal(value, default: Decimal = Decimal("0")) -> Decimal:
 
 def _first_value(mapping: dict, *keys: str):
     for key in keys:
-        value = mapping.get(key)
-        if value not in (None, ""):
-            return value
+        item = mapping.get(key)
+        if item not in (None, ""):
+            return item
     return None
 
 
@@ -185,16 +195,16 @@ def _agreement_values(lead) -> AgreementValues:
         application_number=getattr(application, "application_number", None) or lead.lead_id,
         sanction_date=_date(getattr(decision, "decided_at", None) or execution_at),
         principal=_money(principal),
-        interest_rate=f"{_decimal(interest):g} % Per Day",
+        interest_rate=f"{_decimal(interest):.2f} %",
         processing_fee=_money(processing_fee),
         gst=_money(gst),
         disbursal_amount=_money(disbursal),
         repayment_date=_date(repayment_at),
         repayment_amount=_money(repayment),
-        tenure_days=f"{tenure} days",
-        apr=f"{_decimal(apr):g}",
+        tenure_days=f"{tenure} Days",
+        apr=f"{_decimal(interest):.2f}% per day – {_decimal(apr):.2f}% per annum",
         cooling_off_days=f"{_first_value(details, 'cooling_off_days') or 3} Days",
-        late_interest_rate=f"{_first_value(details, 'late_interest_rate') or '1.25'}% per Day",
+        late_interest_rate=f"{_first_value(details, 'late_interest_rate') or '1'}% per day",
     )
 
 
@@ -235,143 +245,285 @@ def _logo_png_bytes() -> bytes | None:
     return _LOGO_PNG
 
 
-def _draw_brand_logo(pdf: canvas.Canvas) -> None:
+def _from_top(top: float) -> float:
+    return PAGE_HEIGHT - top
+
+
+def _white_png() -> bytes:
+    global _WHITE_PNG
+    if _WHITE_PNG is None:
+        image = Image.new("RGB", (16, 16), (255, 255, 255))
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        _WHITE_PNG = buffer.getvalue()
+    return _WHITE_PNG
+
+
+def _cover(pdf: canvas.Canvas, x: float, top: float, width: float, height: float) -> None:
     pdf.setFillColorRGB(1, 1, 1)
-    pdf.rect(HEADER_MASK_X, HEADER_MASK_Y, HEADER_MASK_WIDTH, HEADER_MASK_HEIGHT, fill=1, stroke=0)
+    pdf.rect(x, _from_top(top + height), width, height, fill=1, stroke=0)
+
+
+def _cover_image(pdf: canvas.Canvas, x: float, top: float, width: float, height: float) -> None:
+    pdf.drawImage(
+        ImageReader(BytesIO(_white_png())),
+        x,
+        _from_top(top + height),
+        width=width,
+        height=height,
+        preserveAspectRatio=False,
+        mask=None,
+        anchor="sw",
+    )
+
+
+def _draw_brand_logo(pdf: canvas.Canvas) -> None:
+    """Replace the footer Har Shreejee wordmark and red seal with the KNM logo."""
+    _cover_image(pdf, 150, 755, 300, 55)
+    _cover_image(pdf, 246, 798, 104, 40)
     logo = _logo_png_bytes()
     if not logo:
         return
     pdf.drawImage(
         ImageReader(BytesIO(logo)),
-        HEADER_LOGO_X,
-        HEADER_LOGO_Y,
-        width=HEADER_LOGO_WIDTH,
-        height=HEADER_LOGO_HEIGHT,
+        172,
+        34,
+        width=250,
+        height=50,
         preserveAspectRatio=True,
         mask="auto",
         anchor="sw",
     )
 
 
+def _wipe_sample_signature(pdf: canvas.Canvas, index: int) -> None:
+    """Blank leftover Digio stamps. The ticked sign is applied only after eSign completes."""
+    _cover_image(pdf, 440, 752, 155, 42)
+    if index == 7:
+        # Keep "Borrower Signature & Date"; hide the sample signed-by block under it.
+        _cover_image(pdf, 385, 365, 185, 50)
+
+
+def _draw_green_tick(pdf: canvas.Canvas, x: float, y: float, size: float) -> None:
+    pdf.setFillColorRGB(0.13, 0.73, 0.38)
+    pdf.circle(x + size / 2, y + size / 2, size / 2, fill=1, stroke=0)
+    pdf.setStrokeColorRGB(1, 1, 1)
+    pdf.setFillColorRGB(1, 1, 1)
+    pdf.setLineWidth(max(2.2, size * 0.08))
+    pdf.setLineCap(1)
+    pdf.setLineJoin(1)
+    path = pdf.beginPath()
+    path.moveTo(x + size * 0.26, y + size * 0.50)
+    path.lineTo(x + size * 0.44, y + size * 0.32)
+    path.lineTo(x + size * 0.76, y + size * 0.70)
+    pdf.drawPath(path, stroke=1, fill=0)
+
+
+def apply_completed_signature_marks(pdf_bytes: bytes) -> bytes:
+    """Add the green Aadhaar tick after Digio has signed. Never call this on the unsigned preview."""
+    if not pdf_bytes or not pdf_bytes.lstrip().startswith(b"%PDF"):
+        return pdf_bytes
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+    except Exception:
+        return pdf_bytes
+    if len(reader.pages) < 8:
+        return pdf_bytes
+
+    writer = PdfWriter()
+    overlays: dict[int, bytes] = {}
+    try:
+        for index, x, y, size in _COMPLETED_TICKS:
+            if index >= len(reader.pages):
+                continue
+            stream = BytesIO()
+            page = reader.pages[index]
+            width = float(page.mediabox.width)
+            height = float(page.mediabox.height)
+            pdf = canvas.Canvas(stream, pagesize=(width, height))
+            _draw_green_tick(pdf, x, y, size)
+            pdf.showPage()
+            pdf.save()
+            overlays[index] = stream.getvalue()
+
+        for index, page in enumerate(reader.pages):
+            overlay = overlays.get(index)
+            if overlay:
+                page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
+            writer.add_page(page)
+        if reader.metadata:
+            writer.add_metadata(
+                {str(key): str(value) for key, value in dict(reader.metadata).items()}
+            )
+        output = BytesIO()
+        writer.write(output)
+        return output.getvalue()
+    except Exception:
+        return pdf_bytes
+
+
 def _replace(
     pdf: canvas.Canvas,
     *,
     x: float,
-    y: float,
+    top: float,
     width: float,
     text: str,
-    height: float = 16,
+    height: float = 14,
     font: str = "Helvetica",
-    size: float = 9,
+    size: float = 8.5,
 ) -> None:
-    pdf.setFillColorRGB(1, 1, 1)
-    pdf.rect(x, y - 4, width, height, fill=1, stroke=0)
+    _cover(pdf, x, top, width, height)
     pdf.setFillColorRGB(0, 0, 0)
     pdf.setFont(font, _fit_text(str(text), width - 4, font=font, size=size))
-    pdf.drawString(x + 2, y, str(text))
+    pdf.drawString(x + 2, _from_top(top + height) + 3, str(text))
+
+
+def _replace_wrapped(
+    pdf: canvas.Canvas,
+    *,
+    x: float,
+    top: float,
+    width: float,
+    height: float,
+    text: str,
+    font: str = "Helvetica",
+    size: float = 8,
+) -> None:
+    _cover(pdf, x, top, width, height)
+    pdf.setFillColorRGB(0, 0, 0)
+    words = str(text or "—").split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if stringWidth(candidate, font, size) <= width - 4 or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    y = _from_top(top + 11)
+    for line in lines[:4]:
+        pdf.setFont(font, size)
+        pdf.drawString(x + 2, y, line)
+        y -= 11
 
 
 def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
-    """Cover the source logo and stamp lead-specific blanks onto the original page."""
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
+    _wipe_sample_signature(pdf, index)
     _draw_brand_logo(pdf)
 
-    if index == 0:
+    if index == 8:
+        details_x = 304
+        details_w = 248
+        _replace(pdf, x=details_x, top=160, width=details_w, text=values.borrower_name, height=16)
+        _replace_wrapped(
+            pdf,
+            x=details_x,
+            top=182,
+            width=details_w,
+            height=32,
+            text=values.address,
+        )
+        _replace_wrapped(
+            pdf,
+            x=details_x,
+            top=218,
+            width=details_w,
+            height=48,
+            text=values.address,
+        )
+        _replace(pdf, x=details_x, top=270, width=details_w, text=values.pan, height=16)
+        _replace(pdf, x=details_x, top=292, width=details_w, text=values.email, height=30)
+        _replace(pdf, x=details_x, top=328, width=details_w, text=values.mobile, height=16)
+        _replace(pdf, x=details_x, top=413, width=details_w, text=values.execution_date, height=16)
+        _replace(
+            pdf, x=details_x, top=435, width=details_w, text=values.application_number, height=16
+        )
+        _replace(pdf, x=details_x, top=458, width=details_w, text=values.sanction_date, height=16)
+        _replace(pdf, x=details_x, top=480, width=details_w, text=values.principal, height=16)
+        _replace(pdf, x=details_x, top=503, width=details_w, text=values.interest_rate, height=16)
+        _replace(pdf, x=details_x, top=525, width=details_w, text=values.processing_fee, height=16)
+        _replace(pdf, x=details_x, top=548, width=details_w, text=values.gst, height=16)
+        _replace(
+            pdf, x=details_x, top=570, width=details_w, text=values.disbursal_amount, height=16
+        )
+        _replace(pdf, x=details_x, top=592, width=details_w, text=values.repayment_date, height=16)
+        _replace(
+            pdf, x=details_x, top=615, width=details_w, text=values.repayment_amount, height=16
+        )
+        _replace(pdf, x=details_x, top=637, width=details_w, text=values.tenure_days, height=16)
+        _replace(pdf, x=details_x, top=696, width=details_w, text=values.borrower_name, height=16)
+    elif index == 9:
+        _replace(pdf, x=238, top=122, width=72, text=values.application_number, height=14, size=7.5)
         _replace(
             pdf,
-            x=123,
-            y=416,
-            width=105,
-            text=f"(Rupees {values.principal.removeprefix('Rs. ').removesuffix(' /-')} only)",
-            height=18,
-            font="Times-Roman",
-            size=11,
+            x=238,
+            top=140,
+            width=72,
+            text=values.principal.replace("Rs.", "₹"),
+            height=14,
+            size=7.5,
         )
-    elif index == 21:
-        for y, text in zip(
-            (671, 646, 622, 597, 573),
-            (values.borrower_name, values.address, values.pan, values.email, values.mobile),
-            strict=True,
-        ):
-            _replace(pdf, x=301, y=y, width=225, text=text)
-        for y, text in zip(
-            (497, 472, 448, 423, 399, 374, 350, 325),
-            (
-                values.execution_date,
-                values.application_number,
-                values.sanction_date,
-                values.principal,
-                values.interest_rate,
-                values.processing_fee,
-                values.gst,
-                values.disbursal_amount,
-            ),
-            strict=True,
-        ):
-            _replace(pdf, x=301, y=y, width=225, text=text)
-    elif index == 22:
-        for y, text in zip(
-            (745, 721, 696, 672, 647),
-            (
-                values.repayment_date,
-                values.repayment_amount,
-                values.tenure_days,
-                "Rs. 1,000.00 + GST",
-                values.late_interest_rate,
-            ),
-            strict=True,
-        ):
-            _replace(pdf, x=301, y=y, width=225, text=text)
-    elif index == 23:
-        for y, text in (
-            (521, values.borrower_name),
-            (496, values.address),
-            (350, values.pan),
-            (322, values.email),
-            (294, values.mobile),
-            (266, values.application_number),
-            (242, values.execution_date),
-        ):
-            _replace(pdf, x=283, y=y, width=235, text=text)
-    elif index == 24:
-        for y, text in (
-            (745, values.principal),
-            (720, values.processing_fee),
-            (695, "18%"),
-            (669, values.gst),
-            (644, values.disbursal_amount),
-            (615, values.repayment_amount),
-            (586, values.repayment_date),
-            (557, values.interest_rate.replace(" % Per Day", "")),
-            (528, values.cooling_off_days),
-            (499, values.apr),
-            (476, values.tenure_days.replace(" days", "")),
-            (451, values.late_interest_rate),
-            (422, "Rs. 1,000.00 /-"),
-        ):
-            _replace(pdf, x=342, y=y, width=180, text=text, font="Helvetica-Bold")
-    elif index == 25:
         _replace(
             pdf,
-            x=399,
-            y=743,
-            width=135,
-            text=f"DATE: {values.execution_date}",
-            height=18,
-            font="Times-Bold",
-            size=10,
+            x=238,
+            top=236,
+            width=90,
+            text=f"Loan tenure – {values.tenure_days.replace(' Days', ' days')}",
+            height=16,
+            size=7.5,
         )
-        _replace(pdf, x=88, y=678, width=150, text=values.borrower_name, height=16)
-        _replace(pdf, x=318, y=654, width=120, text=values.application_number, height=16)
+        _replace(
+            pdf,
+            x=286,
+            top=286,
+            width=50,
+            text=values.repayment_amount.replace("Rs.", "₹"),
+            height=14,
+            size=7.5,
+        )
+        _replace(
+            pdf,
+            x=238,
+            top=308,
+            width=130,
+            text=f"{values.interest_rate} – Fixed",
+            height=14,
+            size=7.5,
+        )
+        _replace(
+            pdf,
+            x=286,
+            top=456,
+            width=50,
+            text=values.processing_fee.replace("Rs. ", "₹ "),
+            height=12,
+            size=7,
+        )
+        _replace(pdf, x=238, top=523, width=130, text=values.apr, height=14, size=7)
+        _replace(pdf, x=438, top=568, width=50, text=values.late_interest_rate, height=14, size=7)
 
     pdf.showPage()
     pdf.save()
     return stream.getvalue()
 
 
+def _strip_form(writer: PdfWriter) -> None:
+    root = getattr(writer, "_root_object", None)
+    if root is not None and "/AcroForm" in root:
+        del root["/AcroForm"]
+    for page in writer.pages:
+        if page.get("/Annots") is not None:
+            del page["/Annots"]
+
+
 def build_agreement_pdf(*, lead) -> bytes:
-    """Return the original 28-page template with only the lead's blanks filled in."""
+    """Return the 10-page template with KNM logo and the lead's blanks filled in."""
     if not TEMPLATE_PATH.is_file():
         raise FileNotFoundError(f"Agreement template not found: {TEMPLATE_PATH}")
 
@@ -382,6 +534,7 @@ def build_agreement_pdf(*, lead) -> bytes:
         overlay = _overlay_for_page(index, values)
         page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
         writer.add_page(page)
+    _strip_form(writer)
 
     writer.add_metadata(
         {

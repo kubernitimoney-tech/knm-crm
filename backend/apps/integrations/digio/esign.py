@@ -18,7 +18,11 @@ from apps.integrations.digio.gateway import (
     customer_identifier,
     gateway_from_payload,
 )
-from apps.integrations.digio.pdf import build_agreement_pdf
+from apps.integrations.digio.pdf import (
+    LAST_THREE_SIGN_COORDINATES,
+    apply_completed_signature_marks,
+    build_agreement_pdf,
+)
 from apps.leads.models import EsignRequestStatus, IntegrationProvider, LeadEsignRequest
 
 logger = logging.getLogger(__name__)
@@ -62,6 +66,8 @@ def create_lead_esign_request(
         sign_type=sign_type,
         reason="Loan Agreement",
         redirect_url=f"{review_url}?done=1",
+        display_on_page="custom",
+        sign_coordinates=LAST_THREE_SIGN_COORDINATES,
     )
     entity_id, access_token, request_url = gateway_from_payload(
         payload=payload if isinstance(payload, dict) else {},
@@ -309,6 +315,7 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
                 )
         if not signed_bytes:
             raise DigioAPIError("Digio did not return the signed document.")
+        signed_bytes = apply_completed_signature_marks(signed_bytes)
     else:
         if str(cached.get("otp") or "") != otp_code:
             raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")
