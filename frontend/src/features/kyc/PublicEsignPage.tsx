@@ -29,6 +29,46 @@ interface PublicEsignSession {
   transaction_id?: string;
   status?: string;
   signing_url?: string;
+  document_id?: string;
+  identifier?: string;
+  access_token?: string;
+  environment?: 'sandbox' | 'production';
+  sdk_url?: string;
+}
+
+interface DigioInstance {
+  init: () => void;
+  submit: (documentId: string, identifier: string, token?: string) => void;
+}
+
+interface DigioConstructor {
+  new (options: {
+    environment: string;
+    is_redirection_approach?: boolean;
+    redirect_url?: string;
+    callback: (response: { error_code?: string; message?: string }) => void;
+  }): DigioInstance;
+}
+
+function getDigioConstructor(): DigioConstructor | undefined {
+  return (window as unknown as { Digio?: DigioConstructor }).Digio;
+}
+
+function loadDigioSdk(src: string): Promise<DigioConstructor> {
+  const current = getDigioConstructor();
+  if (current) return Promise.resolve(current);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      const loaded = getDigioConstructor();
+      if (loaded) resolve(loaded);
+      else reject(new Error('Digio signing failed to load.'));
+    };
+    script.onerror = () => reject(new Error('Digio signing failed to load.'));
+    document.body.appendChild(script);
+  });
 }
 
 function digitsOnly(value: string) {
@@ -321,12 +361,37 @@ export function PublicEsignPage() {
     }
   };
 
-  const startAadhaarEsign = () => {
-    if (!session?.signing_url) {
-      setError('This signing request is missing the Aadhaar eSign link. Ask the team to send a new request.');
+  const startAadhaarEsign = async () => {
+    if (!session?.document_id || !session.identifier || !session.sdk_url) {
+      setError('This signing request is missing the Aadhaar eSign details. Ask the team to send a new request.');
       return;
     }
-    window.location.assign(session.signing_url);
+    setError('');
+    setBusy(true);
+    try {
+      const Digio = await loadDigioSdk(session.sdk_url);
+      const returnUrl = `${window.location.origin}${window.location.pathname}?done=1`;
+      const digio = new Digio({
+        environment: session.environment || 'production',
+        is_redirection_approach: true,
+        redirect_url: returnUrl,
+        callback: (response) => {
+          if (response?.error_code) {
+            setError(response.message || 'Signing was not completed.');
+            setBusy(false);
+          }
+        },
+      });
+      digio.init();
+      if (session.access_token) {
+        digio.submit(session.document_id, session.identifier, session.access_token);
+      } else {
+        digio.submit(session.document_id, session.identifier);
+      }
+    } catch (err: unknown) {
+      setError(apiError(err, 'Could not start Aadhaar eSign.'));
+      setBusy(false);
+    }
   };
 
   const brand = session?.company_name || 'Kuberniti Money';
@@ -454,7 +519,7 @@ export function PublicEsignPage() {
           <button
             type="button"
             disabled={busy}
-            onClick={startAadhaarEsign}
+            onClick={() => void startAadhaarEsign()}
             className="mx-auto mt-4 block rounded-full bg-[#4caf82] px-10 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
             Sign Now

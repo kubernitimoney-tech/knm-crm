@@ -92,8 +92,17 @@ def gateway_from_payload(
     entity_id = extract_entity_id(payload)
     access_token = extract_access_token(payload)
     request_url = str(payload.get("access_token_url") or payload.get("url") or "").strip()
-    # Digio often returns drive.digio.in, which asks the customer to log in.
-    if entity_id and not is_guest_gateway_url(request_url):
+    # Always rebuild when we have the signer id. Digio often returns
+    # /#/gateway/login/<docId> without the identifier, which shows
+    # "Identifier is missing". Drive URLs also ask the customer to log in.
+    if entity_id and identifier:
+        request_url = build_gateway_url(
+            entity_id=entity_id,
+            identifier=identifier,
+            access_token=access_token,
+            flow=flow,
+        )
+    elif entity_id and not is_guest_gateway_url(request_url):
         request_url = build_gateway_url(
             entity_id=entity_id,
             identifier=identifier,
@@ -101,3 +110,21 @@ def gateway_from_payload(
             flow=flow,
         )
     return entity_id, access_token, request_url
+
+
+def esign_signing_url(row) -> str:
+    """Guest gateway URL with identifier, even if the stored request_url omitted it."""
+    customer = getattr(getattr(row, "lead", None), "customer", None)
+    identifier = customer_identifier(
+        customer=customer,
+        recipient_email=getattr(row, "recipient_email", "") or "",
+    )
+    entity_id = (getattr(row, "provider_request_id", None) or "").strip()
+    if entity_id and identifier:
+        return build_gateway_url(
+            entity_id=entity_id,
+            identifier=identifier,
+            access_token=getattr(row, "access_token", "") or "",
+            flow="login",
+        )
+    return (getattr(row, "request_url", None) or "").strip()
