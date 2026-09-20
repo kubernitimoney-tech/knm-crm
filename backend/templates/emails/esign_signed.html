@@ -1,0 +1,28 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Dear {{ customer_name | default:"Customer" }},</p>
+<p style="margin:0 0 20px;font-size:16px;line-height:1.6;font-weight:700;color:#16a34a;">
+  ✓ Document Successfully Signed
+</p>
+<p style="margin:0 0 8px;font-size:15px;line-height:1.6;font-weight:700;">Transaction Details:</p>
+<p style="margin:0 0 4px;font-size:15px;line-height:1.6;">Document Reference:{{ document_reference }}</p>
+<p style="margin:0 0 4px;font-size:15px;line-height:1.6;">Signed Date: {{ signed_date }}</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Legal Binding: Effective Immediately</p>
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;">
+  We confirm receipt of your signed document. The executed copy is attached for your records and will be securely archived in your account.
+</p>
+<p style="margin:0 0 8px;font-size:15px;line-height:1.6;font-weight:700;">Next Steps:</p>
+<p style="margin:0 0 4px;font-size:15px;line-height:1.6;">Retain this confirmation for future reference</p>
+<p style="margin:0 0 4px;font-size:15px;line-height:1.6;">Access documents anytime in your portal</p>
+<p style="margin:0 0 8px;font-size:15px;line-height:1.6;">Contact legal support for any discrepancies</p>
+{% endblock %}
+{% block footer %}
+<p style="margin:0 0 8px;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+  © 2025 Har Shreejee Finance and Leasing Company Ltd &nbsp;|&nbsp; Secured Document Management
+</p>
+<p style="margin:0;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+  <a href="{{ website_url|default:'https://www.kubernitimoney.com' }}/contact" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">Contact Support</a>
+  &nbsp;|&nbsp;
+  <a href="{{ website_url|default:'https://www.kubernitimoney.com' }}/privacy" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">Privacy Policy</a>
+</p>
+{% endblock %}

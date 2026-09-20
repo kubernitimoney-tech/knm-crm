@@ -1,4 +1,5 @@
 from django.contrib.contenttypes.models import ContentType
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.core.encryption import decrypt_for_display
@@ -19,6 +20,7 @@ from apps.customers.services.customer_service import CustomerService
 from apps.documents.catalog import LEAD_DOCUMENT_TYPE_CODES
 from apps.documents.models import Document
 from apps.leads.models import (
+    EsignRequestStatus,
     LeadEsignRequest,
     LeadVideoKycRequest,
     VideoKycRequestStatus,
@@ -353,12 +355,16 @@ class LeadEsignRequestSerializer(serializers.ModelSerializer):
         return obj.signed_at.isoformat() if obj.signed_at else ""
 
     def get_signed_file_url(self, obj):
-        if not obj.signed_file:
+        if obj.status != EsignRequestStatus.SIGNED:
             return None
+        path = reverse(
+            "lead-esign-request-file",
+            kwargs={"pk": obj.lead_id, "request_id": obj.pk},
+        )
         request = self.context.get("request")
         if request is None:
-            return obj.signed_file.url
-        return request.build_absolute_uri(obj.signed_file.url)
+            return path
+        return request.build_absolute_uri(path)
 
     def get_review_url(self, obj):
         from apps.integrations.digio.gateway import customer_esign_review_url

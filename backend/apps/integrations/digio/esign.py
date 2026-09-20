@@ -265,6 +265,7 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     from django.utils import timezone
 
     if row.status == EsignRequestStatus.SIGNED and row.signed_file:
+        notify_esign_signed_copy(row)
         return row
     _require_email_verified(row)
 
@@ -323,4 +324,35 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     row.save()
     cache.delete(AADHAAR_OTP_KEY.format(row.id))
     cache.delete(EMAIL_OK_KEY.format(row.id))
+    notify_esign_signed_copy(row, pdf_bytes=signed_bytes)
     return row
+
+
+def notify_esign_signed_copy(row: LeadEsignRequest, *, pdf_bytes: bytes = b"") -> None:
+    """Email the executed PDF once, after the signed file is stored."""
+    if row.status != EsignRequestStatus.SIGNED:
+        return
+    content = pdf_bytes or b""
+    if not content and row.signed_file:
+        row.signed_file.open("rb")
+        try:
+            content = row.signed_file.read()
+        finally:
+            row.signed_file.close()
+    if not content:
+        return
+    from django.core.cache import cache
+
+    from apps.notifications.services.notification_service import NotificationService
+
+    key = f"esign-signed-copy-email:{row.id}"
+    if not cache.add(key, True, timeout=60 * 60 * 24 * 120):
+        return
+    try:
+        NotificationService.send_esign_signed_copy_email(row=row, pdf_bytes=content)
+    except Exception:
+        cache.delete(key)
+        logger.exception(
+            "Failed to email signed e-sign copy for lead %s",
+            getattr(getattr(row, "lead", None), "lead_id", row.pk),
+        )
