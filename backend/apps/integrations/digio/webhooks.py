@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.integrations.digio.client import DigioClient, coerce_pdf_bytes
 from apps.integrations.digio.exceptions import DigioAPIError, DigioError
-from apps.integrations.digio.pdf import apply_completed_signature_marks
+from apps.integrations.digio.pdf import apply_completed_signature_marks, signer_from_lead
 from apps.leads.models import (
     EsignRequestStatus,
     LeadEsignRequest,
@@ -185,9 +185,11 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
             if attempt < 2:
                 time.sleep(1)
     if pdf_bytes:
+        name, location = signer_from_lead(row.lead)
         pdf_bytes = apply_completed_signature_marks(
             pdf_bytes,
-            signer_name=getattr(getattr(row.lead, "customer", None), "full_name", "") or "",
+            signer_name=name,
+            signer_location=location,
             signed_at=timezone.now(),
         )
         row.signed_file.save(f"{document_id}.pdf", ContentFile(pdf_bytes), save=False)

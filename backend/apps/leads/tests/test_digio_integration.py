@@ -496,15 +496,24 @@ class TestDigioEsignAndVideoKyc:
         signed = apply_completed_signature_marks(
             unsigned,
             signer_name=lead.customer.full_name,
+            signer_location="New Delhi",
         )
         assert len(PdfReader(BytesIO(unsigned)).pages) == 10
         assert len(PdfReader(BytesIO(signed)).pages) == 10
         assert len(signed) != unsigned_size
+        unsigned_text = "\n".join(
+            page.extract_text() or "" for page in PdfReader(BytesIO(unsigned)).pages
+        )
         signed_text = "\n".join(
             page.extract_text() or "" for page in PdfReader(BytesIO(signed)).pages
         )
+        assert "Kuberniti Money" in unsigned_text
         assert "Digitally Signed by:" in signed_text
-        assert "Loan Agreement" in signed_text
+        assert "Name:" in signed_text
+        assert "Location:" in signed_text
+        assert "Reason: Loan Agreement" in signed_text
+        assert "eSigned using Aadhaar" not in signed_text
+        assert "Signed by: Nishant" not in signed_text
 
         for page, index in (("8", 7), ("9", 8), ("10", 9)):
             box = LAST_THREE_SIGN_COORDINATES[page][0]
