@@ -315,7 +315,11 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
                 )
         if not signed_bytes:
             raise DigioAPIError("Digio did not return the signed document.")
-        signed_bytes = apply_completed_signature_marks(signed_bytes)
+        signed_bytes = apply_completed_signature_marks(
+            signed_bytes,
+            signer_name=getattr(row.lead.customer, "full_name", "") or "",
+            signed_at=timezone.now(),
+        )
     else:
         if str(cached.get("otp") or "") != otp_code:
             raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")

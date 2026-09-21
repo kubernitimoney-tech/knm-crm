@@ -483,7 +483,9 @@ class TestDigioEsignAndVideoKyc:
         from pypdf import PdfReader
 
         from apps.integrations.digio.pdf import (
+            _SIGNATURE_CARDS,
             LAST_THREE_SIGN_COORDINATES,
+            PAGE_HEIGHT,
             apply_completed_signature_marks,
             build_agreement_pdf,
         )
@@ -491,13 +493,31 @@ class TestDigioEsignAndVideoKyc:
         lead = _create_lead()
         unsigned = build_agreement_pdf(lead=lead)
         unsigned_size = len(unsigned)
-        signed = apply_completed_signature_marks(unsigned)
+        signed = apply_completed_signature_marks(
+            unsigned,
+            signer_name=lead.customer.full_name,
+        )
         assert len(PdfReader(BytesIO(unsigned)).pages) == 10
         assert len(PdfReader(BytesIO(signed)).pages) == 10
         assert len(signed) != unsigned_size
-        box = LAST_THREE_SIGN_COORDINATES["10"][0]
-        assert box["urx"] - box["llx"] >= 200
-        assert box["ury"] - box["lly"] >= 80
+        signed_text = "\n".join(
+            page.extract_text() or "" for page in PdfReader(BytesIO(signed)).pages
+        )
+        assert "Digitally Signed by:" in signed_text
+        assert "Loan Agreement" in signed_text
+
+        for page, index in (("8", 7), ("9", 8), ("10", 9)):
+            box = LAST_THREE_SIGN_COORDINATES[page][0]
+            card_x, card_top, card_width, card_height = _SIGNATURE_CARDS[index]
+            # Digio's longest line, "eSigned using Aadhaar (digio.in)", needs ~125pt.
+            assert box["urx"] - box["llx"] >= 140
+            assert box["ury"] - box["lly"] >= 55
+            # Stamp sits in the reserved block and stays above the footer band.
+            assert box["llx"] >= card_x
+            assert box["urx"] <= card_x + card_width
+            assert box["lly"] >= PAGE_HEIGHT - card_top - card_height
+            assert box["ury"] <= PAGE_HEIGHT - card_top
+            assert box["lly"] >= 45
 
     def test_gateway_ignores_digio_drive_login_url(self):
         from apps.integrations.digio.gateway import gateway_from_payload
