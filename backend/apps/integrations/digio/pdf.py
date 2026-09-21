@@ -31,8 +31,8 @@ BRAND_HAIRLINE = (0xB0 / 255, 0xB0 / 255, 0xC1 / 255)
 INK = (0.12, 0.13, 0.18)
 SIGNATURE_GREEN = (0x01 / 255, 0xA6 / 255, 0x01 / 255)
 
-# assets/tick-mark-icon.svg traced into a unit box, y flipped for PDF space. A pair is a
-# straight segment, a triple of pairs is a cubic curve's two controls plus its end point.
+# Green tick outline in a unit box, y flipped for PDF space. A pair is a straight
+# segment; a triple of pairs is a cubic curve's two controls plus its end point.
 _TICK_RATIO = 122.88 / 109.76
 _TICK_OUTLINE = (
     (0.0000, 0.5182),
