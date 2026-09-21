@@ -230,30 +230,40 @@ class EmailService:
                 ]
             )
 
-        if template == "video_kyc_request":
-            kyc_url = (ctx.get("kyc_url") or "").strip()
-            lead_id = (ctx.get("lead_id") or "").strip()
-            lines = [
-                "Complete your identity verification.",
-                "",
-                f"Dear {customer_name.title() if customer_name else 'Customer'},",
-                "",
-                "Please complete your Aadhaar, PAN, selfie and OCR verification.",
-            ]
-            if lead_id:
-                lines.extend(["", f"Lead: {lead_id}"])
-            if kyc_url:
-                lines.extend(["", "Open your secure Video KYC link:", kyc_url])
-            lines.extend(
+        if template == "video_kyc_completed":
+            document_reference = (ctx.get("document_reference") or "").strip()
+            signed_date = (ctx.get("signed_date") or "").strip()
+            website_url = (ctx.get("website_url") or "https://www.kubernitimoney.com").rstrip("/")
+            return "\n".join(
                 [
+                    f"Dear {customer_name or 'Customer'},",
                     "",
-                    "Do not share this verification link with anyone.",
-                    f"Thank you for choosing {brand_name}.",
+                    "Video KYC Successfully Completed",
                     "",
-                    footer,
+                    "Transaction Details:",
+                    f"Document Reference:{document_reference}",
+                    f"Completed Date: {signed_date}",
+                    "Verification Status: Approved",
+                    "",
+                    (
+                        "We confirm receipt of your Video KYC. Your identity verification "
+                        "has been recorded and will be securely archived in your account."
+                    ),
+                    "",
+                    "Next Steps:",
+                    "",
+                    "Retain this confirmation for future reference",
+                    "Our team will continue your loan process",
+                    "Contact support if you notice any discrepancy",
+                    "",
+                    (
+                        "© 2025 Har Shreejee Finance and Leasing Company Ltd  "
+                        "| Secured Document Management"
+                    ),
+                    f"Contact Support: {website_url}/contact",
+                    f"Privacy Policy: {website_url}/privacy",
                 ]
             )
-            return "\n".join(lines)
 
         if template == "disbursal_sheet_sent":
             lines = [

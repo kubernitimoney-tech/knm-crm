@@ -227,6 +227,7 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
         row.save(update_fields=["status", "session_details", "updated_at"])
         return True
     if row.status == VideoKycRequestStatus.COMPLETED and not _vkyc_needs_refresh(row):
+        notify_video_kyc_completed(row)
         return True
 
     client = DigioClient.from_settings()
@@ -237,19 +238,30 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
     return _apply_kyc_response(row, response=response, client=client, event=event)
 
 
-def refresh_video_kyc_from_provider(row: LeadVideoKycRequest) -> LeadVideoKycRequest:
+def refresh_video_kyc_from_provider(
+    row: LeadVideoKycRequest, *, force: bool = False
+) -> LeadVideoKycRequest:
     provider_id = (row.provider_request_id or "").strip()
     if not provider_id or row.status == VideoKycRequestStatus.EXPIRED:
         return row
     if not _vkyc_needs_refresh(row) and row.status == VideoKycRequestStatus.COMPLETED:
+        notify_video_kyc_completed(row)
         return row
     try:
         client = DigioClient.from_settings()
         response = client.get_kyc_response(provider_id)
     except DigioError:
         logger.exception("Could not refresh Video KYC %s from Digio", provider_id)
+        if force and row.status != VideoKycRequestStatus.COMPLETED:
+            row.status = VideoKycRequestStatus.COMPLETED
+            if not row.completed_at:
+                row.completed_at = timezone.now()
+            row.save(update_fields=["status", "completed_at", "updated_at"])
+            notify_video_kyc_completed(row)
+            row.refresh_from_db()
         return row
-    _apply_kyc_response(row, response=response, client=client, event="")
+    event = "kyc.completed" if force or row.status == VideoKycRequestStatus.COMPLETED else ""
+    _apply_kyc_response(row, response=response, client=client, event=event)
     row.refresh_from_db()
     details = dict(row.session_details or {})
     details["media_sync_attempted"] = True
@@ -273,18 +285,26 @@ def _vkyc_needs_refresh(row: LeadVideoKycRequest) -> bool:
     return not details.get("media_sync_attempted")
 
 
+def _kyc_is_completed(response: dict, *, event: str = "") -> bool:
+    if _is_success_event(event) or "approval_pending" in (event or "").lower():
+        return True
+    blobs = [
+        str(response.get("status") or ""),
+        str(response.get("kyc_status") or ""),
+        str(response.get("request_status") or ""),
+    ]
+    for action in response.get("actions") or []:
+        if isinstance(action, dict):
+            blobs.append(str(action.get("status") or ""))
+    text = " ".join(blobs).lower()
+    return _is_success_event(text) or "approval_pending" in text
+
+
 def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     response = _unwrap_kyc_response(response if isinstance(response, dict) else {})
     kyc_status = str(response.get("status") or response.get("kyc_status") or event).lower()
-    should_complete = (
-        row.status == VideoKycRequestStatus.COMPLETED
-        or _is_success_event(event)
-        or kyc_status
-        in {
-            "approved",
-            "completed",
-            "success",
-        }
+    should_complete = row.status == VideoKycRequestStatus.COMPLETED or _kyc_is_completed(
+        response, event=event
     )
     if not should_complete:
         details = dict(row.session_details or {})
@@ -297,6 +317,7 @@ def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     previous = dict(row.session_details or {})
     mapped = _map_kyc_session(response)
     mapped["email_sent"] = previous.get("email_sent")
+    mapped["sms_sent"] = previous.get("sms_sent")
     mapped["customer_identifier"] = previous.get("customer_identifier")
     mapped["verification_method"] = previous.get("verification_method")
     mapped["workflow_name"] = mapped.get("workflow_name") or previous.get("workflow_name") or ""
@@ -315,7 +336,29 @@ def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     if not row.completed_at:
         row.completed_at = timezone.now()
     row.save()
+    notify_video_kyc_completed(row)
     return True
+
+
+def notify_video_kyc_completed(row: LeadVideoKycRequest) -> None:
+    """Email the customer once after Video KYC is marked completed."""
+    if row.status != VideoKycRequestStatus.COMPLETED:
+        return
+    from django.core.cache import cache
+
+    from apps.notifications.services.notification_service import NotificationService
+
+    key = f"video-kyc-completed-email:{row.id}"
+    if not cache.add(key, True, timeout=60 * 60 * 24 * 120):
+        return
+    try:
+        NotificationService.send_video_kyc_completed_email(row=row)
+    except Exception:
+        cache.delete(key)
+        logger.exception(
+            "Failed to email Video KYC completion for lead %s",
+            getattr(getattr(row, "lead", None), "lead_id", row.pk),
+        )
 
 
 def _unwrap_kyc_response(response: dict) -> dict:
