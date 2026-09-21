@@ -19,7 +19,7 @@ import {
   videoKycDispatchMessage,
   type ApiLeadVideoKycRequest,
 } from '@/lib/leadDetailsApi';
-import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
+import { videoKycRequestStatusDisplay } from '@/lib/badgeStyles';
 import { formatPersonName } from '@/lib/utils';
 import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import {
@@ -158,7 +158,7 @@ export function LeadVideoKycDetailsSection({
             <EmptyTableRow colSpan={5} message="No video KYC requests sent yet." />
           ) : (
             entries.map((entry) => {
-              const statusDisplay = esignRequestStatusDisplay(entry.status);
+              const statusDisplay = videoKycRequestStatusDisplay(entry.status);
               return (
               <TableRow key={entry.id} className="border-b border-slate-50 dark:border-slate-850">
                 <TableCell>

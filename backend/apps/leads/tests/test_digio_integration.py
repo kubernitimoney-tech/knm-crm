@@ -256,6 +256,12 @@ class TestDigioEsignAndVideoKyc:
         assert len(mail.outbox) == 1
         assert f"/verify-kyc/{row.id}" in mail.outbox[0].body
         assert mail.outbox[0].to == [lead.customer.email]
+        assert mail.outbox[0].subject == (
+            "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+            "& Leasing Company Limited."
+        )
+        assert "Start KYC Process" in mail.outbox[0].body
+        assert "Know Your Customer (KYC)" in mail.outbox[0].body
         from apps.notifications.services.sms_service import SmsService
 
         assert SmsService.outbox
@@ -293,6 +299,70 @@ class TestDigioEsignAndVideoKyc:
         assert mock_client.create_kyc_request.call_args.kwargs["customer_identifier"] == (
             lead.customer.email
         )
+
+    def test_public_video_kyc_sync_marks_completed_from_digio(self):
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.SENT,
+            provider_request_id="KIDSYNC1234567890AB",
+            session_details={"customer_identifier": lead.customer.mobile_number},
+        )
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDSYNC1234567890AB",
+            "status": "approved",
+        }
+
+        client = APIClient()
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(
+                reverse("public-video-kyc", kwargs={"pk": row.id}),
+                {"sync": "1", "force": "1"},
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"]["completed"] is True
+        assert response.data["data"]["status"] == VideoKycRequestStatus.COMPLETED
+        row.refresh_from_db()
+        assert row.status == VideoKycRequestStatus.COMPLETED
+        from django.core import mail
+
+        assert any(item.subject == "Video KYC Successfully Completed" for item in mail.outbox)
+
+    def test_video_kyc_list_refreshes_sent_rows_from_digio(self):
+        admin = UserFactory(email="admin-digio-vkyc-list@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.SENT,
+            provider_request_id="KIDLISTREFRESH1234",
+            session_details={"email_sent": True},
+        )
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDLISTREFRESH1234",
+            "status": "approval_pending",
+        }
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(reverse("lead-video-kyc-requests", kwargs={"pk": lead.id}))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["data"][0]["status"] == VideoKycRequestStatus.COMPLETED
+        row.refresh_from_db()
+        assert row.status == VideoKycRequestStatus.COMPLETED
 
     def test_public_esign_review_endpoint(self):
         lead = _create_lead()
@@ -654,6 +724,15 @@ class TestDigioEsignAndVideoKyc:
         row.refresh_from_db()
         assert row.status == VideoKycRequestStatus.COMPLETED
         assert row.session_details.get("ids_found", {}).get("video") is True
+        from django.core import mail
+
+        completed_mail = [
+            item for item in mail.outbox if item.subject == "Video KYC Successfully Completed"
+        ]
+        assert completed_mail
+        assert completed_mail[0].to == [lead.customer.email]
+        assert "Video KYC Successfully Completed" in completed_mail[0].body
+        assert "Verification Status: Approved" in completed_mail[0].body
 
     def test_webhook_maps_digistudio_aadhaar_pan_and_selfie(self):
         import base64

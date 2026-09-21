@@ -31,6 +31,7 @@ from apps.leads.models import (
     EsignRequestStatus,
     LeadEsignRequest,
     LeadVideoKycRequest,
+    VideoKycRequestStatus,
 )
 from apps.leads.selectors.lead_selectors import get_lead_detail
 from apps.leads.serializers import (
@@ -707,6 +708,17 @@ class LeadDetailActionsMixin:
         lead = self.get_object()
 
         if request.method == "GET":
+            from apps.integrations.digio.webhooks import refresh_video_kyc_from_provider
+
+            rows = list(
+                LeadVideoKycRequest.objects.filter(lead=lead).select_related("requested_by")
+            )
+            for row in rows:
+                if row.status == VideoKycRequestStatus.SENT and row.provider_request_id:
+                    try:
+                        refresh_video_kyc_from_provider(row)
+                    except Exception:
+                        logger.exception("Could not refresh Video KYC %s from Digio", row.pk)
             rows = LeadVideoKycRequest.objects.filter(lead=lead).select_related("requested_by")
 
             return success_response(

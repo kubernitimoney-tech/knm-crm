@@ -97,6 +97,12 @@ function prepareDigioIframe() {
   });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function primeCameraMicAndLocation() {
   if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
@@ -118,18 +124,24 @@ export function PublicVideoKycPage() {
   const [session, setSession] = useState<PublicVideoKycSession | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [awaitingComplete, setAwaitingComplete] = useState(false);
   const launchGeneration = useRef(0);
 
-  const load = useCallback(async () => {
-    if (!requestId) return;
-    const { data } = await axios.get<{
-      success: boolean;
-      data: PublicVideoKycSession;
-      message?: string;
-    }>(`${API_BASE_URL}/leads/video-kyc/${requestId}/`);
-    if (!data.success) throw new Error(data.message || 'Could not load the KYC request.');
-    setSession(data.data);
-  }, [requestId]);
+  const load = useCallback(
+    async (sync = false, force = false) => {
+      if (!requestId) return null;
+      const query = sync ? `?sync=1${force ? '&force=1' : ''}` : '';
+      const { data } = await axios.get<{
+        success: boolean;
+        data: PublicVideoKycSession;
+        message?: string;
+      }>(`${API_BASE_URL}/leads/video-kyc/${requestId}/${query}`);
+      if (!data.success) throw new Error(data.message || 'Could not load the KYC request.');
+      setSession(data.data);
+      return data.data;
+    },
+    [requestId],
+  );
 
   useEffect(() => {
     load()
@@ -140,7 +152,30 @@ export function PublicVideoKycPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!session || session.completed) return;
+    if (!awaitingComplete || session?.completed) return;
+    let cancelled = false;
+    void (async () => {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        if (cancelled) return;
+        const row = await load(true, true).catch(() => null);
+        if (row?.completed) {
+          setAwaitingComplete(false);
+          return;
+        }
+        await sleep(2000);
+      }
+      if (!cancelled) {
+        setAwaitingComplete(false);
+        setError('Verification is still processing. Refresh this page in a moment.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [awaitingComplete, session?.completed, load]);
+
+  useEffect(() => {
+    if (!session || session.completed || awaitingComplete) return;
     if (!session.document_id || !session.identifier || !session.sdk_url) {
       setError('This KYC request is missing Digio details. Ask the team to send a new link.');
       return;
@@ -166,7 +201,7 @@ export function PublicVideoKycPage() {
               setError(response.message || 'Verification was not completed.');
               return;
             }
-            load().catch(() => undefined);
+            setAwaitingComplete(true);
           },
         });
         digio.init();
@@ -183,7 +218,7 @@ export function PublicVideoKycPage() {
     return () => {
       window.clearInterval(iframeWatcher);
     };
-  }, [session, load]);
+  }, [session, load, awaitingComplete]);
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
@@ -199,9 +234,13 @@ export function PublicVideoKycPage() {
           ) : session?.completed ? (
             <div className="text-center space-y-2">
               <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-500" />
-              <h1 className="text-xl font-bold text-slate-900">Verification Completed</h1>
-              <p className="text-sm text-slate-500">Your KYC details were submitted successfully.</p>
+              <h1 className="text-xl font-bold text-slate-900">Video KYC Successfully Completed</h1>
+              <p className="text-sm text-slate-500">
+                A confirmation email has been sent to your registered address.
+              </p>
             </div>
+          ) : awaitingComplete ? (
+            <p className="text-sm text-slate-500 text-center">Saving your verification…</p>
           ) : (
             <p className="text-sm text-slate-500 text-center">Opening Digio Authenticate…</p>
           )}
