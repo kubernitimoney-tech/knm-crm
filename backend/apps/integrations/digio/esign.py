@@ -22,6 +22,7 @@ from apps.integrations.digio.pdf import (
     LAST_THREE_SIGN_COORDINATES,
     apply_completed_signature_marks,
     build_agreement_pdf,
+    signer_from_lead,
 )
 from apps.leads.models import EsignRequestStatus, IntegrationProvider, LeadEsignRequest
 
@@ -315,9 +316,11 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
                 )
         if not signed_bytes:
             raise DigioAPIError("Digio did not return the signed document.")
+        name, location = signer_from_lead(row.lead)
         signed_bytes = apply_completed_signature_marks(
             signed_bytes,
-            signer_name=getattr(row.lead.customer, "full_name", "") or "",
+            signer_name=name,
+            signer_location=location,
             signed_at=timezone.now(),
         )
     else:

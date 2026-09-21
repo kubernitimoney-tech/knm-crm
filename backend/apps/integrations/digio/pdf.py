@@ -44,9 +44,9 @@ _TICK_OUTLINE = (
     ((0.2931, 0.2102), (0.1706, 0.3871), (0.0000, 0.5182)),
 )
 
-# Footer geometry matches the template (image 1). Only the wordmark is swapped
-# for the KNM logo and the purple rules are tinted to CRM navy.
-_FOOTER_WIPE_TOP = 756.0
+# Footer geometry matches the template. The wordmark is bold "Kuberniti Money"
+# text; knm-logo.png is used once, inside the centre footer cell.
+_FOOTER_WIPE_TOP = 786.0
 _FOOTER_LEFT = 30.25
 _FOOTER_RIGHT = 564.95
 _FOOTER_DIVIDER_LEFT = 233.88
@@ -54,8 +54,7 @@ _FOOTER_DIVIDER_RIGHT = 361.96
 _FOOTER_RULE_TOP = 810.59
 _FOOTER_RULE_BOTTOM = 843.89
 _FOOTER_RULE_THICKNESS = 1.28
-_FOOTER_LOGO_WIDTH = 78.0
-_FOOTER_SEAL_SIZE = 24.0
+_WORDMARK = "Kuberniti Money"
 _LEGAL_ENTITY = "Har Shreejee Finance and Leasing Co. Ltd."
 _REGISTER_L1 = "Register Office - Plot No 9, Office No 202, 2nd Floor, Chourdhary Complex,"
 _REGISTER_L2 = "Madhuban Road, V.S. Block, Delhi - 110092"
@@ -94,7 +93,6 @@ LAST_THREE_SIGN_COORDINATES = {
 }
 
 _LOGO: tuple[bytes, float] | None = None
-_SEAL: bytes | None = None
 _LOGO_READY = False
 _WHITE_PNG: bytes | None = None
 _BRANDED_TEMPLATE: bytes | None = None
@@ -166,8 +164,14 @@ def _first_value(mapping: dict, *keys: str):
     return None
 
 
+def _latest_address(customer):
+    if customer is None:
+        return None
+    return CustomerAddress.objects.filter(customer=customer).order_by("-created_at").first()
+
+
 def _customer_address(customer) -> str:
-    address = CustomerAddress.objects.filter(customer=customer).order_by("-created_at").first()
+    address = _latest_address(customer)
     if not address:
         return "—"
     return ", ".join(
@@ -181,6 +185,20 @@ def _customer_address(customer) -> str:
         )
         if part
     )
+
+
+def _customer_location(customer) -> str:
+    address = _latest_address(customer)
+    if not address:
+        return "New Delhi"
+    return (address.city or address.state or "New Delhi").strip() or "New Delhi"
+
+
+def signer_from_lead(lead) -> tuple[str, str]:
+    """Return (signer name, location) for the completed e-sign appearance."""
+    customer = getattr(lead, "customer", None)
+    name = (getattr(customer, "full_name", "") or "").strip()
+    return name, _customer_location(customer)
 
 
 def _agreement_values(lead) -> AgreementValues:
@@ -305,32 +323,21 @@ def _png_bytes(image: Image.Image) -> bytes:
 
 
 def _load_brand_images() -> None:
-    """Cache the landscape wordmark and the circular seal cropped from it."""
-    global _LOGO, _SEAL, _LOGO_READY
+    """Cache knm-logo.png for the centre footer cell."""
+    global _LOGO, _LOGO_READY
     if _LOGO_READY:
         return
     _LOGO_READY = True
     path = _logo_path()
     if path is None:
         return
-    image = Image.open(path).convert("RGBA")
-    # Left side of knm-logo.png is the circular deity / K mark used as the seal.
-    icon_right = max(8, int(image.width * 0.38))
-    seal = _crop_opaque(image.crop((0, 0, icon_right, image.height)))
-    logo = _crop_opaque(image)
-    _SEAL = _png_bytes(seal)
-    _LOGO = (_png_bytes(logo), logo.width / logo.height)
+    image = _crop_opaque(Image.open(path).convert("RGBA"))
+    _LOGO = (_png_bytes(image), image.width / image.height)
 
 
 def _logo_image() -> tuple[bytes, float] | None:
-    """Return the footer logo as PNG bytes plus its width/height ratio."""
     _load_brand_images()
     return _LOGO
-
-
-def _seal_image() -> bytes | None:
-    _load_brand_images()
-    return _SEAL
 
 
 def _from_top(top: float) -> float:
@@ -382,28 +389,23 @@ def _draw_centered_text(
 
 
 def _draw_footer_brand(pdf: canvas.Canvas) -> None:
-    """Redraw the footer to match the template: logo, legal entity, navy rule, offices."""
+    """Redraw the footer: bold wordmark, one knm-logo.png in the centre cell, CRM navy rules."""
     _cover_image(pdf, 0, _FOOTER_WIPE_TOP, PAGE_WIDTH, PAGE_HEIGHT - _FOOTER_WIPE_TOP)
+    # Sample Aadhaar stamps sit at y≈765 on the right; body copy on page 2 ends at y≈762.
+    _cover_image(pdf, 430, 764, 165, 24)
 
-    image = _logo_image()
-    legal_top = 800.0
-    if image:
-        logo, ratio = image
-        height = _FOOTER_LOGO_WIDTH / ratio
-        pdf.drawImage(
-            ImageReader(BytesIO(logo)),
-            (PAGE_WIDTH - _FOOTER_LOGO_WIDTH) / 2,
-            _from_top(legal_top - 1.5),
-            width=_FOOTER_LOGO_WIDTH,
-            height=height,
-            preserveAspectRatio=True,
-            mask="auto",
-            anchor="sw",
-        )
+    _draw_centered_text(
+        pdf,
+        _WORDMARK,
+        top=789.2,
+        font="Times-Bold",
+        size=9.2,
+        color=BRAND_PRIMARY,
+    )
     _draw_centered_text(
         pdf,
         _LEGAL_ENTITY,
-        top=legal_top,
+        top=800.0,
         font="Times-Roman",
         size=6.4,
         color=BRAND_PRIMARY,
@@ -420,16 +422,25 @@ def _draw_footer_brand(pdf: canvas.Canvas) -> None:
     for x in (left, _FOOTER_DIVIDER_LEFT, _FOOTER_DIVIDER_RIGHT, right):
         pdf.rect(x, bottom_y, 0.45, band_height + _FOOTER_RULE_THICKNESS, fill=1, stroke=0)
 
-    seal = _seal_image()
-    if seal:
-        seal_x = (_FOOTER_DIVIDER_LEFT + _FOOTER_DIVIDER_RIGHT - _FOOTER_SEAL_SIZE) / 2
-        seal_top = _FOOTER_RULE_TOP + (band_height - _FOOTER_SEAL_SIZE) / 2
+    image = _logo_image()
+    if image:
+        logo, ratio = image
+        pad = 4.0
+        max_w = _FOOTER_DIVIDER_RIGHT - _FOOTER_DIVIDER_LEFT - 2 * pad
+        max_h = band_height - 2 * pad
+        width = max_w
+        height = width / ratio
+        if height > max_h:
+            height = max_h
+            width = height * ratio
+        logo_x = (_FOOTER_DIVIDER_LEFT + _FOOTER_DIVIDER_RIGHT - width) / 2
+        logo_top = _FOOTER_RULE_TOP + (band_height - height) / 2
         pdf.drawImage(
-            ImageReader(BytesIO(seal)),
-            seal_x,
-            _from_top(seal_top + _FOOTER_SEAL_SIZE),
-            width=_FOOTER_SEAL_SIZE,
-            height=_FOOTER_SEAL_SIZE,
+            ImageReader(BytesIO(logo)),
+            logo_x,
+            _from_top(logo_top + height),
+            width=width,
+            height=height,
             preserveAspectRatio=True,
             mask="auto",
             anchor="sw",
@@ -444,7 +455,7 @@ def _draw_footer_brand(pdf: canvas.Canvas) -> None:
 
 def _wipe_sample_signature(pdf: canvas.Canvas, index: int) -> None:
     """Blank leftover Digio stamps. The signed mark is applied only after eSign completes."""
-    _cover_image(pdf, 420, 748, 175, 52)
+    _cover_image(pdf, 430, 764, 165, 24)
     if index == 7:
         # Keep "Borrower Signature & Date"; hide the sample signed-by block under it.
         _cover_image(pdf, 380, 360, 200, 60)
@@ -485,16 +496,19 @@ def _draw_signed_appearance(
     width: float,
     height: float,
     signer_name: str,
+    signer_location: str,
     signed_at: str,
 ) -> None:
-    """Times-Italic Digio-style block with a large green tick over the text."""
-    _cover_image(pdf, x, top, width, height)
+    """Times-Italic block with a green tick. This replaces Digio's visible stamp."""
+    _cover_image(pdf, x - 4, top - 2, width + 8, height + 6)
+    name = signer_name or "Customer"
+    location = signer_location or "New Delhi"
     lines = (
         "Digitally Signed by:",
-        f"Name:{signer_name}" if signer_name else "Name:",
-        "Location:New Delhi",
-        "Reason:Loan Agreement",
-        f"Date:{signed_at}",
+        f"Name: {name}",
+        f"Location: {location}",
+        "Reason: Loan Agreement",
+        f"Date: {signed_at}",
     )
     size = 8.0 if height >= 72 else 7.2
     leading = 10.0 if height >= 72 else 9.0
@@ -505,11 +519,11 @@ def _draw_signed_appearance(
         pdf.drawString(x + 6, text_y, line)
         text_y -= leading
 
-    tick_w = min(width * 0.70, 62.0)
+    tick_w = min(width * 0.62, 56.0)
     tick_h = tick_w / _TICK_RATIO
     _draw_green_tick(
         pdf,
-        x + width * 0.06,
+        x + width * 0.08,
         _from_top(top + height) + (height - tick_h) / 2,
         tick_w,
     )
@@ -519,9 +533,10 @@ def apply_completed_signature_marks(
     pdf_bytes: bytes,
     *,
     signer_name: str = "",
+    signer_location: str = "",
     signed_at: datetime | None = None,
 ) -> bytes:
-    """Add the Times-Italic Aadhaar block and green tick after Digio has signed."""
+    """Replace Digio's visible stamp with the five-line Times-Italic block and tick."""
     if not pdf_bytes or not pdf_bytes.lstrip().startswith(b"%PDF"):
         return pdf_bytes
     try:
@@ -543,25 +558,16 @@ def apply_completed_signature_marks(
             page_width = float(page.mediabox.width)
             page_height = float(page.mediabox.height)
             pdf = canvas.Canvas(stream, pagesize=(page_width, page_height))
-            if signer_name:
-                _draw_signed_appearance(
-                    pdf,
-                    x=x,
-                    top=top,
-                    width=width,
-                    height=height,
-                    signer_name=signer_name,
-                    signed_at=when,
-                )
-            else:
-                tick_w = min(width * 0.70, 62.0)
-                tick_h = tick_w / _TICK_RATIO
-                _draw_green_tick(
-                    pdf,
-                    x + width * 0.06,
-                    page_height - top - height / 2 - tick_h / 2,
-                    tick_w,
-                )
+            _draw_signed_appearance(
+                pdf,
+                x=x,
+                top=top,
+                width=width,
+                height=height,
+                signer_name=signer_name,
+                signer_location=signer_location,
+                signed_at=when,
+            )
             pdf.showPage()
             pdf.save()
             overlays[index] = stream.getvalue()
@@ -571,6 +577,7 @@ def apply_completed_signature_marks(
             if overlay:
                 page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
             writer.add_page(page)
+        _strip_form(writer)
         if reader.metadata:
             writer.add_metadata(
                 {str(key): str(value) for key, value in dict(reader.metadata).items()}
