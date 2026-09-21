@@ -185,7 +185,11 @@ def _handle_esign(document_id: str, *, event: str) -> bool:
             if attempt < 2:
                 time.sleep(1)
     if pdf_bytes:
-        pdf_bytes = apply_completed_signature_marks(pdf_bytes)
+        pdf_bytes = apply_completed_signature_marks(
+            pdf_bytes,
+            signer_name=getattr(getattr(row.lead, "customer", None), "full_name", "") or "",
+            signed_at=timezone.now(),
+        )
         row.signed_file.save(f"{document_id}.pdf", ContentFile(pdf_bytes), save=False)
     row.status = EsignRequestStatus.SIGNED
     if not row.signed_at:

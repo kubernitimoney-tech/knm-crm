@@ -25,22 +25,76 @@ TEMPLATE_PATH = ASSET_DIR / "loan-agreement-static.pdf"
 PAGE_WIDTH = 595.0
 PAGE_HEIGHT = 842.0
 
-# Digio stamps the Aadhaar block on these pages only after the customer completes eSign.
-# Boxes are wide enough for Digio's green tick plus the signed-by text.
-LAST_THREE_SIGN_COORDINATES = {
-    "8": [{"llx": 330, "lly": 400, "urx": 575, "ury": 545}],
-    "9": [{"llx": 330, "lly": 48, "urx": 580, "ury": 170}],
-    "10": [{"llx": 330, "lly": 48, "urx": 580, "ury": 170}],
-}
+# CRM palette (frontend/src/index.css).
+BRAND_PRIMARY = (0x2A / 255, 0x2D / 255, 0x4F / 255)  # primary-deep
+BRAND_HAIRLINE = (0xB0 / 255, 0xB0 / 255, 0xC1 / 255)
+INK = (0.12, 0.13, 0.18)
+SIGNATURE_GREEN = (0x01 / 255, 0xA6 / 255, 0x01 / 255)
 
-# Extra green tick drawn on the signed PDF (last three pages, left of the Digio text).
-_COMPLETED_TICKS = (
-    (7, 400, 442, 36),
-    (8, 418, 54, 36),
-    (9, 418, 54, 36),
+# assets/tick-mark-icon.svg traced into a unit box, y flipped for PDF space. A pair is a
+# straight segment, a triple of pairs is a cubic curve's two controls plus its end point.
+_TICK_RATIO = 122.88 / 109.76
+_TICK_OUTLINE = (
+    (0.0000, 0.5182),
+    (0.1846, 0.5210),
+    ((0.2559, 0.4749), (0.3197, 0.4154), (0.3746, 0.3400)),
+    ((0.5167, 0.6038), (0.6799, 0.8199), (0.8594, 1.0000)),
+    (1.0000, 1.0000),
+    ((0.7491, 0.6880), (0.5444, 0.3539), (0.3806, 0.0000)),
+    ((0.2931, 0.2102), (0.1706, 0.3871), (0.0000, 0.5182)),
 )
 
-_LOGO_PNG: bytes | None = None
+# Footer geometry matches the template (image 1). Only the wordmark is swapped
+# for the KNM logo and the purple rules are tinted to CRM navy.
+_FOOTER_WIPE_TOP = 756.0
+_FOOTER_LEFT = 30.25
+_FOOTER_RIGHT = 564.95
+_FOOTER_DIVIDER_LEFT = 233.88
+_FOOTER_DIVIDER_RIGHT = 361.96
+_FOOTER_RULE_TOP = 810.59
+_FOOTER_RULE_BOTTOM = 843.89
+_FOOTER_RULE_THICKNESS = 1.28
+_FOOTER_LOGO_WIDTH = 78.0
+_FOOTER_SEAL_SIZE = 24.0
+_LEGAL_ENTITY = "Har Shreejee Finance and Leasing Co. Ltd."
+_REGISTER_L1 = "Register Office - Plot No 9, Office No 202, 2nd Floor, Chourdhary Complex,"
+_REGISTER_L2 = "Madhuban Road, V.S. Block, Delhi - 110092"
+_CORPORATE = "Corporate Office - WZ-3 meenakshi garden, tilak nagar 110018"
+
+# Reserved Digio stamp areas, measured from the top of the page. Kept above the
+# footer band and off the Schedule 1 table. The green tick is overlaid on the
+# stamp after eSign — not drawn in a separate column.
+_SIGNATURE_CARDS = {
+    7: (385.0, 318.0, 175.0, 82.0),  # under "Borrower Signature & Date"
+    8: (412.0, 718.0, 168.0, 72.0),  # gap between Schedule 1 and the footer
+    9: (412.0, 718.0, 168.0, 72.0),
+}
+
+
+def _stamp_area(page: int) -> tuple[float, float, float, float]:
+    """Area Digio fills, as (x, top, width, height)."""
+    return _SIGNATURE_CARDS[page]
+
+
+def _sign_box(page: int) -> dict:
+    x, top, width, height = _stamp_area(page)
+    return {
+        "llx": round(x),
+        "lly": round(PAGE_HEIGHT - top - height),
+        "urx": round(x + width),
+        "ury": round(PAGE_HEIGHT - top),
+    }
+
+
+# Digio stamps the Aadhaar block on these pages only after the customer completes eSign.
+LAST_THREE_SIGN_COORDINATES = {
+    "8": [_sign_box(7)],
+    "9": [_sign_box(8)],
+    "10": [_sign_box(9)],
+}
+
+_LOGO: tuple[bytes, float] | None = None
+_SEAL: bytes | None = None
 _LOGO_READY = False
 _WHITE_PNG: bytes | None = None
 _BRANDED_TEMPLATE: bytes | None = None
@@ -212,41 +266,71 @@ def _agreement_values(lead) -> AgreementValues:
     )
 
 
-def _fit_text(text: str, width: float, *, font: str = "Helvetica", size: float = 9) -> float:
+def _fit_text(text: str, width: float, *, font: str = "Times-Roman", size: float = 9) -> float:
     while size > 6 and stringWidth(text, font, size) > width:
         size -= 0.5
     return size
 
 
 def _logo_path() -> Path | None:
+    # The print asset carries the dark wordmark; the email logo is white-on-transparent
+    # and would be invisible on paper.
     candidates = (
+        ASSET_DIR / "knm-logo.png",
         Path(getattr(settings, "EMAIL_LOGO_PATH", "") or ""),
         Path(getattr(settings, "BASE_DIR", "")) / "static" / "emails" / "logo.png",
-        ASSET_DIR / "knm-logo.png",
     )
     return next((path for path in candidates if path.is_file()), None)
 
 
-def _logo_png_bytes() -> bytes | None:
-    global _LOGO_PNG, _LOGO_READY
+def _crop_opaque(image: Image.Image, *, pad: int = 2) -> Image.Image:
+    bbox = image.getchannel("A").getbbox()
+    if not bbox:
+        return image
+    left, top, right, bottom = bbox
+    return image.crop(
+        (
+            max(0, left - pad),
+            max(0, top - pad),
+            min(image.width, right + pad),
+            min(image.height, bottom + pad),
+        )
+    )
+
+
+def _png_bytes(image: Image.Image) -> bytes:
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _load_brand_images() -> None:
+    """Cache the landscape wordmark and the circular seal cropped from it."""
+    global _LOGO, _SEAL, _LOGO_READY
     if _LOGO_READY:
-        return _LOGO_PNG
+        return
     _LOGO_READY = True
     path = _logo_path()
     if path is None:
-        return None
+        return
     image = Image.open(path).convert("RGBA")
-    pixels = image.load()
-    width, height = image.size
-    for row in range(height):
-        for col in range(width):
-            red, green, blue, alpha = pixels[col, row]
-            if alpha and red < 40 and green < 40 and blue < 40:
-                pixels[col, row] = (red, green, blue, 0)
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    _LOGO_PNG = buffer.getvalue()
-    return _LOGO_PNG
+    # Left side of knm-logo.png is the circular deity / K mark used as the seal.
+    icon_right = max(8, int(image.width * 0.38))
+    seal = _crop_opaque(image.crop((0, 0, icon_right, image.height)))
+    logo = _crop_opaque(image)
+    _SEAL = _png_bytes(seal)
+    _LOGO = (_png_bytes(logo), logo.width / logo.height)
+
+
+def _logo_image() -> tuple[bytes, float] | None:
+    """Return the footer logo as PNG bytes plus its width/height ratio."""
+    _load_brand_images()
+    return _LOGO
+
+
+def _seal_image() -> bytes | None:
+    _load_brand_images()
+    return _SEAL
 
 
 def _from_top(top: float) -> float:
@@ -269,6 +353,8 @@ def _cover(pdf: canvas.Canvas, x: float, top: float, width: float, height: float
 
 
 def _cover_image(pdf: canvas.Canvas, x: float, top: float, width: float, height: float) -> None:
+    pdf.setFillColorRGB(1, 1, 1)
+    pdf.rect(x, _from_top(top + height), width, height, fill=1, stroke=0)
     pdf.drawImage(
         ImageReader(BytesIO(_white_png())),
         x,
@@ -281,50 +367,161 @@ def _cover_image(pdf: canvas.Canvas, x: float, top: float, width: float, height:
     )
 
 
-def _draw_brand_logo(pdf: canvas.Canvas) -> None:
-    """Replace the footer Har Shreejee wordmark and red seal with the KNM logo."""
-    _cover_image(pdf, 150, 755, 300, 55)
-    _cover_image(pdf, 246, 798, 104, 40)
-    logo = _logo_png_bytes()
-    if not logo:
-        return
-    pdf.drawImage(
-        ImageReader(BytesIO(logo)),
-        172,
-        34,
-        width=250,
-        height=50,
-        preserveAspectRatio=True,
-        mask="auto",
-        anchor="sw",
+def _draw_centered_text(
+    pdf: canvas.Canvas,
+    text: str,
+    *,
+    top: float,
+    font: str,
+    size: float,
+    color=INK,
+) -> None:
+    pdf.setFillColorRGB(*color)
+    pdf.setFont(font, size)
+    pdf.drawCentredString(PAGE_WIDTH / 2, _from_top(top + size), text)
+
+
+def _draw_footer_brand(pdf: canvas.Canvas) -> None:
+    """Redraw the footer to match the template: logo, legal entity, navy rule, offices."""
+    _cover_image(pdf, 0, _FOOTER_WIPE_TOP, PAGE_WIDTH, PAGE_HEIGHT - _FOOTER_WIPE_TOP)
+
+    image = _logo_image()
+    legal_top = 800.0
+    if image:
+        logo, ratio = image
+        height = _FOOTER_LOGO_WIDTH / ratio
+        pdf.drawImage(
+            ImageReader(BytesIO(logo)),
+            (PAGE_WIDTH - _FOOTER_LOGO_WIDTH) / 2,
+            _from_top(legal_top - 1.5),
+            width=_FOOTER_LOGO_WIDTH,
+            height=height,
+            preserveAspectRatio=True,
+            mask="auto",
+            anchor="sw",
+        )
+    _draw_centered_text(
+        pdf,
+        _LEGAL_ENTITY,
+        top=legal_top,
+        font="Times-Roman",
+        size=6.4,
+        color=BRAND_PRIMARY,
     )
+
+    left, right = _FOOTER_LEFT, _FOOTER_RIGHT
+    rule_y = _from_top(_FOOTER_RULE_TOP + _FOOTER_RULE_THICKNESS)
+    bottom_y = _from_top(_FOOTER_RULE_BOTTOM + _FOOTER_RULE_THICKNESS)
+    band_height = _FOOTER_RULE_BOTTOM - _FOOTER_RULE_TOP
+    pdf.setFillColorRGB(*BRAND_PRIMARY)
+    pdf.rect(left, rule_y, right - left, _FOOTER_RULE_THICKNESS, fill=1, stroke=0)
+    pdf.rect(left, bottom_y, right - left, _FOOTER_RULE_THICKNESS, fill=1, stroke=0)
+    pdf.setFillColorRGB(*BRAND_HAIRLINE)
+    for x in (left, _FOOTER_DIVIDER_LEFT, _FOOTER_DIVIDER_RIGHT, right):
+        pdf.rect(x, bottom_y, 0.45, band_height + _FOOTER_RULE_THICKNESS, fill=1, stroke=0)
+
+    seal = _seal_image()
+    if seal:
+        seal_x = (_FOOTER_DIVIDER_LEFT + _FOOTER_DIVIDER_RIGHT - _FOOTER_SEAL_SIZE) / 2
+        seal_top = _FOOTER_RULE_TOP + (band_height - _FOOTER_SEAL_SIZE) / 2
+        pdf.drawImage(
+            ImageReader(BytesIO(seal)),
+            seal_x,
+            _from_top(seal_top + _FOOTER_SEAL_SIZE),
+            width=_FOOTER_SEAL_SIZE,
+            height=_FOOTER_SEAL_SIZE,
+            preserveAspectRatio=True,
+            mask="auto",
+            anchor="sw",
+        )
+
+    pdf.setFillColorRGB(*INK)
+    pdf.setFont("Times-Roman", 5.8)
+    pdf.drawString(37.0, _from_top(827.1), _REGISTER_L1)
+    pdf.drawString(78.0, _from_top(834.8), _REGISTER_L2)
+    pdf.drawString(_FOOTER_DIVIDER_RIGHT + 8, _from_top(831.0), _CORPORATE)
 
 
 def _wipe_sample_signature(pdf: canvas.Canvas, index: int) -> None:
-    """Blank leftover Digio stamps. The ticked sign is applied only after eSign completes."""
-    _cover_image(pdf, 440, 752, 155, 42)
+    """Blank leftover Digio stamps. The signed mark is applied only after eSign completes."""
+    _cover_image(pdf, 420, 748, 175, 52)
     if index == 7:
         # Keep "Borrower Signature & Date"; hide the sample signed-by block under it.
-        _cover_image(pdf, 385, 365, 185, 50)
+        _cover_image(pdf, 380, 360, 200, 60)
 
 
 def _draw_green_tick(pdf: canvas.Canvas, x: float, y: float, size: float) -> None:
-    pdf.setFillColorRGB(0.13, 0.73, 0.38)
-    pdf.circle(x + size / 2, y + size / 2, size / 2, fill=1, stroke=0)
-    pdf.setStrokeColorRGB(1, 1, 1)
-    pdf.setFillColorRGB(1, 1, 1)
-    pdf.setLineWidth(max(2.2, size * 0.08))
-    pdf.setLineCap(1)
-    pdf.setLineJoin(1)
+    """Fill the tick-mark outline in a box `size` wide, anchored bottom-left."""
+    height = size / _TICK_RATIO
+
+    def at(point: tuple[float, float]) -> tuple[float, float]:
+        return x + point[0] * size, y + point[1] * height
+
+    pdf.setFillColorRGB(*SIGNATURE_GREEN)
     path = pdf.beginPath()
-    path.moveTo(x + size * 0.26, y + size * 0.50)
-    path.lineTo(x + size * 0.44, y + size * 0.32)
-    path.lineTo(x + size * 0.76, y + size * 0.70)
-    pdf.drawPath(path, stroke=1, fill=0)
+    path.moveTo(*at(_TICK_OUTLINE[0]))
+    for segment in _TICK_OUTLINE[1:]:
+        if isinstance(segment[0], tuple):
+            (c1x, c1y), (c2x, c2y), (end_x, end_y) = (at(point) for point in segment)
+            path.curveTo(c1x, c1y, c2x, c2y, end_x, end_y)
+        else:
+            path.lineTo(*at(segment))
+    path.close()
+    pdf.drawPath(path, stroke=0, fill=1)
 
 
-def apply_completed_signature_marks(pdf_bytes: bytes) -> bytes:
-    """Add the green Aadhaar tick after Digio has signed. Never call this on the unsigned preview."""
+def _signed_at_label(value: datetime | None = None) -> str:
+    stamp = value or timezone.now()
+    if timezone.is_aware(stamp):
+        stamp = timezone.localtime(stamp)
+    return stamp.strftime("%a %b %d %H:%M:%S IST")
+
+
+def _draw_signed_appearance(
+    pdf: canvas.Canvas,
+    *,
+    x: float,
+    top: float,
+    width: float,
+    height: float,
+    signer_name: str,
+    signed_at: str,
+) -> None:
+    """Times-Italic Digio-style block with a large green tick over the text."""
+    _cover_image(pdf, x, top, width, height)
+    lines = (
+        "Digitally Signed by:",
+        f"Name:{signer_name}" if signer_name else "Name:",
+        "Location:New Delhi",
+        "Reason:Loan Agreement",
+        f"Date:{signed_at}",
+    )
+    size = 8.0 if height >= 72 else 7.2
+    leading = 10.0 if height >= 72 else 9.0
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont("Times-Italic", size)
+    text_y = _from_top(top + 11)
+    for line in lines:
+        pdf.drawString(x + 6, text_y, line)
+        text_y -= leading
+
+    tick_w = min(width * 0.70, 62.0)
+    tick_h = tick_w / _TICK_RATIO
+    _draw_green_tick(
+        pdf,
+        x + width * 0.06,
+        _from_top(top + height) + (height - tick_h) / 2,
+        tick_w,
+    )
+
+
+def apply_completed_signature_marks(
+    pdf_bytes: bytes,
+    *,
+    signer_name: str = "",
+    signed_at: datetime | None = None,
+) -> bytes:
+    """Add the Times-Italic Aadhaar block and green tick after Digio has signed."""
     if not pdf_bytes or not pdf_bytes.lstrip().startswith(b"%PDF"):
         return pdf_bytes
     try:
@@ -336,16 +533,35 @@ def apply_completed_signature_marks(pdf_bytes: bytes) -> bytes:
 
     writer = PdfWriter()
     overlays: dict[int, bytes] = {}
+    when = _signed_at_label(signed_at)
     try:
-        for index, x, y, size in _COMPLETED_TICKS:
+        for index, (x, top, width, height) in _SIGNATURE_CARDS.items():
             if index >= len(reader.pages):
                 continue
             stream = BytesIO()
             page = reader.pages[index]
-            width = float(page.mediabox.width)
-            height = float(page.mediabox.height)
-            pdf = canvas.Canvas(stream, pagesize=(width, height))
-            _draw_green_tick(pdf, x, y, size)
+            page_width = float(page.mediabox.width)
+            page_height = float(page.mediabox.height)
+            pdf = canvas.Canvas(stream, pagesize=(page_width, page_height))
+            if signer_name:
+                _draw_signed_appearance(
+                    pdf,
+                    x=x,
+                    top=top,
+                    width=width,
+                    height=height,
+                    signer_name=signer_name,
+                    signed_at=when,
+                )
+            else:
+                tick_w = min(width * 0.70, 62.0)
+                tick_h = tick_w / _TICK_RATIO
+                _draw_green_tick(
+                    pdf,
+                    x + width * 0.06,
+                    page_height - top - height / 2 - tick_h / 2,
+                    tick_w,
+                )
             pdf.showPage()
             pdf.save()
             overlays[index] = stream.getvalue()
@@ -374,11 +590,11 @@ def _replace(
     width: float,
     text: str,
     height: float = 14,
-    font: str = "Helvetica",
-    size: float = 8.5,
+    font: str = "Times-Roman",
+    size: float = 9,
 ) -> None:
     _cover(pdf, x, top, width, height)
-    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFillColorRGB(*INK)
     pdf.setFont(font, _fit_text(str(text), width - 4, font=font, size=size))
     pdf.drawString(x + 2, _from_top(top + height) + 3, str(text))
 
@@ -391,11 +607,11 @@ def _replace_wrapped(
     width: float,
     height: float,
     text: str,
-    font: str = "Helvetica",
+    font: str = "Times-Roman",
     size: float = 8,
 ) -> None:
     _cover(pdf, x, top, width, height)
-    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFillColorRGB(*INK)
     words = str(text or "—").split()
     lines: list[str] = []
     current = ""
@@ -419,7 +635,7 @@ def _branding_overlay_bytes(index: int) -> bytes:
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=(PAGE_WIDTH, PAGE_HEIGHT))
     _wipe_sample_signature(pdf, index)
-    _draw_brand_logo(pdf)
+    _draw_footer_brand(pdf)
     pdf.showPage()
     pdf.save()
     return stream.getvalue()
@@ -441,6 +657,7 @@ def _branded_template_bytes() -> bytes:
             overlay = _branding_overlay_bytes(index)
             page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
             writer.add_page(page)
+        _strip_form(writer)
         output = BytesIO()
         writer.write(output)
         _BRANDED_TEMPLATE = output.getvalue()
@@ -494,7 +711,15 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
         _replace(pdf, x=details_x, top=637, width=details_w, text=values.tenure_days, height=16)
         _replace(pdf, x=details_x, top=696, width=details_w, text=values.borrower_name, height=16)
     elif index == 9:
-        _replace(pdf, x=238, top=122, width=72, text=values.application_number, height=14, size=7.5)
+        _replace(
+            pdf,
+            x=238,
+            top=122,
+            width=72,
+            text=values.application_number,
+            height=14,
+            size=8,
+        )
         _replace(
             pdf,
             x=238,
@@ -502,7 +727,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             width=72,
             text=values.principal.replace("Rs.", "₹"),
             height=14,
-            size=7.5,
+            size=8,
         )
         _replace(
             pdf,
@@ -511,7 +736,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             width=90,
             text=f"Loan tenure – {values.tenure_days.replace(' Days', ' days')}",
             height=16,
-            size=7.5,
+            size=8,
         )
         _replace(
             pdf,
@@ -520,7 +745,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             width=50,
             text=values.repayment_amount.replace("Rs.", "₹"),
             height=14,
-            size=7.5,
+            size=8,
         )
         _replace(
             pdf,
@@ -529,7 +754,7 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             width=130,
             text=f"{values.interest_rate} – Fixed",
             height=14,
-            size=7.5,
+            size=8,
         )
         _replace(
             pdf,
@@ -538,10 +763,10 @@ def _overlay_for_page(index: int, values: AgreementValues) -> bytes:
             width=50,
             text=values.processing_fee.replace("Rs. ", "₹ "),
             height=12,
-            size=7,
+            size=7.5,
         )
-        _replace(pdf, x=238, top=523, width=130, text=values.apr, height=14, size=7)
-        _replace(pdf, x=438, top=568, width=50, text=values.late_interest_rate, height=14, size=7)
+        _replace(pdf, x=238, top=523, width=130, text=values.apr, height=14, size=7.5)
+        _replace(pdf, x=438, top=568, width=50, text=values.late_interest_rate, height=14, size=7.5)
 
     pdf.showPage()
     pdf.save()
