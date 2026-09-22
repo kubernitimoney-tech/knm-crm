@@ -6,50 +6,50 @@
   <style>
     @page {
       size: a4 portrait;
-      margin: 36pt 40pt 76pt 40pt;
+      margin: 44pt 46pt 86pt 46pt;
       @frame header {
         -pdf-frame-content: headerBand;
-        left: 40pt;
-        width: 515pt;
-        top: 16pt;
-        height: 16pt;
+        left: 46pt;
+        width: 503pt;
+        top: 20pt;
+        height: 18pt;
       }
       @frame footer {
         -pdf-frame-content: footerBand;
-        left: 40pt;
-        width: 515pt;
-        bottom: 10pt;
-        height: 62pt;
+        left: 46pt;
+        width: 503pt;
+        bottom: 14pt;
+        height: 72pt;
       }
     }
-    body { font-family: Times-Roman; font-size: 10pt; color: #000000; line-height: 1.32; }
-    h1 { font-size: 12.5pt; text-align: center; color: #2A2D4F; margin: 0 0 6pt 0; }
-    h2 { font-size: 11pt; text-align: center; color: #2A2D4F; margin: 2pt 0 8pt 0; }
-    h3 { font-size: 10pt; color: #2A2D4F; margin: 7pt 0 3pt 0; }
-    p { margin: 0 0 4.5pt 0; text-align: justify; }
+    body { font-family: Times-Roman; font-size: 11pt; color: #000000; line-height: 1.36; }
+    h1 { font-size: 13.5pt; text-align: center; color: #2A2D4F; margin: 0 0 7pt 0; }
+    h2 { font-size: 12.5pt; text-align: center; color: #2A2D4F; margin: 2pt 0 7pt 0; }
+    h3 { font-size: 11.5pt; color: #2A2D4F; margin: 8pt 0 4pt 0; }
+    p { margin: 0 0 5.5pt 0; text-align: justify; }
     .center { text-align: center; }
-    .muted { color: #1f2130; font-size: 9pt; }
-    .indent { margin-left: 12pt; }
-    table.data { width: 100%; margin: 3pt 0 7pt 0; }
-    table.data th, table.data td { border: 0.5pt solid #2A2D4F; padding: 3pt 5pt; font-size: 9pt; vertical-align: top; }
+    .muted { color: #1f2130; font-size: 10pt; }
+    .indent { margin-left: 14pt; }
+    table.data { width: 100%; margin: 4pt 0 8pt 0; }
+    table.data th, table.data td { border: 0.5pt solid #2A2D4F; padding: 3.5pt 5pt; font-size: 10pt; vertical-align: top; }
     table.data th { background-color: #2A2D4F; color: #ffffff; font-family: Times-Bold; text-align: left; }
     table.data td.num { width: 26pt; text-align: center; }
     table.data td.label { width: 46%; }
-    table.kfs { width: 100%; margin: 3pt 0 6pt 0; }
-    table.kfs td { border: 0.5pt solid #2A2D4F; padding: 3pt 4pt; font-size: 8.8pt; vertical-align: top; }
-    table.kfs td.num { width: 18pt; text-align: center; }
+    table.kfs { width: 100%; margin: 4pt 0 8pt 0; }
+    table.kfs td { border: 0.5pt solid #2A2D4F; padding: 3.5pt 5pt; font-size: 9.6pt; vertical-align: top; }
+    table.kfs td.num { width: 20pt; text-align: center; }
     table.kfs td.head { background-color: #2A2D4F; color: #ffffff; font-family: Times-Bold; }
     .page-break { page-break-before: always; }
-    .sign-wrap { margin-top: 14pt; text-align: right; }
-    .sign-label { font-family: Times-Bold; font-size: 9pt; color: #2A2D4F; margin: 0 0 3pt 0; }
-    .sign-box { width: 175pt; height: 82pt; }
-    .sign-box-bottom { width: 168pt; height: 64pt; }
-    #headerBand { font-family: Times-Bold; font-size: 9pt; text-align: center; color: #2A2D4F; }
-    #footerBand { font-size: 6.6pt; color: #2A2D4F; }
-    .wordmark { font-family: Times-Bold; font-size: 9pt; text-align: center; color: #2A2D4F; }
-    .legal { text-align: center; font-size: 6.6pt; margin: 0 0 3pt 0; }
+    table.sign-block { width: 180pt; margin: 10pt 0 0 0; }
+    table.sign-block td { border: 0; padding: 0; text-align: right; vertical-align: top; }
+    td.sign-label { font-family: Times-Bold; font-size: 10.5pt; color: #000000; padding-bottom: 6pt; }
+    td.sign-slot { height: 82pt; }
+    #headerBand { font-family: Times-Bold; font-size: 10pt; text-align: center; color: #2A2D4F; }
+    #footerBand { font-size: 7.2pt; color: #2A2D4F; }
+    .wordmark { font-family: Times-Bold; font-size: 10pt; text-align: center; color: #2A2D4F; }
+    .legal { text-align: center; font-size: 7.2pt; margin: 0 0 3pt 0; }
     table.footer-offices { width: 100%; border-top: 1.15pt solid #2A2D4F; }
-    table.footer-offices td { border: 0; padding: 3pt 4pt 0 4pt; vertical-align: middle; }
+    table.footer-offices td { border: 0; padding: 3pt 5pt 0 5pt; vertical-align: middle; }
     table.footer-offices td.logo { width: 24%; text-align: center; }
     table.footer-offices img { height: 16pt; }
   </style>
@@ -87,7 +87,6 @@
   <p>iv. "Credit Bureau" shall mean any entity authorized by the Reserve Bank of India (RBI) to maintain credit information of individuals and entities.</p>
   <p>v. "Due Date" means the date on which the Borrower is obligated to repay instalments of the Loan, including but not limited to principal, interest, fees, and charges.</p>
 
-  <div class="page-break"></div>
   <p>vi. "Event of Default" means any occurrence specified in Clause B(7), including but not limited to failure of repayment of dues, breach of terms, insolvency, or initiation of criminal/judicial proceedings adversely affecting the Lender's interests.</p>
   <p>vii. "Interest Rate" means the annualized rate of interest applicable to the Loan, as specified in Schedule 1 and Clause E.</p>
   <p>viii. "Indemnity" or "Indemnify" shall mean the Borrower's obligation to compensate the Lender for any loss, damage, expenses, or claims arising due to non-compliance with the terms of this Agreement.</p>
@@ -110,7 +109,6 @@
   <p class="indent">ii. Borrower shall solely be responsible for fulfilling any tax-related obligation arising from availing this Loan.</p>
   <p class="indent">iii. The Repayment Schedule, as shared by the Lender while processing of Loan, gives an indicative Repayment Schedule and is subject to change based on the repayment track and change in Interest Rate.</p>
 
-  <div class="page-break"></div>
   <p>4. The records maintained by the Lender shall be conclusive proof of the amounts outstanding and due from the Borrower.</p>
   <p>5. Borrower agrees to Indemnify and agree to keep Indemnified the Lender from time to time and at all times thereafter against all claims, costs, losses, damages, charges, expenses and liability of any kind or nature whatsoever and expenses that may be incurred by the Lender due to any act or default on the part of the Borrower in respect of the Loan and/or for the recovery of the outstanding dues on account of failure of the Borrower of any of the terms and conditions herein.</p>
   <p>6. Borrower undertakes to keep the Lender informed of any change in the Borrower's e-mail ID, telephone number, mobile number, address and employment details. The Borrower authorizes the Lender to update the contact information, such changes that the Lender may be informed of, and hereby authorizes the Lender to contact the Borrower at the updated contact details, through post, telephone, e-mail, SMS/text messaging.</p>
@@ -127,7 +125,6 @@
   <p>11. Borrower explicitly grants permission to the Lender and/or any other authorized person/representative on behalf of the Lender to visit Borrower home address, office address and/or any other place of location as disclosed by Borrower to the Lender in relation to this Agreement including but not limited to the purpose of repayment of the Loan Amount and/or to recover any other pending amount in connection to the repayment of the Loan Amount. Further, Borrower unconditionally undertakes to inform the Lender upon any change in the communication details, including the home address and/or office address as duly mentioned at the time of execution of this Agreement.</p>
   <p>12. Har Shreejee Finance and Leasing Co. Ltd. is in no manner responsible for any loss of money, breach of privacy, or leakage of confidential information.</p>
 
-  <div class="page-break"></div>
   <h3>C. INTEREST, FEES, CHARGES, COST AND PAYMENT:</h3>
   <p>The Parties agree that Interest, Fees, Charges and Payment (Pre-payment and partial payment) would be as per the terms stated in Schedule 1 of this Agreement. The Borrower further agrees that:</p>
   <p>1. Borrower is obliged to pay Stamp Duty as and if applicable to this Agreement and undertakes to pay or reimburse to the Lender, all statutory charges/stamp duties as may be payable/applicable in future, due to adjudication by tax authorities or enhancement/amendment to the Loan facility.</p>
@@ -146,7 +143,6 @@
   <p>7. Upon delay by the Borrower to pay the outstanding amount on or before the Due Date, or breach of any representation or warranty, the Lender shall be entitled to: (a) declare all sums outstanding under the Loan and other applicable charges to become immediately due and payable; and/or (b) report the Borrower as a defaulter to the Reserve Bank of India (RBI) and other Credit Bureau agencies; and/or (c) invoke Repayment Instruments or similar forms obtained from the Borrower; and/or (d) exercise any other rights or remedies permitted by applicable law.</p>
   <p>8. In the event of prepayment, an appropriate waiver will be made on a pro rata basis across principal, interest, fee, etc., and the same will be reflected in the personal account of the Borrower.</p>
 
-  <div class="page-break"></div>
   <h3>E. THE RATE OF INTEREST IS AS PER SCHEDULE 1.</h3>
   <h3>F. DISCLOSURE OF INFORMATION:</h3>
   <p>1. The Borrower accepts, confirms and consents for the disclosure and sharing by the Lender of all or any information and data relating to the Borrower, the facilities, any other transactions that the Borrower has with the Lender, the Borrower account, and the agreements and documents related to the facilities/Loans and transactions, including but not limited to information relating to default, if any, committed by the Borrower, in the discharge of the Borrower obligations in relation to the facilities/Loans or other transactions, as the Lender may deem appropriate and necessary to disclose and furnish, to the Reserve Bank of India (RBI) and/or to the Credit Information Companies (CICs) and/or to any other agency or body as authorized in this behalf by RBI, to other lenders, including assignee and potential assignee, to its professional advisers and consultants and to its service providers instructed by it in relation to the facilities/Loans, and/or as required under law or any applicable regulation, at the order of a court of law, or at the request or order of any statutory, regulatory or supervisory authority with whom it customarily complies.</p>
@@ -161,7 +157,6 @@
   <p>5. The rights, powers and remedies available to the Lender under law and under this Agreement shall be exercised by the Lender through any of its employees or agents, and the Lender may delegate any or all of the said powers and authorities to such employee or agent.</p>
   <p>6. The Borrower agrees that he/she has fully read and understands the terms and conditions and has tendered true and correct details for availing this credit facility.</p>
 
-  <div class="page-break"></div>
   <p>7. Appointment of Agents: The Lender shall be entitled to appoint and outsource its activities under this Agreement to one or more service providers for the purpose of collecting KYC information, Loan-related documents, collection, service, etc. The Borrower understands and agrees that the services of such agents are essential for the purpose of and effective enjoyment of the Loan.</p>
   <p>8. The Lender may, at its sole discretion, cancel the drawdown of the Personal Loan at any point in time.</p>
   <p>9. In the event that the Borrower applies for a new top-up personal Loan/extension and the same is sanctioned by the Lender, the disbursed amount of the new Loan/extension of the previous Loan will be at the sole discretion of the Lender, and the terms will be decided by the Lender.</p>
@@ -174,7 +169,6 @@
   <p>3. The Cooling-off Period shall not exceed {{ v.cooling_off_days }}.</p>
   <p>4. The Key Fact Statement, forming Annex I / Schedule 2 to this Agreement, shall be deemed to be an integral part of this Agreement and contains the essential terms and conditions of the Loan, including inter alia the Loan amount, rate of interest, annual percentage rate (APR), repayment schedule, fees and charges. The Borrower acknowledges having received, read, and understood the contents of the Key Fact Statement.</p>
 
-  <div class="page-break"></div>
   <p>5. The Borrower is responsible for keeping the salary / repayment account funded on the Due Date so that any NACH / ECS / UPI mandate can be honoured. Failure to do so shall be an Event of Default.</p>
   <p>6. The contract is deemed to have been concluded at Delhi, where the Lender has its registered office and from where the Loan transaction is controlled and approved.</p>
   <p>7. Nothing in this Agreement shall prejudice the Lender's interest or rights if there is any clerical or arithmetical error in the interest calculation due and payable by the Borrower.</p>
@@ -185,10 +179,14 @@
   <div class="page-break"></div>
   <p>IN WITNESS WHEREOF, THE PARTIES HERETO HAVE ACCEPTED THIS AGREEMENT INCLUDING THE TERMS AND CONDITIONS STATED ABOVE ON THE DAY, MONTH AND YEAR MENTIONED BELOW.</p>
   <p>Place: Delhi &nbsp;&nbsp;&nbsp; Date: {{ v.execution_date }}</p>
-  <div class="sign-wrap">
-    <p class="sign-label">Borrower Signature &amp; Date</p>
-    <div class="sign-box">&nbsp;</div>
-  </div>
+  <table class="sign-block" align="right">
+    <tr><td class="sign-label">Borrower Signature &amp; Date</td></tr>
+    <tr>
+      <td class="sign-slot">
+        &nbsp;<br />&nbsp;<br />&nbsp;<br />&nbsp;<br />&nbsp;<br />&nbsp;<br />
+      </td>
+    </tr>
+  </table>
 
   <div class="page-break"></div>
   <h2>SCHEDULE 1</h2>
@@ -219,9 +217,6 @@
     <tr><td class="num">12.</td><td class="label">ECS / Cheque Return Charges per Event</td><td>Rs. 1,000.00 + Applicable Taxes</td></tr>
     <tr><td class="num">13.</td><td class="label">Name of Borrower</td><td>{{ v.borrower_name }}</td></tr>
   </table>
-  <div class="sign-wrap">
-    <div class="sign-box-bottom">&nbsp;</div>
-  </div>
 
   <div class="page-break"></div>
   <h2>SCHEDULE 2 — KEY FACT STATEMENT</h2>
@@ -282,9 +277,6 @@
   </table>
   <p class="muted">*Fixed reset, other than on account of changes in credit profile.</p>
   <p>Place: The contract is deemed to have been concluded at Delhi, where the Lender has its registered office and from where the Loan transaction is controlled and approved.</p>
-  <div class="sign-wrap">
-    <div class="sign-box-bottom">&nbsp;</div>
-  </div>
 
 </body>
 </html>
