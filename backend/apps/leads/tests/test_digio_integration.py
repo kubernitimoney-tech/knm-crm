@@ -8,7 +8,7 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
-from tests.factories import UserFactory, customer_factory
+from tests.factories import UserFactory, application_factory, customer_factory
 
 from apps.accounts.models import Role, UserRole
 from apps.leads.models import (
@@ -528,6 +528,75 @@ class TestDigioEsignAndVideoKyc:
             assert box["ury"] <= PAGE_HEIGHT - card_top
             assert box["lly"] >= 45
 
+    def test_agreement_pdf_matches_sanction_details(self):
+        from io import BytesIO
+
+        from pypdf import PdfReader
+
+        from apps.applications.models import ApplicationDecision, ApplicationStatus
+        from apps.integrations.digio.pdf import _agreement_values, build_agreement_pdf
+
+        user = UserFactory()
+        lead = _create_lead()
+        application = application_factory(
+            customer=lead.customer,
+            requested_amount=Decimal("40000"),
+            tenure_value=21,
+        )
+        application.lead = lead
+        application.status = ApplicationStatus.APPROVED
+        application.approved_amount = Decimal("35000")
+        application.save(update_fields=["lead", "status", "approved_amount", "updated_at"])
+        ApplicationDecision.objects.create(
+            application=application,
+            decision="approved",
+            decided_by=user,
+            approved_amount=Decimal("35000.00"),
+            approved_tenure_value=21,
+            interest_rate=Decimal("1.00"),
+            processing_fee=Decimal("3500.00"),
+            sanction_details={
+                "roi": "1.00",
+                "gst": "630.00",
+                "pf_percentage": "10",
+                "amount_to_be_disbursed": "30870.00",
+                "repay_amount": "35735.00",
+                "repayment_date": "2026-10-13",
+                "cooling_off_days": 3,
+                "late_interest_rate": "1",
+                "cibil_score": "750",
+                "monthly_income": "80000",
+            },
+            created_by=user,
+            updated_by=user,
+        )
+
+        values = _agreement_values(lead)
+        assert values.principal == "Rs. 35,000.00"
+        assert values.processing_fee == "Rs. 3,500.00"
+        assert values.gst == "Rs. 630.00"
+        assert values.disbursal_amount == "Rs. 30,870.00"
+        assert values.repayment_amount == "Rs. 35,735.00"
+        assert values.repayment_date == "13/10/2026"
+        assert values.interest_rate == "1.00 %"
+        assert values.application_number == application.application_number
+
+        pdf = build_agreement_pdf(lead=lead)
+        reader = PdfReader(BytesIO(pdf))
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        assert len(reader.pages) == 10
+        assert application.application_number in text
+        assert "35,000.00" in text
+        assert "3,500.00" in text
+        assert "630.00" in text
+        assert "30,870.00" in text
+        assert "35,735.00" in text
+        assert "13/10/2026" in text
+        assert "25,000.00" not in text
+        assert "40,000.00" not in text
+        assert "Kuberniti Money" in text
+        assert "SCHEDULE 1" in text
+
     def test_gateway_ignores_digio_drive_login_url(self):
         from apps.integrations.digio.gateway import gateway_from_payload
 
@@ -659,6 +728,7 @@ class TestDigioEsignAndVideoKyc:
         message = signed_mails[0]
         assert lead.customer.email in message.to
         assert "Document Successfully Signed" in message.body
+        assert "signed loan agreement PDF is attached" in message.body
         assert "Document Reference:DID1234567890ABCD" in message.body
         assert "Legal Binding: Effective Immediately" in message.body
         assert "Secured Document Management" in message.body
@@ -1135,6 +1205,8 @@ class TestDigioClientResponseHandling:
 
         payload = request.call_args.args[2]
         assert payload["display_on_page"] == "custom"
+        assert payload["notify_signers"] is False
+        assert payload["send_sign_link"] is False
         assert payload["sign_coordinates"] == {"test@example.com": boxes}
 
     def test_digistudio_details_uses_post_with_detailed_response(self):

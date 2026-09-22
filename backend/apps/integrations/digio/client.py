@@ -245,8 +245,9 @@ class DigioClient:
             "file_data": base64.b64encode(file_bytes).decode("ascii"),
             "expire_in_days": expire_in_days,
             # Digio's own mail opens drive.digio.in and asks for a Digio login.
-            # We email the LMS /sign/ page instead.
+            # We email the LMS /sign/ page, then the signed PDF from the CRM.
             "notify_signers": False,
+            "send_sign_link": False,
             "generate_access_token": True,
             "display_on_page": display_on_page,
             "signers": [signer],

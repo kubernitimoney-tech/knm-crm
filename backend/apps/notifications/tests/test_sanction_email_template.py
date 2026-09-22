@@ -190,7 +190,7 @@ class EsignSignedCopyEmailTests(TestCase):
         assert "Document Reference:250720261697JOB542541900" in html
         assert "Signed Date: September 20, 2026" in html
         assert "Legal Binding: Effective Immediately" in html
-        assert "executed copy is attached" in html
+        assert "signed loan agreement PDF is attached" in html
         assert "Retain this confirmation for future reference" in html
         assert "Access documents anytime in your portal" in html
         assert "Contact legal support for any discrepancies" in html

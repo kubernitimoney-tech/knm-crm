@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Lock } from 'lucide-react';
 import { useTitle } from '@/hooks/useTitle';
+import { PdfInlineViewer } from './PdfInlineViewer';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
 const EMAIL_OTP_SECONDS = 180;
@@ -131,7 +132,7 @@ function SixDigitOtp({
           disabled={disabled}
           value={digit}
           aria-label={`Digit ${index + 1}`}
-          className="h-12 w-10 rounded-md border border-slate-300 bg-white text-center text-lg font-semibold text-slate-800 outline-none focus:border-[#4caf82] focus:ring-2 focus:ring-[#4caf82]/20"
+          className="h-12 w-10 rounded-md border border-slate-300 bg-white text-center text-lg font-semibold text-[#1f2130] outline-none focus:border-[#4caf82] focus:ring-2 focus:ring-[#4caf82]/20"
           onChange={(event) => {
             const incoming = digitsOnly(event.target.value);
             if (!incoming) {
@@ -234,6 +235,12 @@ export function PublicEsignPage() {
   const [secondsLeft, setSecondsLeft] = useState(EMAIL_OTP_SECONDS);
   const [otpRound, setOtpRound] = useState(0);
   const [awaitingSigned, setAwaitingSigned] = useState(returningFromEsp);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    root.style.colorScheme = 'light';
+  }, []);
 
   const load = useCallback(
     async (sync = false, force = false) => {
@@ -434,37 +441,29 @@ export function PublicEsignPage() {
   const reason = session?.reason || session?.document_name || 'Loan Agreement';
   const stamp = formatStamp(session?.signed_at || session?.created_at);
 
-  const documentFrame = (
-    <div className="overflow-hidden rounded-sm border border-slate-200 bg-slate-50">
-      {previewUrl ? (
-        <iframe
-          title={session?.document_name || 'Agreement.pdf'}
-          src={previewUrl}
-          className="h-[70vh] min-h-[420px] w-full bg-white"
-        />
-      ) : (
-        <div className="flex h-[70vh] min-h-[420px] items-center justify-center text-sm text-slate-500">
-          Loading document…
-        </div>
-      )}
+  const documentFrame = previewUrl ? (
+    <PdfInlineViewer src={previewUrl} title={session?.document_name || 'Agreement.pdf'} />
+  ) : (
+    <div className="flex h-[70vh] min-h-[420px] items-center justify-center rounded-sm border border-slate-200 bg-white text-sm text-[#424665]">
+      Loading agreement…
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-guest-page min-h-screen bg-[#f4f6f9] text-[#1f2130]">
       {isLoading ? (
-        <p className="px-4 py-24 text-center text-sm text-slate-500">Loading…</p>
+        <p className="px-4 py-24 text-center text-sm text-[#424665]">Loading…</p>
       ) : error && !session ? (
         <p className="px-4 py-24 text-center text-sm text-red-600">{error}</p>
       ) : session?.signed ? (
         <div className="mx-auto max-w-2xl px-4 py-10">
           <SuccessBadge />
           <p className="mt-4 text-center text-xl font-semibold text-[#2f9e86]">eSign completed</p>
-          <p className="mt-2 text-center text-sm text-slate-600">
+          <p className="mt-2 text-center text-sm text-[#424665]">
             Thank you. The loan agreement has been signed with Aadhaar OTP. A signed copy has been
             emailed to you.
           </p>
-          <div className="mt-6 rounded-md border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-slate-800">
+          <div className="mt-6 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-[#1f2130]">
             <p>
               Status :{' '}
               <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
@@ -484,13 +483,9 @@ export function PublicEsignPage() {
           </a>
           <div className="mt-4">
             {signedPreviewUrl ? (
-              <iframe
-                title="Signed agreement"
-                src={signedPreviewUrl}
-                className="h-[70vh] min-h-[420px] w-full rounded-sm border border-slate-200 bg-white"
-              />
+              <PdfInlineViewer src={signedPreviewUrl} title="Signed agreement" />
             ) : (
-              <p className="py-10 text-center text-sm text-slate-500">Loading signed document…</p>
+              <p className="py-10 text-center text-sm text-[#424665]">Loading signed agreement…</p>
             )}
           </div>
         </div>
@@ -498,7 +493,7 @@ export function PublicEsignPage() {
         <div className="flex min-h-screen flex-col items-center justify-center px-4">
           <SuccessBadge />
           <p className="mt-4 text-center text-xl font-semibold text-[#2f9e86]">eSign completed</p>
-          <p className="mt-2 text-center text-sm text-slate-600">
+          <p className="mt-2 text-center text-sm text-[#424665]">
             Fetching your signed agreement and sending a copy to your email…
           </p>
           <ErrorText message={error} />
@@ -506,8 +501,8 @@ export function PublicEsignPage() {
       ) : step === 'send_code' ? (
         <div className="flex min-h-screen items-center justify-center px-4">
           <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-8 py-10 text-center shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
-            <h1 className="text-xl font-bold text-slate-900">Verify Your Email</h1>
-            <p className="mt-3 text-sm text-slate-500">
+            <h1 className="text-xl font-bold text-[#1f2130]">Verify Your Email</h1>
+            <p className="mt-3 text-sm text-[#424665]">
               Please click the button below to send the verification code to your email.
             </p>
             <ErrorText message={error} />
@@ -519,7 +514,7 @@ export function PublicEsignPage() {
             >
               {busy ? 'Sending…' : 'Send Verification Code'}
             </button>
-            <p className="mt-6 flex items-center justify-center gap-1 text-xs text-slate-700">
+            <p className="mt-6 flex items-center justify-center gap-1 text-xs text-[#1f2130]">
               <Lock className="h-3.5 w-3.5" />
               Secured By : <BrandLink name={brand} url={brandUrl} />
             </p>
@@ -529,8 +524,8 @@ export function PublicEsignPage() {
         <div className="flex min-h-screen items-center justify-center px-4">
           <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white px-6 py-10 text-center shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
             <EnvelopeIcon />
-            <h1 className="mt-4 text-xl font-bold text-slate-900">Enter Verification Code</h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <h1 className="mt-4 text-xl font-bold text-[#1f2130]">Enter Verification Code</h1>
+            <p className="mt-2 text-sm text-[#424665]">
               Please enter the 6-digit code sent to your email.
             </p>
             <div className="mt-6">
@@ -555,20 +550,20 @@ export function PublicEsignPage() {
                 Resend Code
               </button>
             </div>
-            <p className="mt-5 text-xs text-slate-500">Time Remaining: {formatCountdown(secondsLeft)}</p>
+            <p className="mt-5 text-xs text-[#424665]">Time Remaining: {formatCountdown(secondsLeft)}</p>
           </div>
         </div>
       ) : (
         <div className="mx-auto max-w-2xl px-4 py-6">
-          <h1 className="text-lg font-bold text-slate-900">{brand}</h1>
+          <h1 className="text-lg font-bold text-[#1f2130]">{brand}</h1>
           {session?.company_email ? (
-            <p className="text-sm text-slate-600">({session.company_email})</p>
+            <p className="text-sm text-[#424665]">({session.company_email})</p>
           ) : null}
-          <h2 className="mt-6 text-base font-bold text-slate-900">Reason For Request:-</h2>
-          <p className="mt-1 text-sm text-slate-700">{reason}</p>
-          <div className="mt-6 rounded-md border border-amber-100 bg-[#fbf6e9] px-4 py-4">
-            <h3 className="text-center text-lg font-semibold text-slate-800">Signers</h3>
-            <div className="mt-3 space-y-1 text-sm text-slate-800">
+          <h2 className="mt-6 text-base font-bold text-[#1f2130]">Reason For Request:-</h2>
+          <p className="mt-1 text-sm text-[#1f2130]">{reason}</p>
+          <div className="mt-6 rounded-md border border-amber-200 bg-[#fbf6e9] px-4 py-4">
+            <h3 className="text-center text-lg font-semibold text-[#1f2130]">Signers</h3>
+            <div className="mt-3 space-y-1 text-sm text-[#1f2130]">
               <p>
                 Status :{' '}
                 <span className="inline-flex items-center gap-1 text-amber-700">
@@ -584,7 +579,7 @@ export function PublicEsignPage() {
             </div>
           </div>
           <div className="mt-4">{documentFrame}</div>
-          <p className="mt-6 text-center text-sm text-slate-800">
+          <p className="mt-6 text-center text-sm text-[#1f2130]">
             Sign Now opens Aadhaar eSign. OTP is sent to the mobile number linked with Aadhaar.
           </p>
           <ErrorText message={error} />

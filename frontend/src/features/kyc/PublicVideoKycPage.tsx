@@ -144,6 +144,12 @@ export function PublicVideoKycPage() {
   );
 
   useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark');
+    root.style.colorScheme = 'light';
+  }, []);
+
+  useEffect(() => {
     load()
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Could not load the KYC request.');
@@ -221,7 +227,7 @@ export function PublicVideoKycPage() {
   }, [session, load, awaitingComplete]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
+    <div className="public-guest-page min-h-screen bg-[#f4f6f9] text-[#1f2130] flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex justify-center">
           <Logo className="h-8" />
