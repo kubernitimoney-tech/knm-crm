@@ -596,6 +596,8 @@ class TestDigioEsignAndVideoKyc:
         assert "40,000.00" not in text
         assert "Kuberniti Money" in text
         assert "SCHEDULE 1" in text
+        assert "WHEREAS" in text
+        assert "NOW THIS AGREEMENT WITNESSETH" in text
 
     def test_gateway_ignores_digio_drive_login_url(self):
         from apps.integrations.digio.gateway import gateway_from_payload

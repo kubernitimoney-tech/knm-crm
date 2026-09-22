@@ -14,6 +14,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from reportlab.lib.colors import Color
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
@@ -84,6 +85,7 @@ class AgreementValues:
     office_address: str
     pan: str
     email: str
+    email_line: str
     mobile: str
     execution_date: str
     application_number: str
@@ -376,13 +378,19 @@ def _agreement_values(lead) -> AgreementValues:
         late = Decimal("1")
 
     cooling = _first_value(details, "cooling_off_days") or 3
+    official = str(_first_value(details, "official_email") or "").strip()
+    personal = getattr(customer, "email", None) or "—"
+    email_line = f"Personal: {personal}"
+    if official:
+        email_line = f"{email_line} Official: {official}"
 
     return AgreementValues(
         borrower_name=(getattr(customer, "full_name", None) or "—"),
         address=_customer_address(customer),
         office_address=_office_address(customer, details),
         pan=CustomerService.get_primary_pan(customer) or "—",
-        email=getattr(customer, "email", None) or "—",
+        email=personal,
+        email_line=email_line,
         mobile=getattr(customer, "mobile_number", None) or "—",
         execution_date=_date(execution_at),
         application_number=getattr(application, "application_number", None) or lead.lead_id,
@@ -446,14 +454,16 @@ def _cover_image(pdf: canvas.Canvas, x: float, top: float, width: float, height:
     )
 
 
-def _draw_green_tick(pdf: canvas.Canvas, x: float, y: float, size: float) -> None:
-    """Fill the tick-mark outline in a box `size` wide, anchored bottom-left."""
+def _draw_green_tick(
+    pdf: canvas.Canvas, x: float, y: float, size: float, *, alpha: float = 0.38
+) -> None:
+    """Fill the tick-mark outline; keep it translucent so signed text stays readable."""
     height = size / _TICK_RATIO
 
     def at(point: tuple[float, float]) -> tuple[float, float]:
         return x + point[0] * size, y + point[1] * height
 
-    pdf.setFillColorRGB(*SIGNATURE_GREEN)
+    pdf.setFillColor(Color(SIGNATURE_GREEN[0], SIGNATURE_GREEN[1], SIGNATURE_GREEN[2], alpha=alpha))
     path = pdf.beginPath()
     path.moveTo(*at(_TICK_OUTLINE[0]))
     for segment in _TICK_OUTLINE[1:]:
@@ -484,8 +494,8 @@ def _draw_signed_appearance(
     signer_location: str,
     signed_at: str,
 ) -> None:
-    """Times-Italic block with a green tick. This replaces Digio's visible stamp."""
-    _cover_image(pdf, x - 4, top - 2, width + 8, height + 6)
+    """Times-Italic block with a translucent green tick behind the text."""
+    _cover_image(pdf, x - 2, top - 1, width + 4, height + 2)
     name = signer_name or "Customer"
     location = signer_location or "New Delhi"
     lines = (
@@ -495,6 +505,15 @@ def _draw_signed_appearance(
         "Reason: Loan Agreement",
         f"Date: {signed_at}",
     )
+    tick_w = min(width * 0.52, 46.0)
+    tick_h = tick_w / _TICK_RATIO
+    _draw_green_tick(
+        pdf,
+        x + width * 0.22,
+        _from_top(top + height) + (height - tick_h) / 2,
+        tick_w,
+        alpha=0.34,
+    )
     size = 8.0 if height >= 72 else 7.2
     leading = 10.0 if height >= 72 else 9.0
     pdf.setFillColorRGB(0, 0, 0)
@@ -503,15 +522,6 @@ def _draw_signed_appearance(
     for line in lines:
         pdf.drawString(x + 6, text_y, line)
         text_y -= leading
-
-    tick_w = min(width * 0.62, 56.0)
-    tick_h = tick_w / _TICK_RATIO
-    _draw_green_tick(
-        pdf,
-        x + width * 0.08,
-        _from_top(top + height) + (height - tick_h) / 2,
-        tick_w,
-    )
 
 
 def apply_completed_signature_marks(
