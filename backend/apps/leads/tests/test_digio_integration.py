@@ -728,6 +728,7 @@ class TestDigioEsignAndVideoKyc:
         message = signed_mails[0]
         assert lead.customer.email in message.to
         assert "Document Successfully Signed" in message.body
+        assert "signed loan agreement PDF is attached" in message.body
         assert "Document Reference:DID1234567890ABCD" in message.body
         assert "Legal Binding: Effective Immediately" in message.body
         assert "Secured Document Management" in message.body
@@ -1204,6 +1205,8 @@ class TestDigioClientResponseHandling:
 
         payload = request.call_args.args[2]
         assert payload["display_on_page"] == "custom"
+        assert payload["notify_signers"] is False
+        assert payload["send_sign_link"] is False
         assert payload["sign_coordinates"] == {"test@example.com": boxes}
 
     def test_digistudio_details_uses_post_with_detailed_response(self):

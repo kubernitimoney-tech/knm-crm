@@ -211,8 +211,9 @@ class EmailService:
                     "Legal Binding: Effective Immediately",
                     "",
                     (
-                        "We confirm receipt of your signed document. The executed copy is "
-                        "attached for your records and will be securely archived in your account."
+                        "We confirm receipt of your signed document. The signed loan "
+                        "agreement PDF is attached to this email for your records and will "
+                        "be securely archived in your account."
                     ),
                     "",
                     "Next Steps:",
