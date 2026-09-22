@@ -103,6 +103,13 @@ class ApplicationService:
         return value
 
     @staticmethod
+    def display_application_number(value: str | None) -> str:
+        raw = (value or "").strip()
+        if raw.upper().startswith("APP"):
+            return raw[3:].lstrip("-_")
+        return raw
+
+    @staticmethod
     def _next_application_number() -> str:
         last = LoanApplication.all_objects.order_by("-created_at").first()
         seq = 1
@@ -110,7 +117,7 @@ class ApplicationService:
             digits = "".join(ch for ch in last.application_number if ch.isdigit())
             if digits:
                 seq = int(digits) + 1
-        return f"APP{seq:06d}"
+        return f"{seq:06d}"
 
     @classmethod
     @transaction.atomic
@@ -380,11 +387,6 @@ class ApplicationService:
                     application=application,
                 )
             NotificationService.notify_application_approved(application)
-            NotificationService.send_sanction_approved_email(
-                application,
-                decision=decision_record,
-                raise_on_error=False,
-            )
             try:
                 LoanService.create_from_application(user=user, application=application)
             except LoanServiceError as exc:

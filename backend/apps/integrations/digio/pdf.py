@@ -19,6 +19,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
+from apps.applications.services.application_service import ApplicationService
 from apps.applications.services.sanction_fee_service import SanctionFeeService
 from apps.customers.models import CustomerAddress
 from apps.customers.services.customer_service import CustomerService
@@ -393,7 +394,9 @@ def _agreement_values(lead) -> AgreementValues:
         email_line=email_line,
         mobile=getattr(customer, "mobile_number", None) or "—",
         execution_date=_date(execution_at),
-        application_number=getattr(application, "application_number", None) or lead.lead_id,
+        application_number=ApplicationService.display_application_number(
+            getattr(application, "application_number", None) or lead.lead_id
+        ),
         sanction_date=_date(sanction_at),
         principal=_money(principal),
         interest_rate=f"{_decimal(interest):.2f} %",

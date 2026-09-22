@@ -5,6 +5,7 @@ from django.utils.dateparse import parse_date
 from rest_framework import serializers
 
 from apps.applications.models import ApplicationDecision, LoanApplication
+from apps.applications.services.application_service import ApplicationService
 from apps.applications.services.sanction_salary_bank_service import (
     SanctionSalaryBankServiceError,
     prepare_sanction_details,
@@ -84,6 +85,13 @@ class LoanApplicationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "application_number", "created_at", "updated_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["application_number"] = ApplicationService.display_application_number(
+            instance.application_number
+        )
+        return data
 
     def get_latest_decision(self, obj):
         prefetched = getattr(obj, "_prefetched_objects_cache", {}).get("decisions")

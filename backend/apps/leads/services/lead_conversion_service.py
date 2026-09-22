@@ -51,7 +51,7 @@ class LeadConversionService:
             digits = "".join(ch for ch in last.application_number if ch.isdigit())
             if digits:
                 seq = int(digits) + 1
-        return f"APP{seq:06d}"
+        return f"{seq:06d}"
 
     @staticmethod
     def _build_customer_snapshot(customer: Customer) -> dict:
