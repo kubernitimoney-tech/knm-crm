@@ -105,6 +105,37 @@ class PublicLeadIntakeAPITests(TestCase):
         lead = Lead.objects.get(lead_id=response.data["data"]["lead_id"])
         self.assertEqual(lead.status, LeadStatus.FRESH)
 
+    def test_intake_skips_legacy_lead_codes_when_allocating_id(self):
+        source, _ = LeadSource.objects.get_or_create(slug="website", defaults={"name": "Website"})
+        Lead.objects.create(
+            lead_id="000003",
+            customer=customer_factory(
+                email="numeric.lead@example.com",
+                mobile_number="9876500083",
+            ),
+            source=source,
+            required_amount=Decimal("10000"),
+        )
+        Lead.objects.create(
+            lead_id="LD-FMT2",
+            customer=customer_factory(
+                email="legacy.lead@example.com",
+                mobile_number="9876500084",
+            ),
+            source=source,
+            required_amount=Decimal("10000"),
+        )
+        response = self.client.post(
+            reverse("lead-public-intake"),
+            self._payload(
+                mobile_number="9876500085",
+                email="next.numeric.lead@example.com",
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["data"]["lead_id"], "000004")
+
     def test_public_sources_list_without_authentication(self):
         response = self.client.get(reverse("lead-public-intake-sources"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)

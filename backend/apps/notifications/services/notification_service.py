@@ -285,10 +285,14 @@ class NotificationService:
             processing_fee = str(decision.processing_fee)
         gst = net.get("gst") or details.get("gst") or details.get("admin_gst")
 
+        from apps.applications.services.application_service import ApplicationService
+
         return {
             "customer_name": customer_label,
             "customer_mobile": cls._customer_mobile(application),
-            "application_number": application.application_number,
+            "application_number": ApplicationService.display_application_number(
+                application.application_number
+            ),
             "product_name": product_name,
             "letter_datetime": cls._format_letter_datetime(letter_at),
             "approved_amount": cls._format_amount(approved_amount),
@@ -675,10 +679,33 @@ class NotificationService:
         cls.notify_users(account_users, title=title, body=body, metadata=metadata)
 
     @classmethod
+    def _disbursal_repayment_amount(cls, *, loan, application, metrics) -> Decimal:
+        """Contract repayment: sanction figure, else principal + daily interest × tenure."""
+        decision = None
+        if application is not None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        details = dict(decision.sanction_details or {}) if decision else {}
+        for key in ("repay_amount", "repayment_amount"):
+            stored = details.get(key)
+            if stored not in (None, ""):
+                amount = cls._as_decimal(stored)
+                if amount > 0:
+                    return amount
+        if metrics.repay_amount and metrics.tenure_days > 0:
+            return metrics.repay_amount
+        principal = loan.principal_amount or Decimal("0")
+        if loan.total_repayable and loan.total_repayable > principal:
+            return loan.total_repayable
+        return metrics.repay_amount
+
+    @classmethod
     def send_loan_disbursed_email(cls, *, loan, application=None) -> None:
         """Email the customer when disbursement is completed."""
         from apps.core.amount_words import indian_amount_in_words
         from apps.loans.services.loan_calculation_service import LoanCalculationService
+        from apps.loans.services.loan_service import LoanService
 
         application = application or None
         if application is None:
@@ -710,16 +737,21 @@ class NotificationService:
                 due_date=loan.due_date,
             )
         principal = loan.principal_amount
-        repayment_amount = metrics.repay_amount
+        repayment_amount = cls._disbursal_repayment_amount(
+            loan=loan,
+            application=application,
+            metrics=metrics,
+        )
+        tenure_days = metrics.tenure_days or ""
         cls._send_email_on_commit(
             subject="Kuberniti Money - Loan Disbursed",
             template="loan_disbursed",
             context={
                 "customer_name": customer_label,
-                "loan_number": loan.loan_account_number,
+                "loan_number": LoanService.display_loan_account_number(loan.loan_account_number),
                 "principal_amount": cls._format_whole_amount(principal),
                 "interest_rate": cls._format_daily_rate(loan.interest_rate),
-                "tenure_days": str(metrics.tenure_days or ""),
+                "tenure_days": str(tenure_days),
                 "repayment_amount": cls._format_whole_amount(repayment_amount),
                 "repayment_amount_words": indian_amount_in_words(repayment_amount),
             },

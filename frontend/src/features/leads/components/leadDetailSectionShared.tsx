@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Mail, Plus } from 'lucide-react';
+import { Loader2, Mail, Plus } from 'lucide-react';
 import {
   RowActionButtonGroup,
   RowDeleteButton,
@@ -287,23 +287,34 @@ export function SectionMailButton({
   onClick,
   title = 'Send email',
   disabled,
+  loading,
 }: {
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
   title?: string;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
     <Button
       type="button"
+      nativeButton
       variant="ghost"
       size="icon"
       className="group/row-action h-8 w-8 text-white hover:bg-white/10 hover:text-white"
-      onClick={onClick}
-      disabled={disabled}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void onClick();
+      }}
+      disabled={disabled || loading}
       title={title}
       aria-label={title}
     >
-      <Mail className={cn(ROW_ACTION_ICON_CLASS, 'text-white')} />
+      {loading ? (
+        <Loader2 className={cn(ROW_ACTION_ICON_CLASS, 'text-white animate-spin')} />
+      ) : (
+        <Mail className={cn(ROW_ACTION_ICON_CLASS, 'text-white')} />
+      )}
     </Button>
   );
 }

@@ -11,12 +11,11 @@ import {
   TableRow,
   TableLoadingRow,
 } from '@/components/ui/table';
-import { toast } from '@/components/ui/toast';
+import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   fetchLeadVideoKycRequests,
   sendLeadVideoKycRequest,
-  videoKycDispatchMessage,
   type ApiLeadVideoKycRequest,
 } from '@/lib/leadDetailsApi';
 import { videoKycRequestStatusDisplay } from '@/lib/badgeStyles';
@@ -45,7 +44,6 @@ export interface LeadVideoKycEntry {
 interface LeadVideoKycDetailsSectionProps {
   leadId: string;
   customerEmail?: string;
-  customerMobile?: string;
   canSendRequest?: boolean;
   refreshToken?: number;
 }
@@ -66,7 +64,6 @@ function mapApiEntry(entry: ApiLeadVideoKycRequest): LeadVideoKycEntry {
 export function LeadVideoKycDetailsSection({
   leadId,
   customerEmail,
-  customerMobile,
   canSendRequest = false,
   refreshToken = 0,
 }: LeadVideoKycDetailsSectionProps) {
@@ -103,12 +100,20 @@ export function LeadVideoKycDetailsSection({
     try {
       const created = await sendLeadVideoKycRequest(leadId);
       setEntries((prev) => [mapApiEntry(created), ...prev]);
-      const dispatched = videoKycDispatchMessage(created, customerEmail, customerMobile);
-      toast({
-        title: 'Video KYC request sent',
-        description: dispatched.text,
-        variant: dispatched.ok ? 'success' : 'error',
-      });
+      if (created.email_sent) {
+        toast({
+          title: sentEmailSuccessTitle('Video KYC email', customerEmail),
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: 'Failed to send Video KYC email',
+          description: customerEmail
+            ? `Video KYC was created, but the email to ${customerEmail} could not be sent.`
+            : 'Video KYC was created, but the email could not be sent.',
+          variant: 'error',
+        });
+      }
     } catch (err) {
       toast({
         title: 'Request failed',

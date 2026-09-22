@@ -508,6 +508,7 @@ class TestDigioEsignAndVideoKyc:
             page.extract_text() or "" for page in PdfReader(BytesIO(signed)).pages
         )
         assert "Kuberniti Money" in unsigned_text
+        assert unsigned_text.count("Borrower Signature & Date") >= 3
         assert "Digitally Signed by:" in signed_text
         assert "Name:" in signed_text
         assert "Location:" in signed_text

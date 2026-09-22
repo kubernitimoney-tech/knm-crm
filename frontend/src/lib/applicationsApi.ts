@@ -156,7 +156,7 @@ export async function decideApplication(
 }
 
 export async function sendSanctionApprovedEmail(applicationId: string): Promise<void> {
-  await apiPost(`/applications/applications/${applicationId}/send-sanction-email/`);
+  await apiPost(`/applications/applications/${applicationId}/send-sanction-email/`, {});
 }
 
 export async function submitDisbursalSheet(

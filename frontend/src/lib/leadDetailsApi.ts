@@ -527,26 +527,6 @@ export async function sendLeadVideoKycRequest(
   });
 }
 
-export function videoKycDispatchMessage(
-  created: Pick<ApiLeadVideoKycRequest, 'email_sent' | 'sms_sent'>,
-  email?: string,
-  mobile?: string,
-): { text: string; ok: boolean } {
-  const parts: string[] = [];
-  if (created.email_sent) parts.push(email ? `email ${email}` : 'email');
-  if (created.sms_sent) parts.push(mobile ? `mobile ${mobile}` : 'mobile');
-  if (parts.length === 2) {
-    return { text: `Video KYC link sent to ${parts[0]} and ${parts[1]}.`, ok: true };
-  }
-  if (parts.length === 1) {
-    return { text: `Video KYC link sent to ${parts[0]}.`, ok: true };
-  }
-  return {
-    text: 'Video KYC was created, but the link could not be emailed or SMS’d. Use Open to share it.',
-    ok: false,
-  };
-}
-
 export async function fetchLeadVideoKycRequestDetail(
   leadId: string,
   requestId: string,
@@ -940,7 +920,7 @@ function buildSanctionDetailsPayload(payload: {
     residential_type: payload.residentialType,
     employment_type: payload.employmentType,
     loan_purpose: payload.loanPurpose,
-    ...(salaryBanks.length ? { salary_banks: salaryBanks } : {}),
+    salary_banks: salaryBanks,
     ...(primaryAccount ? { salary_account: primaryAccount } : {}),
     ...(salaryBanks.length
       ? { bank_name: salaryBanks.map((row) => row.bank_name).filter(Boolean).join(', ') }

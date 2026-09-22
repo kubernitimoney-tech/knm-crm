@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from tests.factories import UserFactory, customer_factory
+from tests.factories import UserFactory, customer_factory, salary_bank_entries
 
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus, LoanApplication
@@ -142,6 +142,7 @@ class NotificationEventTests(TestCase):
             approved_tenure_value=30,
             interest_rate=Decimal("1"),
             processing_fee=Decimal("1000"),
+            sanction_details={"salary_banks": salary_bank_entries()},
         )
 
         notes = Notification.objects.filter(recipient=pm)
@@ -152,7 +153,7 @@ class NotificationEventTests(TestCase):
             NotificationService.EVENT_APPLICATION_APPROVED,
         )
 
-    def test_application_approved_sends_sanction_email(self):
+    def test_application_approved_does_not_send_sanction_email(self):
         approver = UserFactory(email="approver.mail@example.com")
         _assign_role(approver, "admin")
         customer = customer_factory(email="sanction.borrower@example.com")
@@ -170,11 +171,10 @@ class NotificationEventTests(TestCase):
                 approved_tenure_value=30,
                 interest_rate=Decimal("1"),
                 processing_fee=Decimal("1000"),
+                sanction_details={"salary_banks": salary_bank_entries()},
             )
 
-        send_email.assert_called_once()
-        self.assertEqual(send_email.call_args.args[0], application)
-        self.assertFalse(send_email.call_args.kwargs["raise_on_error"])
+        send_email.assert_not_called()
 
     def test_disbursal_sheet_sent_notifies_account_finance(self):
         from unittest.mock import patch
@@ -325,6 +325,64 @@ class NotificationEventTests(TestCase):
             "Fifty-Three Thousand Two Hundred",
         )
         self.assertIn("Rohit", captured["context"]["customer_name"])
+
+    def test_loan_disbursed_email_uses_tenure_and_knm_loan_number(self):
+        customer = customer_factory(
+            email="pankaj.yadav@example.com",
+            first_name="Pankaj",
+            last_name="Kumar Yadav",
+        )
+        rm = UserFactory(email="rm.repay@example.com")
+        cm = UserFactory(email="cm.repay@example.com")
+        lead = _create_lead(lead_code="NTF-REPAY", customer=customer, rm=rm, cm=cm)
+        application = _create_application(
+            customer=customer,
+            lead=lead,
+            cm=cm,
+            status=ApplicationStatus.APPROVED,
+        )
+        application.requested_amount = Decimal("40000")
+        application.approved_amount = Decimal("40000")
+        application.tenure_value = 21
+        application.save(update_fields=["requested_amount", "approved_amount", "tenure_value"])
+        disbursed_on = timezone.make_aware(datetime(2026, 9, 22, 10, 0, 0))
+        loan = Loan.objects.create(
+            loan_account_number="LN00000001",
+            application=application,
+            customer=customer,
+            product=application.product,
+            principal_amount=Decimal("40000"),
+            interest_amount=Decimal("8400"),
+            total_repayable=Decimal("40000"),
+            product_snapshot={"interest_rate": "1", "tenure_days": "21"},
+            due_date=disbursed_on.date(),
+            status=LoanStatus.ACTIVE,
+            disbursed_at=disbursed_on,
+        )
+
+        captured = {}
+
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
+            captured["context"] = context
+
+        with patch.object(
+            NotificationService,
+            "_send_email_on_commit",
+            side_effect=_capture_email,
+        ):
+            NotificationService.send_loan_disbursed_email(loan=loan, application=application)
+
+        self.assertEqual(captured["context"]["loan_number"], "KNM00000001")
+        self.assertEqual(captured["context"]["principal_amount"], "40,000")
+        self.assertEqual(captured["context"]["interest_rate"], "1%")
+        self.assertEqual(captured["context"]["tenure_days"], "21")
+        self.assertEqual(captured["context"]["repayment_amount"], "48,400")
+        self.assertEqual(
+            captured["context"]["repayment_amount_words"],
+            "Forty-Eight Thousand Four Hundred",
+        )
 
     def test_loan_disbursed_email_skipped_without_customer_email(self):
         customer = customer_factory()

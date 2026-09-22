@@ -125,6 +125,8 @@ def prepare_sanction_details(details: dict | None) -> dict:
     salary_banks = normalize_salary_banks((details or {}).get("salary_banks"))
     if not salary_banks:
         salary_banks = legacy_salary_banks_from_details(details)
+    if not salary_banks:
+        raise SanctionSalaryBankServiceError("Salary account is required.")
     return apply_primary_salary_fields(details or {}, salary_banks)
 
 

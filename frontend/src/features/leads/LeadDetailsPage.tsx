@@ -82,7 +82,6 @@ import {
   fetchLeadEsignRequests,
   sendLeadEsignRequest,
   sendLeadVideoKycRequest,
-  videoKycDispatchMessage,
   type ApiLeadSanction,
   type ApiLeadEmployment,
 } from '@/lib/leadDetailsApi';
@@ -120,7 +119,7 @@ import { shouldHideCustomerSectionActions } from '@/features/leads/leadCustomerT
 import { CustomerRelatedLeadsEmptyState } from '@/features/leads/components/CustomerRelatedLeadsEmptyState';
 import { LeadStatusHistoryDrawer } from '@/features/leads/components/LeadStatusHistoryDrawer';
 import { FormFieldLabel, FormSelect } from '@/features/leads/components/leadDetailSectionShared';
-import { toast } from '@/components/ui/toast';
+import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
 
 /** Application statuses where rejection is not allowed. */
@@ -149,7 +148,7 @@ export const LeadDetailsPage = () => {
     () => leadListReturnToFromSearchParams(searchParams) ?? { type: 'all-leads' as const },
     [searchParams],
   );
-  const { canUi, hasPermission, isCollectionOfficer } = usePermissions();
+  const { canUi, hasPermission, isCollectionOfficer, isSuperAdmin, hasRole } = usePermissions();
   const canSanctionCreate = canUi('leadDetails', 'sanction', 'create');
   const canSanctionUpdate = canUi('leadDetails', 'sanction', 'update');
   const canDisbursalSend = canUi('leadDetails', 'disbursal', 'send');
@@ -686,8 +685,6 @@ export const LeadDetailsPage = () => {
   const customerCanAdd = (allowed: boolean) => allowed && !hideCustomerSectionActions;
   const customerEmailForRequests =
     leadData.email !== '—' ? leadData.email : undefined;
-  const customerMobileForRequests =
-    leadData.mobile !== '—' ? leadData.mobile : undefined;
 
   const handleTimelineEsignRequest = useCallback(async () => {
     if (!id) return;
@@ -705,10 +702,7 @@ export const LeadDetailsPage = () => {
         });
       } else {
         toast({
-          title: 'E-sign request sent',
-          description: customerEmailForRequests
-            ? `Signing request email dispatched to ${customerEmailForRequests}.`
-            : 'Signing request email has been queued.',
+          title: sentEmailSuccessTitle('E-sign email', customerEmailForRequests),
           variant: 'success',
         });
       }
@@ -729,16 +723,20 @@ export const LeadDetailsPage = () => {
     try {
       const created = await sendLeadVideoKycRequest(id);
       setEsignKycRefresh((n) => n + 1);
-      const dispatched = videoKycDispatchMessage(
-        created,
-        customerEmailForRequests,
-        customerMobileForRequests,
-      );
-      toast({
-        title: 'Video KYC request sent',
-        description: dispatched.text,
-        variant: dispatched.ok ? 'success' : 'error',
-      });
+      if (created.email_sent) {
+        toast({
+          title: sentEmailSuccessTitle('Video KYC email', customerEmailForRequests),
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: 'Failed to send Video KYC email',
+          description: customerEmailForRequests
+            ? `Video KYC was created, but the email to ${customerEmailForRequests} could not be sent.`
+            : 'Video KYC was created, but the email could not be sent.',
+          variant: 'error',
+        });
+      }
     } catch (err) {
       toast({
         title: 'Request failed',
@@ -748,7 +746,7 @@ export const LeadDetailsPage = () => {
     } finally {
       setIsRequestingTimelineVideoKyc(false);
     }
-  }, [id, customerEmailForRequests, customerMobileForRequests]);
+  }, [id, customerEmailForRequests]);
 
   const customerLeadStats = useMemo(
     () =>
@@ -1101,7 +1099,6 @@ export const LeadDetailsPage = () => {
                       <LeadVideoKycDetailsSection
                         leadId={leadData.id}
                         customerEmail={customerEmailForRequests}
-                        customerMobile={customerMobileForRequests}
                         canSendRequest={customerCanAdd(canRequestEsignVideoKyc)}
                         refreshToken={esignKycRefresh}
                       />
@@ -1169,6 +1166,7 @@ export const LeadDetailsPage = () => {
                       canCreate={canSanctionCreate}
                       canUpdate={canSanctionUpdate}
                       canEditPricingFields={canUi('leadDetails', 'sanction', 'editPricing')}
+                      canChangeProduct={isSuperAdmin || hasRole('production-manager')}
                     />
                   </AccordionContent>
                 </AccordionItem>

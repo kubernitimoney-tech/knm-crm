@@ -19,6 +19,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from xhtml2pdf import pisa
 
+from apps.applications.services.application_service import ApplicationService
 from apps.applications.services.sanction_fee_service import SanctionFeeService
 from apps.customers.models import CustomerAddress
 from apps.customers.services.customer_service import CustomerService
@@ -46,9 +47,9 @@ _TICK_OUTLINE = (
 # Reserved Digio stamp areas, measured from the top of the page. Kept above the
 # footer band. The green tick is overlaid on the stamp after eSign.
 _SIGNATURE_CARDS = {
-    7: (385.0, 318.0, 175.0, 82.0),  # under "Borrower Signature & Date"
-    8: (412.0, 718.0, 168.0, 72.0),  # gap between Schedule 1 and the footer
-    9: (412.0, 718.0, 168.0, 72.0),
+    7: (370.0, 148.0, 175.0, 82.0),  # just below "Borrower Signature & Date"
+    8: (381.0, 640.0, 168.0, 70.0),  # above the caption on Schedule 1
+    9: (381.0, 640.0, 168.0, 70.0),
 }
 
 _WHITE_PNG: bytes | None = None
@@ -393,7 +394,9 @@ def _agreement_values(lead) -> AgreementValues:
         email_line=email_line,
         mobile=getattr(customer, "mobile_number", None) or "—",
         execution_date=_date(execution_at),
-        application_number=getattr(application, "application_number", None) or lead.lead_id,
+        application_number=ApplicationService.display_application_number(
+            getattr(application, "application_number", None) or lead.lead_id
+        ),
         sanction_date=_date(sanction_at),
         principal=_money(principal),
         interest_rate=f"{_decimal(interest):.2f} %",
@@ -425,8 +428,31 @@ def _logo_data_uri() -> str:
     return _LOGO_DATA_URI
 
 
+_CAPTION = "Borrower Signature & Date"
+
+
 def _from_top(top: float) -> float:
     return PAGE_HEIGHT - top
+
+
+def _draw_borrower_caption(pdf: canvas.Canvas, *, x: float, top: float, width: float) -> None:
+    """Right-aligned caption sitting just below the signature stamp."""
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont("Times-Bold", 10.5)
+    text_width = pdf.stringWidth(_CAPTION, "Times-Bold", 10.5)
+    pdf.drawString(x + max(0.0, width - text_width), _from_top(top), _CAPTION)
+
+
+def _page_overlay(page, draw) -> bytes:
+    stream = BytesIO()
+    pdf = canvas.Canvas(
+        stream,
+        pagesize=(float(page.mediabox.width), float(page.mediabox.height)),
+    )
+    draw(pdf)
+    pdf.showPage()
+    pdf.save()
+    return stream.getvalue()
 
 
 def _white_png() -> bytes:
@@ -455,7 +481,7 @@ def _cover_image(pdf: canvas.Canvas, x: float, top: float, width: float, height:
 
 
 def _draw_green_tick(
-    pdf: canvas.Canvas, x: float, y: float, size: float, *, alpha: float = 0.38
+    pdf: canvas.Canvas, x: float, y: float, size: float, *, alpha: float = 0.28
 ) -> None:
     """Fill the tick-mark outline; keep it translucent so signed text stays readable."""
     height = size / _TICK_RATIO
@@ -463,6 +489,7 @@ def _draw_green_tick(
     def at(point: tuple[float, float]) -> tuple[float, float]:
         return x + point[0] * size, y + point[1] * height
 
+    pdf.saveState()
     pdf.setFillColor(Color(SIGNATURE_GREEN[0], SIGNATURE_GREEN[1], SIGNATURE_GREEN[2], alpha=alpha))
     path = pdf.beginPath()
     path.moveTo(*at(_TICK_OUTLINE[0]))
@@ -474,6 +501,7 @@ def _draw_green_tick(
             path.lineTo(*at(segment))
     path.close()
     pdf.drawPath(path, stroke=0, fill=1)
+    pdf.restoreState()
 
 
 def _signed_at_label(value: datetime | None = None) -> str:
@@ -494,7 +522,7 @@ def _draw_signed_appearance(
     signer_location: str,
     signed_at: str,
 ) -> None:
-    """Times-Italic block with a translucent green tick behind the text."""
+    """Black Times block with a translucent green tick behind the text."""
     _cover_image(pdf, x - 2, top - 1, width + 4, height + 2)
     name = signer_name or "Customer"
     location = signer_location or "New Delhi"
@@ -512,13 +540,13 @@ def _draw_signed_appearance(
         x + width * 0.22,
         _from_top(top + height) + (height - tick_h) / 2,
         tick_w,
-        alpha=0.34,
+        alpha=0.22,
     )
-    size = 8.0 if height >= 72 else 7.2
-    leading = 10.0 if height >= 72 else 9.0
+    size = 9.5 if height >= 72 else 9.0
+    leading = 11.5 if height >= 72 else 10.5
     pdf.setFillColorRGB(0, 0, 0)
-    pdf.setFont("Times-Italic", size)
-    text_y = _from_top(top + 11)
+    pdf.setFont("Times-Bold", size)
+    text_y = _from_top(top + 12)
     for line in lines:
         pdf.drawString(x + 6, text_y, line)
         text_y -= leading
@@ -531,7 +559,7 @@ def apply_completed_signature_marks(
     signer_location: str = "",
     signed_at: datetime | None = None,
 ) -> bytes:
-    """Replace Digio's visible stamp with the five-line Times-Italic block and tick."""
+    """Replace Digio's visible stamp with the five-line Times-Bold block and tick."""
     if not pdf_bytes or not pdf_bytes.lstrip().startswith(b"%PDF"):
         return pdf_bytes
     try:
@@ -563,6 +591,8 @@ def apply_completed_signature_marks(
                 signer_location=signer_location,
                 signed_at=when,
             )
+            if index in (8, 9):
+                _draw_borrower_caption(pdf, x=x, top=top + height + 12, width=width)
             pdf.showPage()
             pdf.save()
             overlays[index] = stream.getvalue()
@@ -613,7 +643,17 @@ def build_agreement_pdf(*, lead) -> bytes:
     )
     reader = PdfReader(BytesIO(_html_to_pdf(html)))
     writer = PdfWriter()
-    for page in reader.pages:
+    for index, page in enumerate(reader.pages):
+        card = _SIGNATURE_CARDS.get(index)
+        if card and index in (8, 9):
+            x, top, width, height = card
+            overlay = _page_overlay(
+                page,
+                lambda pdf, x=x, top=top, width=width, height=height: _draw_borrower_caption(
+                    pdf, x=x, top=top + height + 12, width=width
+                ),
+            )
+            page.merge_page(PdfReader(BytesIO(overlay)).pages[0])
         writer.add_page(page)
     _strip_form(writer)
     writer.add_metadata(

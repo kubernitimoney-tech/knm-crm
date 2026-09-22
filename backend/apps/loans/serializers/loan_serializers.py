@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from apps.ledger.selectors.balance_selectors import get_latest_balance
 from apps.loans.models import Loan, LoanDisbursement
+from apps.loans.services.loan_service import LoanService
 
 
 class LoanSerializer(serializers.ModelSerializer):
@@ -37,6 +38,13 @@ class LoanSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["loan_account_number"] = LoanService.display_loan_account_number(
+            instance.loan_account_number
+        )
+        return data
 
     def get_outstanding_balance(self, obj):
         return str(get_latest_balance(obj.id))
