@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Borrower's Loan Agreement - {{ v.application_number }}</title>
+  <style>
+    @page {
+      size: a4 portrait;
+      margin: 40pt 42pt 72pt 42pt;
+      @frame footer {
+        -pdf-frame-content: footerBand;
+        left: 42pt;
+        width: 511pt;
+        bottom: 12pt;
+        height: 66pt;
+      }
+    }
+    body { font-family: Times-Roman; font-size: 10pt; color: #1f2130; line-height: 1.28; }
+    h1 { font-size: 13pt; text-align: center; color: #2A2D4F; letter-spacing: 0.4pt; margin: 0 0 4pt 0; }
+    h2 { font-size: 11pt; text-align: center; color: #2A2D4F; margin: 2pt 0 6pt 0; }
+    h3 { font-size: 10pt; color: #2A2D4F; margin: 6pt 0 3pt 0; }
+    p { margin: 0 0 5pt 0; text-align: justify; }
+    .center { text-align: center; }
+    .muted { color: #424665; font-size: 9pt; }
+    .section { margin-bottom: 8pt; }
+    table.data { width: 100%; margin: 3pt 0 6pt 0; }
+    table.data th, table.data td { border: 0.6pt solid #2A2D4F; padding: 2pt 5pt; font-size: 8.5pt; vertical-align: middle; }
+    table.data th { background-color: #2A2D4F; color: #ffffff; font-family: Times-Bold; text-align: left; }
+    table.data td.num { width: 28pt; text-align: center; }
+    table.data td.label { width: 48%; }
+    .page-break { page-break-before: always; }
+    .sign-wrap { margin-top: 10pt; text-align: right; }
+    .sign-label { font-family: Times-Bold; font-size: 9pt; color: #2A2D4F; margin: 0 0 3pt 0; }
+    .sign-box { width: 175pt; height: 82pt; border: 0.4pt solid #B0B0C1; }
+    .sign-box-bottom { width: 168pt; height: 56pt; border: 0.4pt solid #B0B0C1; }
+    #footerBand { font-size: 6.2pt; color: #2A2D4F; }
+    .wordmark { font-family: Times-Bold; font-size: 8.5pt; text-align: center; color: #2A2D4F; }
+    .legal { text-align: center; font-size: 6pt; margin-bottom: 2pt; }
+    table.footer-offices { width: 100%; border-top: 1.2pt solid #2A2D4F; border-bottom: 1.2pt solid #2A2D4F; }
+    table.footer-offices td { border-left: 0.4pt solid #B0B0C1; border-right: 0.4pt solid #B0B0C1; padding: 2pt 4pt; vertical-align: middle; }
+    table.footer-offices td.logo { width: 28%; text-align: center; }
+    table.footer-offices img { height: 18pt; }
+  </style>
+</head>
+<body>
+  <div id="footerBand">
+    <div class="wordmark">Kuberniti Money</div>
+    <div class="legal">Har Shreejee Finance and Leasing Co. Ltd.</div>
+    <table class="footer-offices">
+      <tr>
+        <td>
+          Register Office - Plot No 9, Office No 202, 2nd Floor, Chourdhary Complex,<br />
+          Madhuban Road, V.S. Block, Delhi - 110092
+        </td>
+        <td class="logo">{% if logo_uri %}<img src="{{ logo_uri }}" />{% endif %}</td>
+        <td>Corporate Office - WZ-3 meenakshi garden, tilak nagar 110018</td>
+      </tr>
+    </table>
+  </div>
+
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p class="center muted">This Agreement is executed at Delhi on {{ v.execution_date }}.</p>
+  <p>This Borrower's Loan Agreement ("Agreement") is made and entered into by and between:</p>
+  <p><b>{{ v.borrower_name }}</b>, residing at {{ v.address }} (hereinafter referred to as the "Borrower", which expression shall include heirs, executors, administrators and permitted assigns);</p>
+  <p class="center"><b>AND</b></p>
+  <p><b>Har Shreejee Finance and Leasing Co. Ltd.</b>, a company having its registered office at Plot No 9, Office No 202, 2nd Floor, Chourdhary Complex, Madhuban Road, V.S. Block, Delhi - 110092, and corporate office at WZ-3, Meenakshi Garden, Tilak Nagar, 110018, operating the brand Kuberniti Money (hereinafter referred to as the "Lender").</p>
+  <p>The Borrower and the Lender are collectively referred to as the "Parties".</p>
+
+  <h3>A. DEFINITIONS</h3>
+  <p>1. "Loan" means the principal amount sanctioned and disbursed by the Lender to the Borrower as set out in Schedule 1, together with interest, fees, charges, costs and other amounts payable under this Agreement.</p>
+  <p>2. "Cooling-off Period" means the period of up to {{ v.cooling_off_days }} from the date of repayment of the Loan during which the Borrower may prepay the Loan without incurring any strict action, provided the Borrower submits documentary proof of financial hardship to the satisfaction of the Lender and the same is duly verified and approved. In the absence of such submission, verification and approval, no Cooling-off Period shall apply.</p>
+  <p>3. "Schedule 1" means the annexure containing the Borrower's details, Loan terms, interest rates, fees, repayment dates and other particulars integral to this Agreement.</p>
+  <p>4. "Key Fact Statement" means Annex / Schedule 2, which contains the essential terms of the Loan and forms an integral part of this Agreement.</p>
+  <p>5. "Due Date" means the repayment date specified in Schedule 1.</p>
+
+  <h3>B. BORROWER REPRESENTATIONS AND UNDERTAKINGS</h3>
+  <p>1. The Borrower confirms that all information provided to the Lender, including name, PAN, address, e-mail, telephone number, mobile number and employment details, is true and correct.</p>
+  <p>2. The Borrower authorizes the Lender to update contact information as informed to the Lender and to contact the Borrower at the updated details through post, telephone, e-mail or SMS.</p>
+  <p>3. The Borrower would commit an Event of Default if there is a failure to pay the agreed dues or any fee, charges or costs for more than 1 day from the date when it became due, or if there is a breach of the terms agreed herein or a misrepresentation of any material fact.</p>
+  <p>4. The Borrower shall inform the Lender upon any change in communication details, including the home address and/or office address mentioned at the time of execution of this Agreement.</p>
+  <p>5. Har Shreejee Finance and Leasing Co. Ltd. is in no manner responsible for any loss of money, breach of privacy, or leakage of confidential information arising from the Borrower's own acts or omissions.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <h3>C. INTEREST, FEES, CHARGES AND PAYMENT</h3>
+  <p>The Parties agree that interest, fees, charges and payment (including pre-payment and partial payment) shall be as stated in Schedule 1. The Borrower further agrees that:</p>
+  <p>1. Interest shall accrue at the rate specified in Schedule 1 until the Loan is repaid in full.</p>
+  <p>2. Processing fee and GST on processing fee shall be deducted as specified in Schedule 1. The amount actually disbursed may therefore be less than the principal Loan amount.</p>
+  <p>3. Any delay in repayment shall entail additional interest, fee or penalty as prescribed in Schedule 1.</p>
+  <p>4. The Borrower can prepay only as per the Lender's policy prescribed in Schedule 1. Any charges thereof shall be borne by the Borrower.</p>
+  <p>5. Upon delay by the Borrower to pay the outstanding amount on or before the Due Date, the Lender may initiate recovery in accordance with applicable law.</p>
+  <p>6. ECS / cheque return charges shall be as specified in Schedule 1.</p>
+
+  <h3>D. DISBURSEMENT AND REPAYMENT</h3>
+  <p>1. The Lender shall disburse the net amount specified in Schedule 1 to the bank account designated by the Borrower, subject to completion of KYC, e-sign and any other condition prescribed by the Lender.</p>
+  <p>2. The Borrower shall repay the repayment amount on or before the Due Date in a single bullet payment unless otherwise agreed in writing.</p>
+  <p>3. The Due Date is fixed. Any modification can be made only in consultation with and after written approval from the Lender.</p>
+  <p>4. In the event of prepayment, an appropriate waiver may be made on a pro-rata basis across principal, interest and fee, and the same will be reflected in the personal account of the Borrower.</p>
+
+  <h3>E. EVENTS OF DEFAULT</h3>
+  <p>Upon an Event of Default, the Lender may, without prejudice to any other right, declare the entire outstanding amount immediately due and payable, report the default to credit bureaus, and initiate recovery and realization proceedings, including through third-party agents appointed by the Lender.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <h3>F. INFORMATION AND CREDIT CHECKS</h3>
+  <p>1. The Borrower authorizes the Lender to share information with affiliates, group companies, credit bureaus and third-party service providers for underwriting, collections and regulatory reporting.</p>
+  <p>2. The Lender reserves the right to draw credit reports from TransUnion CIBIL, Equifax, CRIF and other credit information companies.</p>
+  <p>3. All information that the Borrower disclosed is voluntary and is given without any undue influence or coercion.</p>
+
+  <h3>G. MISCELLANEOUS</h3>
+  <p>1. Any dispute arising from this Agreement shall be exclusively adjudicated by courts situated at Delhi.</p>
+  <p>2. The Parties may amend this Agreement only by executing an amendment in writing.</p>
+  <p>3. The Borrower confirms that they have not provided any incorrect information or materially misleading information.</p>
+  <p>4. If any provision of this Agreement is held invalid, the remaining provisions shall continue in full force.</p>
+  <p>5. This Agreement, Schedule 1 and the Key Fact Statement together constitute the entire agreement between the Parties relating to the Loan.</p>
+
+  <h3>H. TERMS AND CONDITIONS</h3>
+  <p>1. The Borrower is responsible for providing correct bank account details. Any error shall be the sole responsibility of the Borrower, who shall still honour this Agreement and repay the amount as per Schedule 1.</p>
+  <p>2. The Lender or its agent shall never demand cash repayment of the Loan. Any cash repayment made by the Borrower to any person is at the Borrower's own risk.</p>
+  <p>3. Records maintained by the Lender shall be conclusive proof of amounts outstanding, subject to correction of clerical or arithmetical error.</p>
+  <p>4. The Borrower shall pay non-refundable upfront transaction / processing fees and other charges as and when applicable.</p>
+  <p>5. The Cooling-off Period shall not exceed {{ v.cooling_off_days }}.</p>
+  <p>6. The Key Fact Statement forming Schedule 2 to this Agreement is an integral part of this Agreement. The Borrower acknowledges having received, read and understood its contents.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p>The Borrower further agrees that the Lender may assign or transfer its rights under this Agreement to any third party without the Borrower's prior consent, and the Borrower shall continue to be bound by the terms hereof in favour of such assignee.</p>
+  <p>The Borrower agrees that communication sent to the last known mobile number or e-mail address shall be deemed to have been received.</p>
+  <p>Stamp duty, if applicable, shall be borne by the Borrower as per applicable law.</p>
+  <p>Nothing in this Agreement shall prejudice the Lender's interest or rights if there is any clerical or arithmetical error in the interest calculation due and payable by the Borrower.</p>
+  <p>The Borrower agrees that in case the Borrower avails any third-party service through the Lender, the fees for such third-party service shall be deducted as provided by such third party. The Lender shall not be liable for claims arising out of third-party products.</p>
+  <p>The contract is deemed to have been concluded at Delhi, where the Lender has its registered office and from where the Loan transaction is controlled and approved.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p>The Borrower shall not create any lien, charge or encumbrance over the proceeds of the Loan or over any account into which the Loan is disbursed except in favour of the Lender.</p>
+  <p>The Borrower shall promptly notify the Lender of any change in employment, residential address, bank account or mobile number.</p>
+  <p>Any waiver of a breach shall not operate as a waiver of any subsequent breach. If any provision is held invalid, the remaining provisions shall continue in full force.</p>
+  <p>This Agreement, together with Schedule 1 and Schedule 2, constitutes the entire agreement between the Parties in relation to the Loan.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p>The Borrower undertakes to keep the salary / repayment account funded on the Due Date so that any NACH / ECS / UPI mandate can be honoured. Failure to do so shall be an Event of Default.</p>
+  <p>The Lender may, at its discretion, grant a short extension of the Due Date. Any such extension shall not constitute a waiver of the Lender's rights.</p>
+  <p>The Borrower agrees that recovery agents appointed by the Lender may contact the Borrower at the addresses and numbers provided in Schedule 1.</p>
+  <p>All notices under this Agreement may be sent by e-mail, SMS or courier and shall be deemed served on the date of sending to the last known contact details.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p>The Cooling-off Period, if granted, shall not exceed {{ v.cooling_off_days }}. The Key Fact Statement forming Schedule 2 is an integral part of this Agreement and contains the Loan amount, rate of interest, APR, repayment schedule, fees and charges.</p>
+  <p>The Borrower acknowledges having received, read and understood the contents of the Key Fact Statement and Schedule 1 before e-signing.</p>
+  <p>The Borrower agrees that Aadhaar-based electronic signature of this Agreement shall constitute a valid and binding acceptance of all terms herein.</p>
+  <p>Application {{ v.application_number }} is sanctioned on {{ v.sanction_date }} for principal {{ v.principal }}, to be repaid as {{ v.repayment_amount }} on {{ v.repayment_date }}.</p>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <p>IN WITNESS WHEREOF, THE PARTIES HERETO HAVE ACCEPTED THIS AGREEMENT INCLUDING THE TERMS AND CONDITIONS STATED ABOVE ON THE DAY, MONTH AND YEAR MENTIONED BELOW.</p>
+  <p>Place: Delhi &nbsp;&nbsp;&nbsp; Date: {{ v.execution_date }}</p>
+  <div class="sign-wrap">
+    <p class="sign-label">Borrower Signature &amp; Date</p>
+    <div class="sign-box">&nbsp;</div>
+  </div>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <h2>SCHEDULE 1</h2>
+  <h3>Borrower details</h3>
+  <table class="data">
+    <tr><th class="num">Sr.</th><th>Particulars</th><th>Details</th></tr>
+    <tr><td class="num">1.</td><td class="label">Name of Borrower</td><td>{{ v.borrower_name }}</td></tr>
+    <tr><td class="num">2.</td><td class="label">Residential Address of Borrower</td><td>{{ v.address }}</td></tr>
+    <tr><td class="num">3.</td><td class="label">Office Address of Borrower</td><td>{{ v.office_address }}</td></tr>
+    <tr><td class="num">4.</td><td class="label">PAN</td><td>{{ v.pan }}</td></tr>
+    <tr><td class="num">5.</td><td class="label">Email ID</td><td>{{ v.email }}</td></tr>
+    <tr><td class="num">6.</td><td class="label">Phone / Mobile Number</td><td>{{ v.mobile }}</td></tr>
+  </table>
+  <h3>Loan details</h3>
+  <table class="data">
+    <tr><th class="num">Sr.</th><th>Particulars</th><th>Details</th></tr>
+    <tr><td class="num">1.</td><td class="label">Date of Loan Contract Execution</td><td>{{ v.execution_date }}</td></tr>
+    <tr><td class="num">2.</td><td class="label">Application ID</td><td>{{ v.application_number }}</td></tr>
+    <tr><td class="num">3.</td><td class="label">Sanction Date</td><td>{{ v.sanction_date }}</td></tr>
+    <tr><td class="num">4.</td><td class="label">Principal Loan Amount</td><td>{{ v.principal }}</td></tr>
+    <tr><td class="num">5.</td><td class="label">Rate of Interest (Per Day)</td><td>{{ v.interest_rate }}</td></tr>
+    <tr><td class="num">6.</td><td class="label">Processing Fee</td><td>{{ v.processing_fee }}</td></tr>
+    <tr><td class="num">7.</td><td class="label">GST on Processing Fee</td><td>{{ v.gst }}</td></tr>
+    <tr><td class="num">8.</td><td class="label">Amount to be Disbursed</td><td>{{ v.disbursal_amount }}</td></tr>
+    <tr><td class="num">9.</td><td class="label">Repayment Date</td><td>{{ v.repayment_date }}</td></tr>
+    <tr><td class="num">10.</td><td class="label">Repayment Amount</td><td>{{ v.repayment_amount }}</td></tr>
+    <tr><td class="num">11.</td><td class="label">Terms of the Loan</td><td>{{ v.tenure_days }}</td></tr>
+    <tr><td class="num">12.</td><td class="label">ECS / Cheque Return Charges per Event</td><td>Rs. 1,000.00 + Applicable Taxes</td></tr>
+    <tr><td class="num">13.</td><td class="label">Name of Borrower</td><td>{{ v.borrower_name }}</td></tr>
+  </table>
+  <div class="sign-wrap">
+    <div class="sign-box-bottom">&nbsp;</div>
+  </div>
+
+  <div class="page-break"></div>
+  <h1>BORROWER'S LOAN AGREEMENT</h1>
+  <h2>SCHEDULE 2 — KEY FACT STATEMENT</h2>
+  <p class="center muted">(Interest rate and fees / charges)</p>
+  <table class="data">
+    <tr><td class="num">1</td><td class="label">Loan proposal / account No.</td><td>{{ v.application_number }}</td></tr>
+    <tr><td class="num">2</td><td class="label">Type of Loan</td><td>Personal – Payday loan</td></tr>
+    <tr><td class="num">3</td><td class="label">Sanctioned Loan amount</td><td>{{ v.principal_rupee }}</td></tr>
+    <tr><td class="num">4</td><td class="label">Disbursement</td><td>Disbursement 100% upfront</td></tr>
+    <tr><td class="num">5</td><td class="label">Loan term</td><td>Loan tenure – {{ v.tenure_days|lower }}</td></tr>
+    <tr><td class="num">6</td><td class="label">Instalment details</td><td>Bullet payment — 01 EMI of {{ v.repayment_amount_rupee }} commencing after sanction</td></tr>
+    <tr><td class="num">7</td><td class="label">Interest rate (fixed)</td><td>{{ v.interest_rate }} – Fixed</td></tr>
+    <tr><td class="num">8</td><td class="label">Processing fees (one-time)</td><td>{{ v.processing_fee_rupee }}</td></tr>
+    <tr><td class="num">9</td><td class="label">Annual Percentage Rate (APR)</td><td>{{ v.apr }}</td></tr>
+    <tr><td class="num">10</td><td class="label">Penal charges for delayed payment</td><td>{{ v.late_interest_rate }}</td></tr>
+    <tr><td class="num">11</td><td class="label">Other penal / foreclosure / switching charges</td><td>Nil / Not applicable</td></tr>
+  </table>
+  <p class="muted">*Fixed reset, other than on account of changes in credit profile.</p>
+  <p>Place: The contract is deemed to have been concluded at Delhi, where the Lender has its registered office and from where the Loan transaction is controlled and approved.</p>
+  <div class="sign-wrap">
+    <div class="sign-box-bottom">&nbsp;</div>
+  </div>
+
+</body>
+</html>
