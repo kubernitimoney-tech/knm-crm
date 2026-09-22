@@ -437,9 +437,10 @@
 
 .public-pdf-page {
   display: block;
-  width: 100%;
+  width: auto !important;
+  max-width: none !important;
   height: auto;
-  margin: 0 0 8px;
+  margin: 0 auto 8px;
   background: #ffffff;
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
 }

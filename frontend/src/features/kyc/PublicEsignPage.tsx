@@ -456,7 +456,7 @@ export function PublicEsignPage() {
       ) : error && !session ? (
         <p className="px-4 py-24 text-center text-sm text-red-600">{error}</p>
       ) : session?.signed ? (
-        <div className="mx-auto max-w-2xl px-4 py-10">
+        <div className="mx-auto max-w-4xl px-4 py-10">
           <SuccessBadge />
           <p className="mt-4 text-center text-xl font-semibold text-[#2f9e86]">eSign completed</p>
           <p className="mt-2 text-center text-sm text-[#424665]">
@@ -554,7 +554,7 @@ export function PublicEsignPage() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-2xl px-4 py-6">
+        <div className="mx-auto max-w-4xl px-4 py-6">
           <h1 className="text-lg font-bold text-[#1f2130]">{brand}</h1>
           {session?.company_email ? (
             <p className="text-sm text-[#424665]">({session.company_email})</p>
