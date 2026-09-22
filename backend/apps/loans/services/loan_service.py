@@ -56,14 +56,25 @@ class LoanService:
         return raw
 
     @staticmethod
+    def _sequence_from_loan_account_number(value: str | None) -> int:
+        raw = (value or "").strip()
+        if raw.upper().startswith("KNM"):
+            raw = raw[3:].lstrip("-_")
+        elif raw.upper().startswith("LN"):
+            raw = raw[2:].lstrip("-_")
+        if raw.isdigit():
+            return int(raw)
+        return 0
+
+    @staticmethod
     def _next_loan_account_number() -> str:
-        last = Loan.all_objects.order_by("-created_at").first()
-        seq = 1
-        if last and last.loan_account_number:
-            digits = "".join(ch for ch in last.loan_account_number if ch.isdigit())
-            if digits:
-                seq = int(digits) + 1
-        return f"KNM{seq:08d}"
+        seq = 0
+        for value in Loan.all_objects.values_list("loan_account_number", flat=True).iterator():
+            seq = max(seq, LoanService._sequence_from_loan_account_number(value))
+        candidate = seq + 1
+        while Loan.all_objects.filter(loan_account_number=f"KNM{candidate:08d}").exists():
+            candidate += 1
+        return f"KNM{candidate:08d}"
 
     @staticmethod
     def _calculate_payday_amounts(

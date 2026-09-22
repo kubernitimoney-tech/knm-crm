@@ -41,13 +41,15 @@ class LeadServiceError(Exception):
 class LeadService:
     @staticmethod
     def _next_lead_id() -> str:
-        last = Lead.all_objects.order_by("-created_at").first()
-        seq = 1
-        if last and last.lead_id:
-            digits = "".join(ch for ch in last.lead_id if ch.isdigit())
-            if digits:
-                seq = int(digits) + 1
-        return f"{seq:06d}"
+        seq = 0
+        for value in Lead.all_objects.values_list("lead_id", flat=True).iterator():
+            raw = (value or "").strip()
+            if raw.isdigit():
+                seq = max(seq, int(raw))
+        candidate = seq + 1
+        while Lead.all_objects.filter(lead_id=f"{candidate:06d}").exists():
+            candidate += 1
+        return f"{candidate:06d}"
 
     @staticmethod
     def get_relationship_managers():

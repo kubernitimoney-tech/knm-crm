@@ -11,7 +11,7 @@ import {
   TableRow,
   TableLoadingRow,
 } from '@/components/ui/table';
-import { toast } from '@/components/ui/toast';
+import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   downloadAuthenticatedFile,
@@ -119,10 +119,7 @@ export function LeadEsignDetailsSection({
         });
       } else {
         toast({
-          title: 'E-sign request sent',
-          description: customerEmail
-            ? `Signing link emailed to ${customerEmail}. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.`
-            : 'Signing link created. After email OTP, the customer signs with Aadhaar OTP on the Aadhaar-linked mobile.',
+          title: sentEmailSuccessTitle('E-sign email', customerEmail),
           variant: 'success',
         });
       }

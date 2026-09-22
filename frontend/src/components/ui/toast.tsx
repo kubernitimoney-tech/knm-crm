@@ -1,4 +1,6 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -14,16 +16,30 @@ export interface ToastItem {
 
 type Listener = (toasts: ToastItem[]) => void;
 
-let toasts: ToastItem[] = [];
-let listeners: Listener[] = [];
-let nextId = 1;
+type ToastStore = {
+  toasts: ToastItem[];
+  listeners: Listener[];
+  nextId: number;
+};
+
+const TOAST_STORE_KEY = '__knmToastStore';
+
+function getStore(): ToastStore {
+  const globalRef = globalThis as typeof globalThis & { [TOAST_STORE_KEY]?: ToastStore };
+  if (!globalRef[TOAST_STORE_KEY]) {
+    globalRef[TOAST_STORE_KEY] = { toasts: [], listeners: [], nextId: 1 };
+  }
+  return globalRef[TOAST_STORE_KEY];
+}
 
 function emit() {
-  for (const listener of listeners) listener([...toasts]);
+  const store = getStore();
+  for (const listener of store.listeners) listener([...store.toasts]);
 }
 
 function dismiss(id: number) {
-  toasts = toasts.filter((t) => t.id !== id);
+  const store = getStore();
+  store.toasts = store.toasts.filter((item) => item.id !== id);
   emit();
 }
 
@@ -33,14 +49,15 @@ export function toast(input: {
   variant?: ToastVariant;
   duration?: number;
 }) {
+  const store = getStore();
   const item: ToastItem = {
-    id: nextId++,
+    id: store.nextId++,
     title: input.title,
     description: input.description,
     variant: input.variant ?? 'info',
-    duration: input.duration ?? 5000,
+    duration: input.duration ?? 6000,
   };
-  toasts = [...toasts, item];
+  store.toasts = [...store.toasts, item];
   emit();
   if (item.duration > 0) {
     setTimeout(() => dismiss(item.id), item.duration);
@@ -48,9 +65,17 @@ export function toast(input: {
   return item.id;
 }
 
+export function sentEmailSuccessTitle(label: string, email?: string | null) {
+  const address = (email || '').trim();
+  if (!address || address === '—') {
+    return `Success: ${label} has been sent`;
+  }
+  return `Success: ${label} has been sent to ${address}`;
+}
+
 const VARIANT_STYLES: Record<ToastVariant, { ring: string; icon: React.ReactNode }> = {
   success: {
-    ring: 'border-emerald-200 bg-emerald-50',
+    ring: 'border-emerald-300 bg-emerald-50',
     icon: <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />,
   },
   error: {
@@ -64,27 +89,29 @@ const VARIANT_STYLES: Record<ToastVariant, { ring: string; icon: React.ReactNode
 };
 
 export function Toaster() {
-  const [items, setItems] = useState<ToastItem[]>([]);
+  const [items, setItems] = useState<ToastItem[]>(() => [...getStore().toasts]);
 
   useEffect(() => {
+    const store = getStore();
     const listener: Listener = (next) => setItems(next);
-    listeners.push(listener);
+    store.listeners.push(listener);
+    setItems([...store.toasts]);
     return () => {
-      listeners = listeners.filter((l) => l !== listener);
+      store.listeners = store.listeners.filter((entry) => entry !== listener);
     };
   }, []);
 
-  if (items.length === 0) return null;
+  if (typeof document === 'undefined' || items.length === 0) return null;
 
-  return (
-    <div className="fixed top-5 right-5 z-[300] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
+  return createPortal(
+    <div className="fixed top-20 right-5 z-[400] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
       {items.map((item) => {
         const style = VARIANT_STYLES[item.variant];
         return (
           <div
             key={item.id}
             className={cn(
-              'pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-xl shadow-slate-300/30 animate-in slide-in-from-top-2 fade-in duration-300',
+              'pointer-events-auto flex items-start gap-3 rounded-2xl border p-4 shadow-xl shadow-slate-400/40 animate-in slide-in-from-top-2 fade-in duration-300',
               style.ring,
             )}
           >
@@ -106,6 +133,7 @@ export function Toaster() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

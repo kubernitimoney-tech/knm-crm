@@ -2,7 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from tests.factories import UserFactory, application_factory, customer_factory
+from tests.factories import UserFactory, application_factory, customer_factory, salary_bank_entries
 
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus
@@ -33,7 +33,11 @@ class TestSanctionRevision:
             approved_tenure_value=30,
             interest_rate=Decimal("24"),
             processing_fee=Decimal("500"),
-            sanction_details={"branch": "Delhi", "cibil_score": "750"},
+            sanction_details={
+                "branch": "Delhi",
+                "cibil_score": "750",
+                "salary_banks": salary_bank_entries(),
+            },
         )
 
         application.refresh_from_db()
@@ -60,6 +64,7 @@ class TestSanctionRevision:
                 "branch": "Delhi",
                 "cibil_score": "750",
                 "repayment_date": "2026-10-13",
+                "salary_banks": salary_bank_entries(),
             },
         )
 
@@ -140,6 +145,7 @@ class TestSanctionRevision:
             sanction_details={
                 "branch": "Delhi",
                 "official_email": "official@company.com",
+                "salary_banks": salary_bank_entries(),
             },
         )
 

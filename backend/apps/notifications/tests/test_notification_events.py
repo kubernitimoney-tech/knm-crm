@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from tests.factories import UserFactory, customer_factory
+from tests.factories import UserFactory, customer_factory, salary_bank_entries
 
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus, LoanApplication
@@ -142,6 +142,7 @@ class NotificationEventTests(TestCase):
             approved_tenure_value=30,
             interest_rate=Decimal("1"),
             processing_fee=Decimal("1000"),
+            sanction_details={"salary_banks": salary_bank_entries()},
         )
 
         notes = Notification.objects.filter(recipient=pm)
@@ -170,6 +171,7 @@ class NotificationEventTests(TestCase):
                 approved_tenure_value=30,
                 interest_rate=Decimal("1"),
                 processing_fee=Decimal("1000"),
+                sanction_details={"salary_banks": salary_bank_entries()},
             )
 
         send_email.assert_not_called()

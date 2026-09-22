@@ -123,3 +123,16 @@ def application_factory(customer=None, **kwargs):
         product=product,
         data=application_data,
     )
+
+
+def salary_bank_entries(*, account_number: str = "1111222233") -> list[dict[str, str]]:
+    from apps.organization.models import Bank
+
+    bank, _ = Bank.objects.get_or_create(name="HDFC Bank", defaults={"is_active": True})
+    return [
+        {
+            "bank_id": str(bank.id),
+            "bank_name": bank.name,
+            "account_number": account_number,
+        }
+    ]
