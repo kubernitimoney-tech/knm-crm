@@ -3,6 +3,9 @@ export interface LeadWorkflowReadiness {
   hasAddress: boolean;
   hasSanction: boolean;
   hasEsignCompleted: boolean;
+  /** Disbursal sheet exists or the loan is already disbursed. */
+  hasDisbursalSheet: boolean;
+  /** Loan has been disbursed. */
   hasDisbursal: boolean;
 }
 
@@ -17,6 +20,7 @@ const EMPTY_READINESS: LeadWorkflowReadiness = {
   hasAddress: false,
   hasSanction: false,
   hasEsignCompleted: false,
+  hasDisbursalSheet: false,
   hasDisbursal: false,
 };
 
@@ -74,7 +78,7 @@ export function getTabAccess(tab: string, readiness: LeadWorkflowReadiness): Tab
     }
 
     case 'disbursed': {
-      if (readiness.hasDisbursal) {
+      if (readiness.hasDisbursal || readiness.hasDisbursalSheet) {
         return { allowed: true };
       }
       const customerBlock = customerPrerequisiteBlock(readiness);
