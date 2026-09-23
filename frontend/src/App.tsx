@@ -17,11 +17,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
+    const path = window.location.pathname;
+    const isGuestPage = path.startsWith('/sign/') || path.startsWith('/verify-kyc/');
+    if (isGuestPage || !isDarkMode) {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = isGuestPage ? 'light' : '';
+      return;
     }
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = '';
   }, [isDarkMode]);
 
   return (

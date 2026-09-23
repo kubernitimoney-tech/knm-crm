@@ -97,8 +97,12 @@ export interface ApiLeadEsignRequest {
   requested_on: string;
   signed_on: string;
   signed_file_url: string | null;
+  sign_type: 'aadhaar' | 'electronic';
   request_url?: string | null;
+  review_url?: string | null;
   provider_request_id?: string | null;
+  email_sent?: boolean | null;
+  email_error?: string | null;
 }
 
 export interface ApiLeadVideoKycRequest {
@@ -110,6 +114,9 @@ export interface ApiLeadVideoKycRequest {
   requested_on: string;
   signed_on: string;
   recording_file_url: string | null;
+  selfie_file_url: string | null;
+  email_sent: boolean;
+  sms_sent: boolean;
   request_url?: string | null;
   provider_request_id?: string | null;
 }
@@ -128,6 +135,7 @@ export interface ApiLeadVideoKycDetail {
   approval_status: string;
   ids_found: {
     video: boolean;
+    selfie: boolean;
     aadhaar: boolean;
     pan: boolean;
   };
@@ -135,6 +143,7 @@ export interface ApiLeadVideoKycDetail {
   video_details: {
     geolocation: ApiLeadVideoKycGeolocation;
     recording_file_url: string | null;
+    selfie_file_url: string | null;
   };
   aadhaar_details: Record<string, string>;
   pan_details: Record<string, string>;
@@ -296,13 +305,41 @@ export async function downloadAuthenticatedFile(url: string, filename: string): 
   URL.revokeObjectURL(objectUrl);
 }
 
+export async function openAuthenticatedFileInNewTab(url: string): Promise<void> {
+  const preview = window.open('about:blank', '_blank');
+  try {
+    const blob = await fetchAuthenticatedFileBlob(url);
+    const objectUrl = URL.createObjectURL(blob);
+    if (preview && !preview.closed) {
+      preview.location.replace(objectUrl);
+      return;
+    }
+    window.open(objectUrl, '_blank', 'noopener');
+  } catch (error) {
+    preview?.close();
+    throw error;
+  }
+}
+
 export async function fetchAuthenticatedFileBlob(url: string): Promise<Blob> {
   const tokens = getStoredTokens();
   const response = await fetch(url, {
     headers: tokens?.access ? { Authorization: `Bearer ${tokens.access}` } : {},
   });
   if (!response.ok) {
-    throw new Error('Failed to load file');
+    let message = 'Failed to load file';
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        const payload = await response.json();
+        if (typeof payload?.message === 'string' && payload.message.trim()) {
+          message = payload.message;
+        }
+      } catch {
+        // keep default
+      }
+    }
+    throw new Error(message);
   }
   return response.blob();
 }
@@ -314,6 +351,11 @@ export async function deleteLeadDocument(leadId: string, documentId: string): Pr
 export function getLeadDocumentDownloadUrl(leadId: string, documentId: string): string {
   const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
   return `${base}/leads/${leadId}/documents/${documentId}/download/`;
+}
+
+export function getLeadEsignFileUrl(leadId: string, requestId: string): string {
+  const base = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+  return `${base}/leads/${leadId}/esign-requests/${requestId}/file/`;
 }
 
 export async function fetchLeadAddresses(leadId: string): Promise<ApiLeadAddress[]> {
@@ -453,8 +495,14 @@ export async function fetchLeadEsignRequests(leadId: string): Promise<ApiLeadEsi
   );
 }
 
-export async function sendLeadEsignRequest(leadId: string): Promise<ApiLeadEsignRequest> {
-  return apiPost<ApiLeadEsignRequest>(`/leads/${leadId}/esign-requests/`, {});
+export async function sendLeadEsignRequest(
+  leadId: string,
+  signType?: ApiLeadEsignRequest['sign_type'],
+): Promise<ApiLeadEsignRequest> {
+  return apiPost<ApiLeadEsignRequest>(
+    `/leads/${leadId}/esign-requests/`,
+    signType ? { sign_type: signType } : {},
+  );
 }
 
 export async function fetchLeadVideoKycRequests(
@@ -471,8 +519,12 @@ export async function fetchLeadEmployments(leadId: string): Promise<ApiLeadEmplo
   );
 }
 
-export async function sendLeadVideoKycRequest(leadId: string): Promise<ApiLeadVideoKycRequest> {
-  return apiPost<ApiLeadVideoKycRequest>(`/leads/${leadId}/video-kyc-requests/`, {});
+export async function sendLeadVideoKycRequest(
+  leadId: string,
+): Promise<ApiLeadVideoKycRequest> {
+  return apiPost<ApiLeadVideoKycRequest>(`/leads/${leadId}/video-kyc-requests/`, {
+    verification_method: 'mobile',
+  });
 }
 
 export async function fetchLeadVideoKycRequestDetail(
@@ -868,7 +920,7 @@ function buildSanctionDetailsPayload(payload: {
     residential_type: payload.residentialType,
     employment_type: payload.employmentType,
     loan_purpose: payload.loanPurpose,
-    ...(salaryBanks.length ? { salary_banks: salaryBanks } : {}),
+    salary_banks: salaryBanks,
     ...(primaryAccount ? { salary_account: primaryAccount } : {}),
     ...(salaryBanks.length
       ? { bank_name: salaryBanks.map((row) => row.bank_name).filter(Boolean).join(', ') }
@@ -1100,25 +1152,32 @@ export async function createLeadSanction(
     remarks: string;
     salaryBanks?: ApiSanctionSalaryBank[];
   },
-  options?: { product?: ApiLoanProduct | null; applicationId?: string | null },
+  options?: {
+    product?: ApiLoanProduct | null;
+    applicationId?: string | null;
+    bankHolidayLabels?: Record<string, string>;
+  },
 ): Promise<ApiLeadSanction> {
-  let application: NonNullable<Awaited<ReturnType<typeof getLeadApplication>>>;
-  if (options?.applicationId) {
-    application = await fetchApplication(options.applicationId);
-  } else {
-    ({ application } = await ensureLeadApplication(leadId, {
-      requestedAmount: payload.loanAmount,
-      productId: payload.productId,
-    }));
-  }
-  const submitted = await submitApplicationIfNeeded(application);
+  const applicationPromise = options?.applicationId
+    ? fetchApplication(options.applicationId)
+    : ensureLeadApplication(leadId, {
+        requestedAmount: payload.loanAmount,
+        productId: payload.productId,
+      }).then((result) => result.application);
+  const productPromise = options?.product
+    ? Promise.resolve(options.product)
+    : fetchProducts().then((items) => items.find((item) => item.id === payload.productId) ?? null);
+  const holidaysPromise = options?.bankHolidayLabels
+    ? Promise.resolve(options.bankHolidayLabels)
+    : fetchBankHolidayLabelMap();
+  const [loadedApplication, product, bankHolidayLabels] = await Promise.all([
+    applicationPromise,
+    productPromise,
+    holidaysPromise,
+  ]);
+  const submitted = await submitApplicationIfNeeded(loadedApplication);
   const sanctionDetails = buildSanctionDetailsPayload(payload);
-  const product =
-    options?.product ??
-    (await fetchProducts()).find((item) => item.id === payload.productId) ??
-    null;
   const tenureLimits = resolveRepaymentTenureLimits(product);
-  const bankHolidayLabels = await fetchBankHolidayLabelMap();
   const repaymentValidationError = validateSanctionRepaymentDate(
     payload.repaymentDate,
     tenureLimits,

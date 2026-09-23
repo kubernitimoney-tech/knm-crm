@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui/toast';
+import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { getApiErrorMessage } from '@/lib/api';
 import { sendSanctionApprovedEmail } from '@/lib/applicationsApi';
 import {
@@ -122,6 +122,8 @@ interface LeadLoanSanctionSectionProps {
   canUpdate?: boolean;
   /** Admin / Super Admin only — ROI and processing fee % */
   canEditPricingFields?: boolean;
+  /** Super Admin / Production Manager only — loan product dropdown */
+  canChangeProduct?: boolean;
   onCancel?: () => void;
   onSaved?: (record: ApiLeadSanction) => void;
   onSanctionStateChange?: (hasSanction: boolean) => void;
@@ -287,6 +289,7 @@ export function LeadLoanSanctionSection({
   canCreate = false,
   canUpdate = false,
   canEditPricingFields = false,
+  canChangeProduct = false,
   onCancel,
   onSaved,
   onSanctionStateChange,
@@ -307,7 +310,6 @@ export function LeadLoanSanctionSection({
     loanPurpose: defaultLoanPurpose ?? '',
     residentialType: defaultResidentialType ?? '',
   });
-  const [lockProductSelection, setLockProductSelection] = useState(false);
   const [productPricing, setProductPricing] = useState<ApiLoanProduct | null>(null);
   const [productPricingLoading, setProductPricingLoading] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
@@ -331,8 +333,7 @@ export function LeadLoanSanctionSection({
   }, [sanctionRecord?.application_id]);
 
   const gstRatePercent = productPricing?.gst_percentage ?? '18';
-  const canEditProductSelection = canCreate || canUpdate || canEditPricingFields;
-  const showProductDropdown = !lockProductSelection || canEditProductSelection;
+  const showProductDropdown = canChangeProduct;
   const readOnlyFieldClass =
     'h-8 text-[11px] bg-slate-100 dark:bg-slate-900 cursor-not-allowed';
 
@@ -501,14 +502,12 @@ export function LeadLoanSanctionSection({
         ({
           products: loadedProducts,
           initialProductId,
-          lockProductSelection: locked,
           selectedProduct,
           defaultLoanPurpose: loadedLoanPurpose,
           defaultResidentialType: loadedResidentialType,
         }) => {
         if (cancelled) return;
         setProducts(loadedProducts);
-        setLockProductSelection(locked);
         setProductPricing(selectedProduct);
         setLeadDefaults({
           loanPurpose: loadedLoanPurpose,
@@ -590,6 +589,7 @@ export function LeadLoanSanctionSection({
   }, [form.loanAmount, form.pfPercentage, gstRatePercent]);
 
   const handleProductChange = (productId: string) => {
+    if (!canChangeProduct) return;
     const product = products.find((item) => item.id === productId) ?? null;
     setProductPricing(product);
     const limits = resolveRepaymentTenureLimits(product);
@@ -767,7 +767,11 @@ export function LeadLoanSanctionSection({
         loanPurpose: form.loanPurpose,
         remarks: form.remarks.trim(),
         salaryBanks: bankIdsToApiSalaryBanks(form.salaryBankIds, banks),
-      }, { product: productPricing, applicationId: applicationId ?? undefined });
+      }, {
+        product: productPricing,
+        applicationId: applicationId ?? undefined,
+        bankHolidayLabels,
+      });
       if (record.application_id) {
         setResolvedApplicationId(record.application_id);
       }
@@ -788,14 +792,21 @@ export function LeadLoanSanctionSection({
   };
 
   const handleSendSanctionEmail = async () => {
-    if (!resolvedApplicationId) return;
+    const applicationIdToSend = resolvedApplicationId || sanctionRecord?.application_id || applicationId;
+    const recipientEmail = submitted?.officialEmail || form.officialEmail || defaultEmail;
+    if (!applicationIdToSend) {
+      toast({
+        title: 'Failed to send sanction email',
+        description: 'Application is missing.',
+        variant: 'error',
+      });
+      return;
+    }
     setIsSendingSanctionEmail(true);
     try {
-      await sendSanctionApprovedEmail(resolvedApplicationId);
+      await sendSanctionApprovedEmail(applicationIdToSend);
       toast({
-        title: 'Sanction email sent',
-        description:
-          'The mail server accepted the message. Check the customer inbox and spam. It will not appear in Outlook/Hotmail Sent items.',
+        title: sentEmailSuccessTitle('Sanction email', recipientEmail),
         variant: 'success',
       });
     } catch (error) {
@@ -827,6 +838,7 @@ export function LeadLoanSanctionSection({
                 <SectionMailButton
                   onClick={handleSendSanctionEmail}
                   disabled={isSendingSanctionEmail}
+                  loading={isSendingSanctionEmail}
                   title="Send sanction email"
                 />
               ) : null}

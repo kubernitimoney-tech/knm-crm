@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Download, ExternalLink, Mail } from 'lucide-react';
+import { Download, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 import { Badge } from '@/components/ui/badge';
@@ -11,15 +11,16 @@ import {
   TableRow,
   TableLoadingRow,
 } from '@/components/ui/table';
-import { toast } from '@/components/ui/toast';
+import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   fetchLeadVideoKycRequests,
   sendLeadVideoKycRequest,
   type ApiLeadVideoKycRequest,
 } from '@/lib/leadDetailsApi';
-import { esignRequestStatusDisplay } from '@/lib/badgeStyles';
+import { videoKycRequestStatusDisplay } from '@/lib/badgeStyles';
 import { formatPersonName } from '@/lib/utils';
+import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import {
   EmptyTableRow,
   SectionTable,
@@ -37,7 +38,7 @@ export interface LeadVideoKycEntry {
   requestedOn: string;
   signedOn: string;
   recordingFileUrl: string | null;
-  requestUrl: string | null;
+  selfieFileUrl: string | null;
 }
 
 interface LeadVideoKycDetailsSectionProps {
@@ -53,10 +54,10 @@ function mapApiEntry(entry: ApiLeadVideoKycRequest): LeadVideoKycEntry {
     status: entry.status,
     requestedBy: entry.requested_by_name,
     videoLabel: entry.video,
-    requestedOn: entry.requested_on,
-    signedOn: entry.signed_on,
+    requestedOn: formatAppDateTimeOrFallback(entry.requested_on),
+    signedOn: formatAppDateTimeOrFallback(entry.signed_on),
     recordingFileUrl: entry.recording_file_url,
-    requestUrl: entry.request_url || null,
+    selfieFileUrl: entry.selfie_file_url,
   };
 }
 
@@ -99,13 +100,20 @@ export function LeadVideoKycDetailsSection({
     try {
       const created = await sendLeadVideoKycRequest(leadId);
       setEntries((prev) => [mapApiEntry(created), ...prev]);
-      toast({
-        title: 'Video KYC request sent',
-        description: customerEmail
-          ? `Digio video KYC created for ${customerEmail}. Open the link from the row to start the sandbox session.`
-          : 'Digio video KYC created. Open the link from the row to start the sandbox session.',
-        variant: 'success',
-      });
+      if (created.email_sent) {
+        toast({
+          title: sentEmailSuccessTitle('Video KYC email', customerEmail),
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: 'Failed to send Video KYC email',
+          description: customerEmail
+            ? `Video KYC was created, but the email to ${customerEmail} could not be sent.`
+            : 'Video KYC was created, but the email could not be sent.',
+          variant: 'error',
+        });
+      }
     } catch (err) {
       toast({
         title: 'Request failed',
@@ -121,14 +129,15 @@ export function LeadVideoKycDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Send video KYC session links and track completion status.
+          Uses the “AadharPAN with selfie and OCR” DigiStudio workflow to collect DigiLocker
+          identity data, selfie/video and OCR results.
         </p>
         {canSendRequest ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
-            onClick={handleSendRequest}
+            onClick={() => void handleSendRequest()}
             disabled={isSending}
             title="Request Video KYC"
           >
@@ -154,11 +163,7 @@ export function LeadVideoKycDetailsSection({
             <EmptyTableRow colSpan={5} message="No video KYC requests sent yet." />
           ) : (
             entries.map((entry) => {
-              const statusDisplay = esignRequestStatusDisplay(entry.status);
-              const canOpenKycSession =
-                Boolean(entry.requestUrl) &&
-                entry.status !== 'completed' &&
-                entry.status !== 'expired';
+              const statusDisplay = videoKycRequestStatusDisplay(entry.status);
               return (
               <TableRow key={entry.id} className="border-b border-slate-50 dark:border-slate-850">
                 <TableCell>
@@ -171,22 +176,6 @@ export function LeadVideoKycDetailsSection({
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {canOpenKycSession && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        title="Open Digio video KYC session"
-                        onClick={() => {
-                          if (entry.requestUrl) {
-                            window.open(entry.requestUrl, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                      >
-                        <ExternalLink size={12} className="mr-1" />
-                        Open
-                      </Button>
-                    )}
                     {canViewDocument && (
                       <RowViewButton
                         title="View video KYC details"
@@ -199,10 +188,14 @@ export function LeadVideoKycDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        disabled={entry.status !== 'completed' || !entry.recordingFileUrl}
+                        disabled={
+                          entry.status !== 'completed' ||
+                          (!entry.recordingFileUrl && !entry.selfieFileUrl)
+                        }
                         onClick={() => {
-                          if (entry.recordingFileUrl) {
-                            window.open(entry.recordingFileUrl, '_blank', 'noopener,noreferrer');
+                          const mediaUrl = entry.recordingFileUrl || entry.selfieFileUrl;
+                          if (mediaUrl) {
+                            window.open(mediaUrl, '_blank', 'noopener,noreferrer');
                           }
                         }}
                       >
@@ -210,7 +203,7 @@ export function LeadVideoKycDetailsSection({
                         Download
                       </Button>
                     )}
-                    {!canOpenKycSession && !canViewDocument && !canDownloadDocument && (
+                    {!canViewDocument && !canDownloadDocument && (
                       <span className="text-[11px] text-slate-400">—</span>
                     )}
                   </div>

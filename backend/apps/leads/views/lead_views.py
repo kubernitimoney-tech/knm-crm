@@ -16,7 +16,11 @@ from apps.accounts.permissions import (
     require_rbac,
 )
 from apps.accounts.services.permission_cache import resolve_user_permissions
-from apps.accounts.services.role_helpers import is_admin_user, is_super_admin
+from apps.accounts.services.role_helpers import (
+    can_change_sanction_product,
+    is_admin_user,
+    is_super_admin,
+)
 from apps.applications.services.sanction_fee_service import SanctionFeeService
 from apps.collections.models import CollectionActivityType
 from apps.collections.services.collection_activity_service import CollectionActivityService
@@ -190,10 +194,15 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
         serializer = LeadConvertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            product = LoanProduct.objects.get(
-                id=serializer.validated_data["product_id"],
-                is_active=True,
-            )
+            if can_change_sanction_product(request.user):
+                product = LoanProduct.objects.get(
+                    id=serializer.validated_data["product_id"],
+                    is_active=True,
+                )
+            else:
+                product = LeadConversionService._resolve_product(lead)
+                if product is None:
+                    raise LoanProduct.DoesNotExist
         except LoanProduct.DoesNotExist:
             return error_response(message="Product not found", status_code=404)
         try:

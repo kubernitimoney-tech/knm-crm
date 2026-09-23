@@ -37,7 +37,7 @@ export interface DatePickerProps {
   openTo?: 'year' | 'month' | 'day';
   /** Disable Sundays and/or bank holidays from the bank holiday master. */
   availability?: CalendarAvailabilityOptions;
-  /** Lock calendar navigation and visible days to minDate–maxDate only. */
+  /** Lock month navigation to minDate–maxDate. Out-of-range days stay visible but disabled. */
   boundedRange?: boolean;
 }
 

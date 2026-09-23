@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import logging
+import threading
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from apps.accounts.services.role_helpers import (
@@ -41,6 +46,57 @@ class NotificationService:
         return None
 
     @staticmethod
+    def _normalize_email(value) -> str | None:
+        email = (value or "").strip()
+        return email or None
+
+    @classmethod
+    def _mailbox_email(cls, setting_name: str, default: str) -> str | None:
+        return cls._normalize_email(getattr(settings, setting_name, "") or default)
+
+    @classmethod
+    def _official_email(cls, application, *, decision=None) -> str | None:
+        if decision is None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        details = dict(decision.sanction_details or {}) if decision else {}
+        return cls._normalize_email(details.get("official_email") or details.get("officialEmail"))
+
+    @classmethod
+    def _unique_emails(cls, *emails) -> list[str]:
+        addresses: list[str] = []
+        seen: set[str] = set()
+        for email in emails:
+            if not email:
+                continue
+            key = email.lower()
+            if key not in seen:
+                seen.add(key)
+                addresses.append(email)
+        return addresses
+
+    @classmethod
+    def _sanction_to_addresses(cls, application, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._customer_email(application),
+            cls._official_email(application, decision=decision),
+            cls._mailbox_email("SANCTION_MAILBOX_EMAIL", "sanction@kubernitimoney.com"),
+        )
+
+    @classmethod
+    def _sanction_cc_addresses(cls, application=None, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._mailbox_email("CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"),
+        )
+
+    @classmethod
+    def _disbursal_cc_addresses(cls, application=None, *, decision=None) -> list[str]:
+        return cls._unique_emails(
+            cls._mailbox_email("CONFIRMATION_MAILBOX_EMAIL", "confirmation@kubernitimoney.com"),
+        )
+
+    @staticmethod
     def _assigned_officer_emails(application) -> list[str]:
         """Assigned RM/CM emails for customer-facing mail CC."""
         emails: list[str] = []
@@ -53,6 +109,17 @@ class NotificationService:
         return emails
 
     @staticmethod
+    def _as_decimal(value, default="0") -> Decimal:
+        if value in (None, ""):
+            return Decimal(default)
+        if isinstance(value, Decimal):
+            return value
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return Decimal(default)
+
+    @staticmethod
     def _format_amount(value) -> str:
         if value in (None, ""):
             return ""
@@ -60,6 +127,210 @@ class NotificationService:
             return f"{float(value):,.2f}"
         except (TypeError, ValueError):
             return str(value)
+
+    @staticmethod
+    def _format_whole_amount(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            number = Decimal(str(value)).quantize(Decimal("1"))
+            return f"{int(number):,}"
+        except (InvalidOperation, TypeError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _format_daily_rate(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            number = Decimal(str(value))
+        except (TypeError, ValueError):
+            return str(value)
+        if number == number.to_integral_value():
+            return f"{int(number)}%"
+        return f"{number.normalize()}%"
+
+    @staticmethod
+    def _ordinal_day(day: int) -> str:
+        if 11 <= day <= 13:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+        return f"{day}{suffix}"
+
+    @classmethod
+    def _format_letter_datetime(cls, value) -> str:
+        if value is None:
+            value = timezone.localtime()
+        if isinstance(value, datetime):
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
+            time_part = value.strftime("%I:%M %p").lstrip("0")
+            return f"{cls._ordinal_day(value.day)} {value.strftime('%B, %Y')} - {time_part}"
+        if isinstance(value, date):
+            return f"{cls._ordinal_day(value.day)} {value.strftime('%B, %Y')}"
+        return str(value)
+
+    @staticmethod
+    def _format_due_date(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            value = timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+        if isinstance(value, date):
+            return value.strftime("%d.%m.%Y")
+        return str(value)
+
+    @staticmethod
+    def _format_rate_per_day(value) -> str:
+        if value in (None, ""):
+            return ""
+        try:
+            return f"{float(value):.2f}% per day"
+        except (TypeError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _format_tenure(days) -> str:
+        try:
+            count = int(days or 0)
+        except (TypeError, ValueError):
+            return str(days or "")
+        if count <= 0:
+            return ""
+        return f"{count} day" if count == 1 else f"{count} days"
+
+    @classmethod
+    def _customer_mobile(cls, application) -> str:
+        customer = getattr(application, "customer", None)
+        if customer and getattr(customer, "mobile_number", None):
+            return str(customer.mobile_number).strip()
+        return ""
+
+    @classmethod
+    def _sanction_letter_context(cls, application, *, decision=None) -> dict:
+        from apps.applications.services.sanction_fee_service import SanctionFeeService
+        from apps.loans.services.loan_calculation_service import LoanCalculationService
+
+        if decision is None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        loan = None
+        try:
+            loan = application.loan
+        except ObjectDoesNotExist:
+            loan = None
+        details = dict(decision.sanction_details or {}) if decision else {}
+        customer_label = cls._customer_label(application.customer)
+        product_name = application.product.name if application.product_id else ""
+
+        approved_amount = (
+            decision.approved_amount
+            if decision and decision.approved_amount is not None
+            else application.approved_amount
+        )
+        interest_rate = None
+        if decision and decision.interest_rate is not None:
+            interest_rate = decision.interest_rate
+        elif application.product_id:
+            interest_rate = application.product.interest_rate
+
+        net = SanctionFeeService.net_disbursal_for_application(application)
+        repayment_date = LoanCalculationService.resolve_repayment_date(
+            application=application,
+            loan=loan,
+            decision=decision,
+        )
+        tenure_days = LoanCalculationService.compute_contract_tenure_days(
+            repayment_date=repayment_date,
+            disbursal_date=LoanCalculationService.resolve_actual_disbursal_date(loan=loan),
+            disbursal_sheet_sent_date=LoanCalculationService.resolve_sheet_sent_date(
+                application=application
+            ),
+            sanction_date=LoanCalculationService.resolve_sanction_date(
+                application=application,
+                decision=decision,
+            ),
+        )
+        if tenure_days <= 0:
+            if decision and decision.approved_tenure_value:
+                tenure_days = decision.approved_tenure_value
+            elif application.tenure_value:
+                tenure_days = application.tenure_value
+
+        principal = cls._as_decimal(approved_amount)
+        roi = cls._as_decimal(interest_rate)
+        metrics = LoanCalculationService.compute_summary(
+            principal_amount=principal,
+            roi_percent=roi,
+            contract_tenure_days=tenure_days,
+            due_date=repayment_date,
+        )
+        penalty_rate = LoanCalculationService.resolve_penalty_rate_percent(
+            loan=loan,
+            application=application,
+        )
+        if penalty_rate <= 0:
+            penalty_rate = Decimal("1.00")
+
+        letter_at = None
+        if decision and decision.decided_at:
+            letter_at = decision.decided_at
+        elif application.decided_at:
+            letter_at = application.decided_at
+
+        processing_fee = net.get("processing_fee")
+        if decision and decision.processing_fee is not None:
+            processing_fee = str(decision.processing_fee)
+        gst = net.get("gst") or details.get("gst") or details.get("admin_gst")
+
+        from apps.applications.services.application_service import ApplicationService
+
+        return {
+            "customer_name": customer_label,
+            "customer_mobile": cls._customer_mobile(application),
+            "application_number": ApplicationService.display_application_number(
+                application.application_number
+            ),
+            "product_name": product_name,
+            "letter_datetime": cls._format_letter_datetime(letter_at),
+            "approved_amount": cls._format_amount(approved_amount),
+            "interest_rate": cls._format_rate_per_day(interest_rate),
+            "tenure": cls._format_tenure(tenure_days),
+            "processing_fee": cls._format_amount(processing_fee),
+            "gst": cls._format_amount(gst),
+            "net_disbursed_amount": cls._format_amount(net.get("amount_to_be_disbursed")),
+            "repayment_amount": cls._format_amount(metrics.repay_amount),
+            "due_date": cls._format_due_date(repayment_date),
+            "penalty_rate": cls._format_rate_per_day(penalty_rate),
+            "bounce_penalty": "1,000.00",
+            "repayment_mode": ("UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"),
+            "payment_structure": 'Bullet Payment (as per "BLA")',
+        }
+
+    @classmethod
+    def _from_email(cls, setting_name: str, default: str) -> str:
+        from email.utils import formataddr, parseaddr
+
+        raw = cls._mailbox_email(setting_name, default) or default
+        name, addr = parseaddr(raw)
+        if not addr:
+            return raw
+        brand = getattr(settings, "BRAND_NAME", "Kuberniti Money")
+        return formataddr((name or brand, addr))
+
+    @staticmethod
+    def _uses_local_email_backend() -> bool:
+        backend = (getattr(settings, "EMAIL_BACKEND", "") or "").strip()
+        return backend.endswith(
+            (
+                "locmem.EmailBackend",
+                "dummy.EmailBackend",
+                "console.EmailBackend",
+                "inmemory.EmailBackend",
+            )
+        )
 
     @classmethod
     def _send_email_on_commit(
@@ -70,12 +341,13 @@ class NotificationService:
         context,
         recipients,
         cc=None,
+        from_email=None,
+        attachments=None,
         raise_on_error=False,
     ) -> None:
-        """Send an email once the surrounding DB transaction commits.
+        """Queue SMTP after commit so staff APIs are not blocked by Gmail.
 
-        When ``raise_on_error`` is true the send runs immediately and SMTP
-        failures propagate so API callers are not told the mail succeeded.
+        Locmem/console backends still send inline so tests see the message.
         """
         recipients = [email for email in recipients if email]
         cc = [email for email in (cc or []) if email]
@@ -95,11 +367,14 @@ class NotificationService:
                     context=context or {},
                     recipients=recipients,
                     cc=cc,
+                    from_email=from_email,
+                    attachments=attachments,
                 )
                 if sent:
                     logger.info(
-                        "Sent email %r to %s (cc=%s)",
+                        "Sent email %r from %s to %s (cc=%s)",
                         subject,
+                        from_email,
                         recipients,
                         cc or [],
                     )
@@ -113,10 +388,14 @@ class NotificationService:
                 if raise_on_error:
                     raise
 
-        if raise_on_error:
+        if cls._uses_local_email_backend():
             _send()
             return
-        transaction.on_commit(_send)
+
+        def _queue() -> None:
+            threading.Thread(target=_send, name="knm-email-send", daemon=True).start()
+
+        transaction.on_commit(_queue)
 
     @classmethod
     def notify_user(cls, user, *, title: str, body: str, metadata: dict | None = None) -> None:
@@ -207,35 +486,178 @@ class NotificationService:
         cls.notify_users(managers, title=title, body=body, metadata=metadata)
 
     @classmethod
-    def send_sanction_approved_email(cls, application, *, decision=None) -> None:
-        """Email customer with assigned RM/CM in CC (manual trigger)."""
-        customer_label = cls._customer_label(application.customer)
-        product_name = application.product.name if application.product_id else ""
+    def send_sanction_approved_email(
+        cls, application, *, decision=None, raise_on_error=True
+    ) -> None:
+        """Email the customer and internal sanction/confirmation mailboxes."""
         if decision is None:
             decision = (
                 application.decisions.filter(decision="approved").order_by("-decided_at").first()
             )
-        approved_amount = (
-            decision.approved_amount
-            if decision and decision.approved_amount is not None
-            else application.approved_amount
-        )
         customer_email = cls._customer_email(application)
         if not customer_email:
-            raise ValueError(
+            message = (
                 "This customer has no email address. Add one before sending the sanction email."
             )
+            if raise_on_error:
+                raise ValueError(message)
+            logger.info(
+                "Skipping sanction email; no customer email for application %s",
+                getattr(application, "application_number", application.pk),
+            )
+            return
+        try:
+            context = cls._sanction_letter_context(application, decision=decision)
+            cls._send_email_on_commit(
+                subject=(
+                    f"Sanction Approval by Credit Team of Kuberniti Money — "
+                    f"{application.application_number}"
+                ),
+                template="sanction_approved",
+                context=context,
+                recipients=cls._sanction_to_addresses(application, decision=decision),
+                cc=cls._sanction_cc_addresses(),
+                from_email=cls._from_email("SANCTION_FROM_EMAIL", "sanction@kubernitimoney.com"),
+                raise_on_error=raise_on_error,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send sanction email for application %s",
+                getattr(application, "application_number", application.pk),
+            )
+            if raise_on_error:
+                raise
+
+    @classmethod
+    def send_esign_request_email(
+        cls,
+        *,
+        lead,
+        request_url: str,
+        recipient_email: str = "",
+        sign_type: str = "electronic",
+    ) -> None:
+        """Email the guest signing link. Do not send Digio Drive login URLs."""
+        customer = getattr(lead, "customer", None)
+        customer_label = cls._customer_label(customer)
+        email = (recipient_email or getattr(customer, "email", None) or "").strip()
+        if not email:
+            raise ValueError("This customer has no email address. Add one before sending e-sign.")
+        if not (request_url or "").strip():
+            raise ValueError("E-sign signing link is missing.")
         cls._send_email_on_commit(
-            subject=f"Your loan application has been approved — {application.application_number}",
-            template="sanction_approved",
+            subject="Please complete KYC process of Kuberniti Money with Har Shreejee Finance & Leasing Company Limited.",
+            template="esign_request",
             context={
                 "customer_name": customer_label,
-                "application_number": application.application_number,
-                "product_name": product_name,
-                "approved_amount": cls._format_amount(approved_amount),
+                "lead_id": lead.lead_id,
+                "signing_url": request_url.strip(),
+                "sign_method": (
+                    "Aadhaar OTP" if sign_type == "aadhaar" else "OTP sent to your registered email"
+                ),
             },
-            recipients=[customer_email],
-            cc=cls._assigned_officer_emails(application),
+            recipients=[email],
+            raise_on_error=True,
+        )
+
+    @staticmethod
+    def esign_document_reference(row) -> str:
+        raw = (getattr(row, "provider_request_id", "") or "").strip() or str(
+            getattr(row, "id", "") or ""
+        )
+        cleaned = "".join(ch for ch in raw if ch.isalnum())
+        return cleaned or "SignedDocument"
+
+    @classmethod
+    def _format_esign_signed_date(cls, value) -> str:
+        if value is None:
+            value = timezone.localtime()
+        if isinstance(value, datetime):
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
+            return f"{value.strftime('%B')} {value.day}, {value.year}"
+        if isinstance(value, date):
+            return f"{value.strftime('%B')} {value.day}, {value.year}"
+        return str(value)
+
+    @classmethod
+    def send_esign_signed_copy_email(cls, *, row, pdf_bytes: bytes) -> None:
+        """Email the customer a copy of the executed e-sign PDF."""
+        if not pdf_bytes:
+            raise ValueError("Signed document bytes are missing.")
+        lead = getattr(row, "lead", None)
+        customer = getattr(lead, "customer", None)
+        email = (
+            getattr(row, "recipient_email", "") or getattr(customer, "email", "") or ""
+        ).strip()
+        if not email:
+            raise ValueError("This customer has no email address.")
+        reference = cls.esign_document_reference(row)
+        filename = f"{reference}_signedFinal.pdf"
+        cls._send_email_on_commit(
+            subject="Document Successfully Signed",
+            template="esign_signed",
+            context={
+                "customer_name": cls._customer_label(customer),
+                "document_reference": reference,
+                "signed_date": cls._format_esign_signed_date(getattr(row, "signed_at", None)),
+                "attachment_name": filename,
+            },
+            recipients=[email],
+            attachments=[(filename, pdf_bytes, "application/pdf")],
+            raise_on_error=True,
+        )
+
+    @classmethod
+    def send_video_kyc_request_email(
+        cls,
+        *,
+        lead,
+        request_url: str,
+        recipient_email: str = "",
+    ) -> None:
+        customer = getattr(lead, "customer", None)
+        customer_label = cls._customer_label(customer)
+        email = (recipient_email or getattr(customer, "email", None) or "").strip()
+        if not email:
+            raise ValueError("This customer has no email address. Add one before sending KYC.")
+        if not (request_url or "").strip():
+            raise ValueError("Video KYC link is missing.")
+        cls._send_email_on_commit(
+            subject=(
+                "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+                "& Leasing Company Limited."
+            ),
+            template="esign_request",
+            context={
+                "customer_name": customer_label,
+                "lead_id": lead.lead_id,
+                "signing_url": request_url.strip(),
+            },
+            recipients=[email],
+            raise_on_error=True,
+        )
+
+    @classmethod
+    def send_video_kyc_completed_email(cls, *, row) -> None:
+        """Email the customer after Video KYC is completed."""
+        lead = getattr(row, "lead", None)
+        customer = getattr(lead, "customer", None)
+        email = (
+            getattr(row, "recipient_email", "") or getattr(customer, "email", "") or ""
+        ).strip()
+        if not email:
+            raise ValueError("This customer has no email address.")
+        reference = cls.esign_document_reference(row)
+        cls._send_email_on_commit(
+            subject="Video KYC Successfully Completed",
+            template="video_kyc_completed",
+            context={
+                "customer_name": cls._customer_label(customer),
+                "document_reference": reference,
+                "signed_date": cls._format_esign_signed_date(getattr(row, "completed_at", None)),
+            },
+            recipients=[email],
             raise_on_error=True,
         )
 
@@ -256,21 +678,86 @@ class NotificationService:
         account_users = get_active_users_with_role_slug(ACCOUNT_FINANCE_SLUG)
         cls.notify_users(account_users, title=title, body=body, metadata=metadata)
 
-        details = application.disbursal_sheet_details or {}
-        customer_email = cls._customer_email(application)
+    @classmethod
+    def _disbursal_repayment_amount(cls, *, loan, application, metrics) -> Decimal:
+        """Contract repayment: sanction figure, else principal + daily interest × tenure."""
+        decision = None
+        if application is not None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        details = dict(decision.sanction_details or {}) if decision else {}
+        for key in ("repay_amount", "repayment_amount"):
+            stored = details.get(key)
+            if stored not in (None, ""):
+                amount = cls._as_decimal(stored)
+                if amount > 0:
+                    return amount
+        if metrics.repay_amount and metrics.tenure_days > 0:
+            return metrics.repay_amount
+        principal = loan.principal_amount or Decimal("0")
+        if loan.total_repayable and loan.total_repayable > principal:
+            return loan.total_repayable
+        return metrics.repay_amount
+
+    @classmethod
+    def send_loan_disbursed_email(cls, *, loan, application=None) -> None:
+        """Email the customer when disbursement is completed."""
+        from apps.core.amount_words import indian_amount_in_words
+        from apps.loans.services.loan_calculation_service import LoanCalculationService
+        from apps.loans.services.loan_service import LoanService
+
+        application = application or None
+        if application is None:
+            try:
+                application = loan.application
+            except ObjectDoesNotExist:
+                application = None
+        customer_email = cls._customer_email(application) if application else None
         if not customer_email:
+            customer = getattr(loan, "customer", None)
+            customer_email = cls._normalize_email(getattr(customer, "email", None))
+        if not customer_email:
+            logger.info(
+                "Skipping loan-disbursed email; no customer email for loan %s",
+                getattr(loan, "loan_account_number", loan.pk),
+            )
             return
+
+        customer_label = cls._customer_label(
+            application.customer if application else getattr(loan, "customer", None)
+        )
+        if application:
+            metrics = LoanCalculationService.compute_for_application(application, loan=loan)
+        else:
+            metrics = LoanCalculationService.compute_summary(
+                principal_amount=loan.principal_amount or Decimal("0"),
+                roi_percent=loan.interest_rate or Decimal("0"),
+                disbursed_at=loan.disbursed_at,
+                due_date=loan.due_date,
+            )
+        principal = loan.principal_amount
+        repayment_amount = cls._disbursal_repayment_amount(
+            loan=loan,
+            application=application,
+            metrics=metrics,
+        )
+        tenure_days = metrics.tenure_days or ""
         cls._send_email_on_commit(
-            subject=f"Disbursal In Progress — {application.application_number}",
-            template="disbursal_sheet_sent",
+            subject="Kuberniti Money - Loan Disbursed",
+            template="loan_disbursed",
             context={
                 "customer_name": customer_label,
-                "application_number": application.application_number,
-                "amount_to_be_disbursed": cls._format_amount(details.get("amount_to_be_disbursed")),
-                "bank_name": details.get("bank_name") or "",
+                "loan_number": LoanService.display_loan_account_number(loan.loan_account_number),
+                "principal_amount": cls._format_whole_amount(principal),
+                "interest_rate": cls._format_daily_rate(loan.interest_rate),
+                "tenure_days": str(tenure_days),
+                "repayment_amount": cls._format_whole_amount(repayment_amount),
+                "repayment_amount_words": indian_amount_in_words(repayment_amount),
             },
             recipients=[customer_email],
-            cc=cls._assigned_officer_emails(application),
+            cc=cls._disbursal_cc_addresses(),
+            from_email=cls._from_email("DISBURSAL_FROM_EMAIL", "disbursal@kubernitimoney.com"),
         )
 
     @classmethod

@@ -1,5 +1,5 @@
 import { memo, useMemo } from 'react';
-import { DayPicker, Day, DayButton, type DateRange, type DayButtonProps, type DayProps, type Matcher } from 'react-day-picker';
+import { DayPicker, DayButton, type DateRange, type DayButtonProps, type Matcher } from 'react-day-picker';
 import 'react-day-picker/style.css';
 import { cn } from '@/lib/utils';
 import {
@@ -73,26 +73,6 @@ function buildDisabledMatcher(
   };
 }
 
-function createBoundedDay(minDate?: Date, maxDate?: Date) {
-  const min = minDate ? stripTime(minDate) : undefined;
-  const max = maxDate ? stripTime(maxDate) : undefined;
-
-  return function BoundedDay(props: DayProps) {
-    const { day, modifiers, ...tdProps } = props;
-    const dayDate = stripTime(day.date);
-    if ((min && dayDate < min) || (max && dayDate > max)) {
-      return (
-        <td
-          {...tdProps}
-          className={cn(tdProps.className, 'pointer-events-none invisible')}
-          aria-hidden
-        />
-      );
-    }
-    return <Day day={day} modifiers={modifiers} {...tdProps} />;
-  };
-}
-
 function monthStart(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), 1);
 }
@@ -158,7 +138,7 @@ export interface SingleDateCalendarProps {
   startMonth?: Date;
   endMonth?: Date;
   captionLayout?: 'label' | 'dropdown' | 'dropdown-months' | 'dropdown-years';
-  /** When true with min/max dates, only shows days inside the allowed range. */
+  /** When true with min/max dates, month navigation stays inside the allowed months. */
   boundedRange?: boolean;
   availability?: CalendarAvailabilityOptions;
   onSelect: (date: Date | undefined) => void;
@@ -191,21 +171,12 @@ export const SingleDateCalendar = memo(function SingleDateCalendar({
     () => createHolidayAwareDayButton(holidayLabelsByIsoDate, disableSundays),
     [holidayLabelsByIsoDate, disableSundays],
   );
-  const BoundedDayComponent = useMemo(
-    () => (isBoundedRange ? createBoundedDay(minDate, maxDate) : undefined),
-    [isBoundedRange, minDate, maxDate],
-  );
   const components = useMemo(() => {
-    const merged: {
-      Day?: typeof BoundedDayComponent;
-      DayButton?: typeof DayButtonComponent;
-    } = {};
-    if (BoundedDayComponent) merged.Day = BoundedDayComponent;
-    if (disableSundays || Object.keys(holidayLabelsByIsoDate).length > 0) {
-      merged.DayButton = DayButtonComponent;
+    if (!disableSundays && Object.keys(holidayLabelsByIsoDate).length === 0) {
+      return undefined;
     }
-    return Object.keys(merged).length > 0 ? merged : undefined;
-  }, [BoundedDayComponent, DayButtonComponent, disableSundays, holidayLabelsByIsoDate]);
+    return { DayButton: DayButtonComponent };
+  }, [DayButtonComponent, disableSundays, holidayLabelsByIsoDate]);
   const classNames = useMemo(() => {
     const usesDropdownCaption =
       resolvedCaptionLayout === 'dropdown' ||
@@ -229,7 +200,7 @@ export const SingleDateCalendar = memo(function SingleDateCalendar({
       mode="single"
       animate={false}
       showOutsideDays={!isBoundedRange}
-      fixedWeeks={isBoundedRange}
+      fixedWeeks={false}
       selected={selected}
       defaultMonth={defaultMonth ?? selected}
       startMonth={resolvedStartMonth}

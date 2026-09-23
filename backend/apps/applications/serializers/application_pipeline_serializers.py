@@ -1,10 +1,12 @@
 from rest_framework import serializers
 
 from apps.applications.models import ApplicationStatus
+from apps.applications.services.application_service import ApplicationService
 from apps.applications.services.sanction_fee_service import SanctionFeeService
 from apps.customers.services.customer_service import CustomerService
 from apps.leads.utils.lead_enrichment import resolve_beneficiary_disbursal_defaults
 from apps.loans.services.loan_calculation_service import LoanCalculationService
+from apps.loans.services.loan_service import LoanService
 
 
 def _user_label(user) -> str:
@@ -99,7 +101,7 @@ class ApplicationPipelineRowSerializer(serializers.Serializer):
         )
         if code:
             return code
-        return obj.application_number
+        return ApplicationService.display_application_number(obj.application_number)
 
     def get_branch(self, obj):
         if obj.branch_id:
@@ -222,12 +224,12 @@ class ApplicationPipelineRowSerializer(serializers.Serializer):
     def get_loan_no(self, obj):
         loan = getattr(obj, "loan", None)
         if loan:
-            return loan.loan_account_number
-        return obj.application_number
+            return LoanService.display_loan_account_number(loan.loan_account_number)
+        return ApplicationService.display_application_number(obj.application_number)
 
     def get_loan_account(self, obj):
         loan = getattr(obj, "loan", None)
-        return loan.loan_account_number if loan else ""
+        return LoanService.display_loan_account_number(loan.loan_account_number) if loan else ""
 
     def get_disbursed_amount(self, obj):
         details = self._sheet_details(obj)

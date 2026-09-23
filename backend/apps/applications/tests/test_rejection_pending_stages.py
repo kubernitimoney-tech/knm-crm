@@ -1,5 +1,5 @@
 from django.test import TestCase
-from tests.factories import UserFactory, application_factory, customer_factory
+from tests.factories import UserFactory, application_factory, customer_factory, salary_bank_entries
 
 from apps.applications.models import ApplicationStatus
 from apps.applications.services.application_service import (
@@ -66,6 +66,7 @@ class TestRejectionFromPendingStages(TestCase):
             application=self.application,
             decision="approved",
             approved_amount=self.application.requested_amount,
+            sanction_details={"salary_banks": salary_bank_entries()},
         )
 
         self.application.refresh_from_db()

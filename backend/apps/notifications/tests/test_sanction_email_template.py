@@ -1,0 +1,227 @@
+from django.core import mail
+from django.test import TestCase
+
+from apps.notifications.services.email_service import EmailService
+
+
+class SanctionEmailTemplateTests(TestCase):
+    def test_html_letter_uses_kuberniti_money_not_indi_rupee(self):
+        html = EmailService.render_html(
+            template="sanction_approved",
+            context={
+                "customer_name": "Naveen",
+                "customer_mobile": "9876543210",
+                "application_number": "APP-1",
+                "letter_datetime": "14th September, 2026 - 11:20 AM",
+                "approved_amount": "25,000.00",
+                "interest_rate": "1.00% per day",
+                "tenure": "15 days",
+                "processing_fee": "2,500.00",
+                "gst": "450.00",
+                "net_disbursed_amount": "22,050.00",
+                "repayment_amount": "28,750.00",
+                "due_date": "29.09.2026",
+                "penalty_rate": "0.25% per day",
+                "bounce_penalty": "1,000.00",
+                "repayment_mode": (
+                    "UPI, IMPS, NEFT, RTGS, Cash. Fallback E-Mandate/E-NACH, Cheque"
+                ),
+                "payment_structure": 'Bullet Payment (as per "BLA")',
+            },
+            subject="Sanction Approval",
+        )
+
+        assert "Kuberniti Money" in html
+        assert "Indi Rupee" not in html
+        assert "IndiRupee" not in html
+        assert "SCHEDULE OF SANCTIONED LOAN TERMS" in html
+        assert "Mandatory Acceptance Format" in html
+        assert "Komal Dhawan" in html
+        assert "#2A2D4F" in html
+        assert "cid:brand_logo" in html or "data:image" in html or "Kuberniti Money" in html
+
+    def test_send_html_attaches_html_alternative(self):
+        sent = EmailService.send_html(
+            subject="Sanction Approval by Credit Team of Kuberniti Money — APP-1",
+            template="sanction_approved",
+            context={
+                "customer_name": "Naveen",
+                "application_number": "APP-1",
+                "approved_amount": "25,000.00",
+                "interest_rate": "1.00% per day",
+                "penalty_rate": "0.25% per day",
+                "bounce_penalty": "1,000.00",
+            },
+            recipients=["customer@example.com"],
+        )
+
+        assert sent == 1
+        assert len(mail.outbox) == 1
+        message = mail.outbox[0]
+        assert message.alternatives
+        html, content_type = message.alternatives[0]
+        assert content_type == "text/html"
+        assert "Kuberniti Money" in html
+        assert "Indi Rupee" not in html
+        assert "SCHEDULE OF SANCTIONED LOAN TERMS" in html
+        assert "Kuberniti Money" in message.body
+        assert "Indi Rupee" not in message.body
+        assert "Kuberniti Money" in message.from_email
+        assert "<" in message.from_email
+
+    def test_send_html_uses_explicit_from_email(self):
+        sent = EmailService.send_html(
+            subject="Sanction Approval",
+            template="sanction_approved",
+            context={"customer_name": "Naveen", "application_number": "APP-1"},
+            recipients=["customer@example.com"],
+            from_email="sanction@kubernitimoney.com",
+        )
+
+        assert sent == 1
+        assert len(mail.outbox) == 1
+        assert "sanction@kubernitimoney.com" in mail.outbox[0].from_email
+        assert "Kuberniti Money" in mail.outbox[0].from_email
+
+    def test_smtp_keeps_mailbox_on_from_header(self):
+        from django.test import override_settings
+
+        visible = EmailService._resolve_from_email("sanction@kubernitimoney.com")
+        with override_settings(
+            EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+            EMAIL_HOST_USER="info@kubernitimoney.com",
+        ):
+            envelope, headers = EmailService._delivery_addresses(visible)
+
+        assert envelope == "info@kubernitimoney.com"
+        assert "sanction@kubernitimoney.com" in headers["From"]
+        assert "Kuberniti Money" in headers["From"]
+
+
+class LoanDisbursedEmailTemplateTests(TestCase):
+    _context = {
+        "customer_name": "ROHIT DHINGRA",
+        "loan_number": "LDR573689062731",
+        "principal_amount": "40,000",
+        "interest_rate": "1%",
+        "tenure_days": "33",
+        "repayment_amount": "53,200",
+        "repayment_amount_words": "Fifty-Three Thousand Two Hundred",
+    }
+
+    def test_html_uses_kuberniti_money_logo_and_wording(self):
+        html = EmailService.render_html(
+            template="loan_disbursed",
+            context=self._context,
+            subject="Kuberniti Money - Loan Disbursed",
+        )
+
+        assert "Kuberniti Money" in html
+        assert "Lending Rupee" not in html
+        assert "lendingrupee" not in html.lower()
+        assert "Indi Rupee" not in html
+        assert "Dear ROHIT DHINGRA" in html
+        assert "LDR573689062731" in html
+        assert "40,000" in html
+        assert "1%" in html
+        assert "33" in html
+        assert "53,200" in html
+        assert "Fifty-Three Thousand Two Hundred" in html
+        assert "Please repay on due date to avoid penal interest." in html
+        assert "#2A2D4F" in html
+        assert "cid:brand_logo" in html or "data:image" in html
+
+    def test_plain_text_matches_disbursed_letter_format(self):
+        body = EmailService.render_plain_text(
+            template="loan_disbursed",
+            context=self._context,
+        )
+
+        assert "Dear ROHIT DHINGRA," in body
+        assert "Loan Number: LDR573689062731." in body
+        assert "40,000" in body
+        assert "1%" in body
+        assert "33 days" in body
+        assert "53,200 ( Fifty-Three Thousand Two Hundred ) only." in body
+        assert "Please repay on due date to avoid penal interest." in body
+        assert "Team" in body
+        assert "Kuberniti Money" in body
+        assert "Lending Rupee" not in body
+
+    def test_send_html_attaches_html_alternative(self):
+        sent = EmailService.send_html(
+            subject="Kuberniti Money - Loan Disbursed",
+            template="loan_disbursed",
+            context=self._context,
+            recipients=["rohit.dhingra200@gmail.com"],
+            cc=["confirmation@kubernitimoney.com"],
+            from_email="disbursal@kubernitimoney.com",
+        )
+
+        assert sent == 1
+        assert len(mail.outbox) == 1
+        message = mail.outbox[0]
+        assert message.subject == "Kuberniti Money - Loan Disbursed"
+        assert message.to == ["rohit.dhingra200@gmail.com"]
+        assert message.cc == ["confirmation@kubernitimoney.com"]
+        assert "disbursal@kubernitimoney.com" in message.from_email
+        html, content_type = message.alternatives[0]
+        assert content_type == "text/html"
+        assert "Kuberniti Money" in html
+        assert "Lending Rupee" not in html
+        assert "Kuberniti Money" in message.body
+        assert "Lending Rupee" not in message.body
+        assert "Kuberniti Money" in message.from_email
+
+
+class EsignSignedCopyEmailTests(TestCase):
+    def test_html_and_attachment_use_confirmation_copy(self):
+        html = EmailService.render_html(
+            template="esign_signed",
+            context={
+                "customer_name": "Naveen Kumar",
+                "document_reference": "250720261697JOB542541900",
+                "signed_date": "September 20, 2026",
+            },
+            subject="Document Successfully Signed",
+        )
+        assert "Dear Naveen Kumar," in html
+        assert "Document Successfully Signed" in html
+        assert "Document Reference:250720261697JOB542541900" in html
+        assert "Signed Date: September 20, 2026" in html
+        assert "Legal Binding: Effective Immediately" in html
+        assert "signed loan agreement PDF is attached" in html
+        assert "Retain this confirmation for future reference" in html
+        assert "Access documents anytime in your portal" in html
+        assert "Contact legal support for any discrepancies" in html
+        assert "Secured Document Management" in html
+        assert "Contact Support" in html
+        assert "Privacy Policy" in html
+        assert "© 2025 Har Shreejee Finance and Leasing Company Ltd" in html
+
+        sent = EmailService.send_html(
+            subject="Document Successfully Signed",
+            template="esign_signed",
+            context={
+                "customer_name": "Naveen Kumar",
+                "document_reference": "250720261697JOB542541900",
+                "signed_date": "September 20, 2026",
+            },
+            recipients=["customer@example.com"],
+            attachments=[
+                (
+                    "250720261697JOB542541900_signedFinal.pdf",
+                    b"%PDF-signed-copy",
+                    "application/pdf",
+                )
+            ],
+        )
+        assert sent == 1
+        message = mail.outbox[0]
+        assert message.subject == "Document Successfully Signed"
+        assert message.to == ["customer@example.com"]
+        filename, content, mimetype = message.attachments[0]
+        assert filename == "250720261697JOB542541900_signedFinal.pdf"
+        assert content == b"%PDF-signed-copy"
+        assert mimetype == "application/pdf"
+        assert "Document Reference:250720261697JOB542541900" in message.body

@@ -5,32 +5,34 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ subject }}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0;">
+<body style="margin:0;padding:0;background:{{ brand_bg_color|default:'#F4F6F9' }};font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{{ brand_bg_color|default:'#F4F6F9' }};padding:24px 0;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <table role="presentation" width="680" cellpadding="0" cellspacing="0" style="max-width:680px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(42,45,79,0.12);">
           <tr>
-            <td style="background:#0f172a;padding:20px 32px;">
+            <td style="background:{{ primary_color|default:'#2A2D4F' }};padding:18px 32px;text-align:center;">
               {% if logo_data_url %}
-              <img src="{{ logo_data_url }}" alt="{{ brand_name }}" width="160" style="display:block;max-width:160px;height:auto;border:0;" />
+              <img src="{{ logo_data_url }}" alt="{{ brand_name }}" width="180" style="display:inline-block;max-width:180px;height:auto;border:0;" />
               {% elif logo_cid %}
-              <img src="cid:{{ logo_cid }}" alt="{{ brand_name }}" width="160" style="display:block;max-width:160px;height:auto;border:0;" />
+              <img src="cid:{{ logo_cid }}" alt="{{ brand_name }}" width="180" style="display:inline-block;max-width:180px;height:auto;border:0;" />
               {% else %}
               <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:0.3px;">{{ brand_name }}</span>
               {% endif %}
             </td>
           </tr>
           <tr>
-            <td style="padding:32px;">
+            <td style="padding:28px 32px;">
               {% block content %}{% endblock %}
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e5e7eb;">
-              <p style="margin:0;font-size:12px;line-height:1.5;color:#6b7280;">
-                This is an automated message from {{ brand_name }}. Please do not reply to this email.{% if support_email %} For assistance, contact <a href="mailto:{{ support_email }}" style="color:#2563eb;text-decoration:none;">{{ support_email }}</a>.{% endif %}
+            <td style="padding:20px 32px;background:{{ brand_bg_color|default:'#F4F6F9' }};border-top:1px solid {{ primary_color|default:'#2A2D4F' }};">
+              {% block footer %}
+              <p style="margin:0;font-size:12px;line-height:1.5;color:{{ secondary_color|default:'#424665' }};">
+                This is an automated message from {{ brand_name }}. Please do not reply to this email.{% if support_email %} For assistance, contact <a href="mailto:{{ support_email }}" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">{{ support_email }}</a>.{% endif %}
               </p>
+              {% endblock %}
             </td>
           </tr>
         </table>

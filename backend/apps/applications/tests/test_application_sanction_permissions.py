@@ -5,6 +5,7 @@ from tests.factories import (
     application_factory,
     customer_factory,
     loan_product_factory,
+    salary_bank_entries,
 )
 
 from apps.accounts.models import Role, UserRole
@@ -54,6 +55,7 @@ def _sanction_payload(*, approved_amount: str = "50000") -> dict:
             "branch": "Mumbai",
             "monthly_income": "60000",
             "monthly_obligation": "0",
+            "salary_banks": salary_bank_entries(),
         },
     }
 

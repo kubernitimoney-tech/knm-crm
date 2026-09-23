@@ -3,10 +3,10 @@ name: CI/CD
 # Promotion path (PRs, not auto-merge):
 #   development → testing → staging → production
 #
-# Deploys after CI passes on a push (merged PR):
-#   testing    → test VPS    (test / api-test / dev / staging / api-staging)
-#   staging    → test VPS    (same box, staging branch)
-#   production → production VPS (app / api / kubernitimoney.com)
+# Deploys after CI passes:
+#   push to testing    → test VPS
+#   push to staging    → staging hostnames on the same VPS
+#   push to production → production VPS
 
 on:
   push:
@@ -42,7 +42,7 @@ jobs:
           cache-dependency-path: backend/requirements/dev.txt
 
       - name: Install Ruff
-        run: pip install "ruff>=0.9,<1.0"
+        run: pip install "ruff==0.15.20"
 
       - name: Ruff check
         run: ruff check .
@@ -238,6 +238,7 @@ jobs:
             docker image prune -f
 
       - name: Open promotion PR
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

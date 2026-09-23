@@ -39,6 +39,27 @@ def test_decide_persists_multiple_salary_banks():
 
 
 @pytest.mark.django_db
+def test_decide_requires_salary_account():
+    user = UserFactory()
+    application = application_factory()
+
+    ApplicationService._advance_to_documents_verified(user=user, application=application)
+    with pytest.raises(Exception, match="Salary account is required"):
+        ApplicationService.decide(
+            user=user,
+            application=application,
+            decision="approved",
+            approved_amount=application.requested_amount,
+            approved_tenure_value=30,
+            interest_rate="1.00",
+            sanction_details={
+                "monthly_income": "50000",
+                "cibil_score": "750",
+            },
+        )
+
+
+@pytest.mark.django_db
 def test_decide_rejects_duplicate_salary_bank():
     user = UserFactory()
     application = application_factory()

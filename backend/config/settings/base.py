@@ -17,7 +17,6 @@ env = environ.Env(
     DEBUG=(bool, False),
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES=(int, 30),
     JWT_REFRESH_TOKEN_LIFETIME_DAYS=(int, 7),
-    CORS_ALLOW_CREDENTIALS=(bool, True),
 )
 
 # overwrite=True: a mounted .env wins over stale empty EMAIL_* vars baked into
@@ -195,20 +194,8 @@ SIMPLE_JWT = {
 RBAC_PERMISSION_CACHE_PREFIX = "user"
 RBAC_PERMISSION_CACHE_TTL = 3600  # 1 hour
 
-# CORS — browser origins allowed to call the API (CRM + marketing).
-# Set CORS_ALLOWED_ORIGINS per environment; do not use "*".
+# CORS
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
-CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=True)
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "accept-encoding",
-    "authorization",
-    "content-type",
-    "origin",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-]
 
 # Loan workflow default slug
 DEFAULT_LOAN_WORKFLOW_SLUG = "loan-lifecycle"
@@ -222,6 +209,16 @@ def _env_str(name, default=""):
     return value
 
 
+def _named_from_email(value: str, brand: str) -> str:
+    """Ensure From is ``Name <addr>`` so clients show the brand, not a bare address."""
+    from email.utils import formataddr, parseaddr
+
+    name, addr = parseaddr((value or "").strip())
+    if not addr:
+        return (value or "").strip()
+    return formataddr((name or brand, addr))
+
+
 # Email (SMTP). Set EMAIL_HOST to enable outbound mail; leave empty for console backend.
 EMAIL_HOST = _env_str("EMAIL_HOST")
 if EMAIL_HOST:
@@ -231,8 +228,7 @@ if EMAIL_HOST:
     )
     EMAIL_PORT = env.int("EMAIL_PORT", default=587)
     EMAIL_HOST_USER = _env_str("EMAIL_HOST_USER")
-    # Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are display-only.
-    EMAIL_HOST_PASSWORD = "".join(_env_str("EMAIL_HOST_PASSWORD").split())
+    EMAIL_HOST_PASSWORD = _env_str("EMAIL_HOST_PASSWORD")
     EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
     EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
     EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=30)
@@ -249,7 +245,35 @@ else:
 # Branding used in transactional emails.
 BRAND_NAME = env("BRAND_NAME", default="Kuberniti Money")
 SUPPORT_EMAIL = env("SUPPORT_EMAIL", default="support@kubernitimoney.com")
+# Matches CRM portal --color-primary-deep / --color-secondary-dark.
+BRAND_PRIMARY_COLOR = env("BRAND_PRIMARY_COLOR", default="#2A2D4F")
+BRAND_SECONDARY_COLOR = env("BRAND_SECONDARY_COLOR", default="#424665")
+BRAND_BG_COLOR = env("BRAND_BG_COLOR", default="#F4F6F9")
 EMAIL_LOGO_PATH = env("EMAIL_LOGO_PATH", default=str(BASE_DIR / "static" / "emails" / "logo.png"))
+SANCTION_MAILBOX_EMAIL = _env_str("SANCTION_MAILBOX_EMAIL") or "sanction@kubernitimoney.com"
+DISBURSAL_MAILBOX_EMAIL = _env_str("DISBURSAL_MAILBOX_EMAIL") or "disbursal@kubernitimoney.com"
+CONFIRMATION_MAILBOX_EMAIL = (
+    _env_str("CONFIRMATION_MAILBOX_EMAIL") or "confirmation@kubernitimoney.com"
+)
+DEFAULT_FROM_EMAIL = _named_from_email(DEFAULT_FROM_EMAIL, BRAND_NAME)
+SERVER_EMAIL = _named_from_email(SERVER_EMAIL, BRAND_NAME)
+SANCTION_FROM_EMAIL = _named_from_email(
+    _env_str("SANCTION_FROM_EMAIL") or SANCTION_MAILBOX_EMAIL,
+    BRAND_NAME,
+)
+DISBURSAL_FROM_EMAIL = _named_from_email(
+    _env_str("DISBURSAL_FROM_EMAIL") or DISBURSAL_MAILBOX_EMAIL,
+    BRAND_NAME,
+)
+
+# Optional SMS for Video KYC invitation links (customer mobile).
+# Fast2SMS: SMS_PROVIDER=fast2sms and SMS_API_KEY=<authorization key>
+# MSG91: SMS_PROVIDER=msg91, SMS_API_KEY=<authkey>, SMS_SENDER_ID=KNMCRM
+# Leave SMS_PROVIDER empty or "console" to log SMS instead of sending.
+SMS_PROVIDER = _env_str("SMS_PROVIDER")
+SMS_API_KEY = _env_str("SMS_API_KEY")
+SMS_TEMPLATE_ID = _env_str("SMS_TEMPLATE_ID")
+SMS_SENDER_ID = _env_str("SMS_SENDER_ID") or "KNMCRM"
 
 # Document virus scan hook (plug in ClamAV etc.)
 DOCUMENT_VIRUS_SCAN_ENABLED = env.bool("DOCUMENT_VIRUS_SCAN_ENABLED", default=False)
@@ -261,6 +285,7 @@ DIGIO_CLIENT_SECRET = env("DIGIO_CLIENT_SECRET", default="")
 DIGIO_WEBHOOK_SECRET = env("DIGIO_WEBHOOK_SECRET", default="")
 DIGIO_KYC_TEMPLATE_NAME = _env_str("DIGIO_KYC_TEMPLATE_NAME")
 DIGIO_ESIGN_SIGN_TYPE = env("DIGIO_ESIGN_SIGN_TYPE", default="aadhaar")
+FRONTEND_BASE_URL = _env_str("FRONTEND_BASE_URL") or "http://localhost:3000"
 DIGIO_WEBHOOK_ALLOW_UNSIGNED = env.bool("DIGIO_WEBHOOK_ALLOW_UNSIGNED", default=False)
 _DIGIO_PRODUCTION = DIGIO_ENV in {"production", "prod", "live"}
 DIGIO_BASE_URL = env(

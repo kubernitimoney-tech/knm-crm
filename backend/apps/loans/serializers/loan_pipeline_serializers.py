@@ -10,6 +10,7 @@ from apps.customers.services.customer_service import CustomerService
 from apps.leads.utils.lead_enrichment import resolve_current_employment
 from apps.loans.models import LoanStatus
 from apps.loans.services.loan_calculation_service import LoanCalculationService
+from apps.loans.services.loan_service import LoanService
 from apps.repayments.models import RepaymentStatus
 
 
@@ -67,7 +68,7 @@ class LoanPipelineRowSerializer(serializers.Serializer):
         application = self._application(obj)
         if application and application.lead_id and application.lead.lead_id:
             return application.lead.lead_id
-        return obj.loan_account_number
+        return LoanService.display_loan_account_number(obj.loan_account_number)
 
     def get_branch(self, obj):
         if obj.branch_id:
@@ -237,7 +238,7 @@ class LoanPipelineRowSerializer(serializers.Serializer):
         return obj.created_at
 
     def get_loan_no(self, obj):
-        return obj.loan_account_number
+        return LoanService.display_loan_account_number(obj.loan_account_number)
 
     def get_loan_type(self, obj):
         if obj.product_id:
