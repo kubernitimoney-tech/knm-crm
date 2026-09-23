@@ -1,10 +1,12 @@
 from decimal import Decimal
 
 import pytest
+from tests.factories import salary_bank_entries
 
 from apps.applications.serializers.application_serializers import ApplicationDecisionWriteSerializer
 
 
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     ("approved_amount", "monthly_income", "monthly_obligation", "error"),
     [
@@ -41,6 +43,7 @@ def test_approved_decision_validates_income_limits(
                 "monthly_income": monthly_income,
                 "monthly_obligation": monthly_obligation,
                 "cibil_score": "750",
+                "salary_banks": salary_bank_entries(),
             },
         }
     )

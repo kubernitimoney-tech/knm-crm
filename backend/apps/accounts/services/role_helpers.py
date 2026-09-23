@@ -100,6 +100,15 @@ def is_admin_or_super_admin(user) -> bool:
     return is_super_admin(user) or is_admin_user(user)
 
 
+def is_production_manager(user) -> bool:
+    return user_has_role_slug(user, PRODUCTION_MANAGER_SLUG)
+
+
+def can_change_sanction_product(user) -> bool:
+    """Loan product on the sanction form is locked except Super Admin and Production Manager."""
+    return is_super_admin(user) or is_production_manager(user)
+
+
 def is_senior_relationship_manager(user) -> bool:
     return user_has_role_slug(user, SENIOR_RELATIONSHIP_MANAGER_SLUG)
 

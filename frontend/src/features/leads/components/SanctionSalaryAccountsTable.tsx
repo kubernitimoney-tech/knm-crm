@@ -103,11 +103,12 @@ export function bankIdsToApiSalaryBanks(
 }
 
 export function validateSelectedBankIds(bankIds: string[]): string | null {
-  if (!bankIds.length) {
-    return null;
+  const selected = bankIds.map((bankId) => bankId.trim()).filter(Boolean);
+  if (!selected.length) {
+    return 'Salary account is required.';
   }
-  const unique = new Set(bankIds.filter(Boolean));
-  if (unique.size !== bankIds.filter(Boolean).length) {
+  const unique = new Set(selected);
+  if (unique.size !== selected.length) {
     return 'Duplicate salary banks are not allowed.';
   }
   return null;
@@ -194,7 +195,7 @@ export function SanctionSalaryBankMultiSelect({
 
   return (
     <div className={cn('space-y-1 md:col-span-2 lg:col-span-4', className)}>
-      <FormFieldLabel>Salary Account</FormFieldLabel>
+      <FormFieldLabel required>Salary Account</FormFieldLabel>
       <Select<BankSelectOption, true>
         isMulti
         isSearchable

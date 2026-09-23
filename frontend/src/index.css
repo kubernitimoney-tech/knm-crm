@@ -401,3 +401,46 @@
   background-color: var(--surface-base) !important;
   color: var(--foreground) !important;
 }
+
+/* Guest e-sign / KYC pages stay high-contrast even if the CRM is in dark mode. */
+.public-guest-page,
+.dark .public-guest-page,
+.dark .public-guest-page.min-h-screen {
+  background-color: #f4f6f9 !important;
+  color: #1f2130 !important;
+  color-scheme: light;
+}
+
+.dark .public-guest-page h1,
+.dark .public-guest-page h2,
+.dark .public-guest-page h3,
+.dark .public-guest-page h4,
+.dark .public-guest-page p,
+.dark .public-guest-page .text-slate-900,
+.dark .public-guest-page .text-slate-950,
+.dark .public-guest-page .text-slate-800,
+.dark .public-guest-page .text-slate-700 {
+  color: #1f2130 !important;
+}
+
+.dark .public-guest-page .text-slate-500,
+.dark .public-guest-page .text-slate-600,
+.dark .public-guest-page .text-slate-400 {
+  color: #424665 !important;
+}
+
+.dark .public-guest-page input:not([type="checkbox"]):not([type="radio"]) {
+  background-color: #ffffff !important;
+  color: #1f2130 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.public-pdf-page {
+  display: block;
+  width: auto !important;
+  max-width: none !important;
+  height: auto;
+  margin: 0 auto 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}

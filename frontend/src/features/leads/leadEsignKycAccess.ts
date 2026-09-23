@@ -26,8 +26,12 @@ export function canLogCallOnLeadTimeline(
   return true;
 }
 
-/** Application status when e-sign and video KYC actions appear on the lead timeline. */
-export const ESIGN_VIDEO_KYC_APPLICATION_STATUSES = new Set(['disbursal_sheet_sent']);
+/** Application statuses when e-sign and video KYC requests are available. */
+export const ESIGN_VIDEO_KYC_APPLICATION_STATUSES = new Set([
+  'approved',
+  'disbursal_sheet_sent',
+  'disbursed',
+]);
 
 export function canRequestEsignAndVideoKyc(applicationStatus: string | null | undefined): boolean {
   if (!applicationStatus) return false;

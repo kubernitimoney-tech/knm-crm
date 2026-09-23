@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Mail, Plus } from 'lucide-react';
+import { Loader2, Mail, Plus } from 'lucide-react';
 import {
   RowActionButtonGroup,
   RowDeleteButton,
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/table';
 import { RequiredMark } from '@/components/ui/field-label';
 import { cn } from '@/lib/utils';
-import { SURFACE_CARD_CLASS, ROW_ACTION_ICON_CLASS, ROW_VIEW_ICON_BUTTON_CLASS, ROW_VIEW_ICON_CLASS } from '@/lib/uiTokens';
+import { SURFACE_CARD_CLASS, ROW_ACTION_ICON_CLASS } from '@/lib/uiTokens';
 import { dataTableCellClass, dataTableHeadClass } from '@/components/ui/data-table';
 import { AppSelect } from '@/components/ui/app-select';
 import { entryStatusBadgeClass } from '@/lib/badgeStyles';
@@ -287,23 +287,34 @@ export function SectionMailButton({
   onClick,
   title = 'Send email',
   disabled,
+  loading,
 }: {
-  onClick: () => void;
+  onClick: () => void | Promise<void>;
   title?: string;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
     <Button
       type="button"
+      nativeButton
       variant="ghost"
       size="icon"
-      className={ROW_VIEW_ICON_BUTTON_CLASS}
-      onClick={onClick}
-      disabled={disabled}
+      className="group/row-action h-8 w-8 text-white hover:bg-white/10 hover:text-white"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void onClick();
+      }}
+      disabled={disabled || loading}
       title={title}
       aria-label={title}
     >
-      <Mail className={cn(ROW_ACTION_ICON_CLASS, ROW_VIEW_ICON_CLASS)} />
+      {loading ? (
+        <Loader2 className={cn(ROW_ACTION_ICON_CLASS, 'text-white animate-spin')} />
+      ) : (
+        <Mail className={cn(ROW_ACTION_ICON_CLASS, 'text-white')} />
+      )}
     </Button>
   );
 }

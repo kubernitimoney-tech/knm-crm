@@ -38,11 +38,11 @@ import {
   fetchLeadDocuments,
   getLeadDocumentDownloadUrl,
   mapDocumentTypeFromApi,
+  openAuthenticatedFileInNewTab,
   updateLeadDocument,
   uploadLeadDocument,
   type ApiLeadDocument,
 } from '@/lib/leadDetailsApi';
-import { leadDocumentViewPath } from '@/lib/leadNavigation';
 import {
   FORM_TRANSITION_MS,
   FormFieldLabel,
@@ -384,6 +384,7 @@ export function LeadDocumentDetailsSection({
       await deleteLeadDocument(leadId, deleteTarget.id);
       setDocuments((prev) => prev.filter((doc) => doc.id !== deleteTarget.id));
       setDeleteTarget(null);
+      await onApplicationStatusChange?.();
       toast({ title: 'Document deleted', variant: 'success' });
     } catch (err) {
       toast({
@@ -812,8 +813,20 @@ export function LeadDocumentDetailsSection({
                           title="View"
                           aria-label="View document"
                           disabled={!entry.fileName}
-                          to={leadDocumentViewPath(leadId, entry.id)}
-                          newTab
+                          onClick={async () => {
+                            try {
+                              await openAuthenticatedFileInNewTab(
+                                getLeadDocumentDownloadUrl(leadId, entry.id),
+                              );
+                            } catch (err) {
+                              toast({
+                                title: 'Could not open document',
+                                description:
+                                  err instanceof Error ? err.message : 'Please try again.',
+                                variant: 'error',
+                              });
+                            }
+                          }}
                         />
                       )}
                       {canDownload && (

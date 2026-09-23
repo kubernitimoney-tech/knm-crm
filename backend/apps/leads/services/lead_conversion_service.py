@@ -45,13 +45,9 @@ class LeadConversionService:
 
     @staticmethod
     def _next_application_number() -> str:
-        last = LoanApplication.all_objects.order_by("-created_at").first()
-        seq = 1
-        if last and last.application_number:
-            digits = "".join(ch for ch in last.application_number if ch.isdigit())
-            if digits:
-                seq = int(digits) + 1
-        return f"APP{seq:06d}"
+        from apps.applications.services.application_service import ApplicationService
+
+        return ApplicationService._next_application_number()
 
     @staticmethod
     def _build_customer_snapshot(customer: Customer) -> dict:

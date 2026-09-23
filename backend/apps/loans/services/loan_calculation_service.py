@@ -397,6 +397,18 @@ class LoanCalculationService:
             disbursal_sheet_sent_date=sheet_sent_date,
             sanction_date=sanction_date,
         )
+        if contract_tenure <= 0:
+            snapshot = (loan.product_snapshot or {}) if loan is not None else {}
+            stored_tenure = snapshot.get("tenure_days")
+            if stored_tenure not in (None, ""):
+                try:
+                    contract_tenure = int(stored_tenure)
+                except (TypeError, ValueError):
+                    contract_tenure = 0
+            if contract_tenure <= 0 and decision is not None and decision.approved_tenure_value:
+                contract_tenure = int(decision.approved_tenure_value)
+            if contract_tenure <= 0 and application is not None and application.tenure_value:
+                contract_tenure = int(application.tenure_value)
         penalty_rate_percent = cls.resolve_penalty_rate_percent(
             loan=loan,
             application=application,

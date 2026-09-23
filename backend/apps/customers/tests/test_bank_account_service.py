@@ -1,6 +1,6 @@
 import pytest
 from django.db import IntegrityError
-from tests.factories import UserFactory, application_factory, customer_factory
+from tests.factories import UserFactory, application_factory, customer_factory, salary_bank_entries
 
 from apps.applications.models import ApplicationDecision, ApplicationStatus
 from apps.applications.services.application_service import (
@@ -152,7 +152,11 @@ class TestApplicationAccountNumberUniqueness:
                 application=pending,
                 decision="approved",
                 approved_amount=pending.requested_amount,
-                sanction_details={"salary_account": "1111222233", "cibil_score": "750"},
+                sanction_details={
+                    "salary_account": "1111222233",
+                    "cibil_score": "750",
+                    "salary_banks": salary_bank_entries(account_number="1111222233"),
+                },
             )
 
     def test_submit_disbursal_sheet_rejects_duplicate_account_number(self):

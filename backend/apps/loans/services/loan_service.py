@@ -41,14 +41,40 @@ def _resolve_disbursed_at(disbursed_at):
 
 class LoanService:
     @staticmethod
-    def _next_loan_account_number() -> str:
-        last = Loan.all_objects.order_by("-created_at").first()
-        seq = 1
-        if last and last.loan_account_number:
-            digits = "".join(ch for ch in last.loan_account_number if ch.isdigit())
+    def display_loan_account_number(value: str | None) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+        if raw.upper().startswith("KNM"):
+            return raw
+        if raw.upper().startswith("LN"):
+            rest = raw[2:].lstrip("-_")
+            digits = "".join(ch for ch in rest if ch.isdigit())
             if digits:
-                seq = int(digits) + 1
-        return f"LN{seq:08d}"
+                return f"KNM{digits.zfill(8)}"
+            return f"KNM{rest}" if rest else "KNM"
+        return raw
+
+    @staticmethod
+    def _sequence_from_loan_account_number(value: str | None) -> int:
+        raw = (value or "").strip()
+        if raw.upper().startswith("KNM"):
+            raw = raw[3:].lstrip("-_")
+        elif raw.upper().startswith("LN"):
+            raw = raw[2:].lstrip("-_")
+        if raw.isdigit():
+            return int(raw)
+        return 0
+
+    @staticmethod
+    def _next_loan_account_number() -> str:
+        seq = 0
+        for value in Loan.all_objects.values_list("loan_account_number", flat=True).iterator():
+            seq = max(seq, LoanService._sequence_from_loan_account_number(value))
+        candidate = seq + 1
+        while Loan.all_objects.filter(loan_account_number=f"KNM{candidate:08d}").exists():
+            candidate += 1
+        return f"KNM{candidate:08d}"
 
     @staticmethod
     def _calculate_payday_amounts(
@@ -211,17 +237,20 @@ class LoanService:
                 disbursal_date=disbursal_date,
                 due_date=loan.due_date,
             )
-            snapshot = dict(loan.product_snapshot or {})
-            snapshot["tenure_days"] = tenure_days
-            loan.product_snapshot = snapshot
-            decision = (
-                application.decisions.filter(decision="approved").order_by("-decided_at").first()
-                if application
-                else None
-            )
-            if decision and decision.approved_tenure_value != tenure_days:
-                decision.approved_tenure_value = tenure_days
-                decision.save(update_fields=["approved_tenure_value", "updated_at"])
+            if tenure_days > 0:
+                snapshot = dict(loan.product_snapshot or {})
+                snapshot["tenure_days"] = tenure_days
+                loan.product_snapshot = snapshot
+                decision = (
+                    application.decisions.filter(decision="approved")
+                    .order_by("-decided_at")
+                    .first()
+                    if application
+                    else None
+                )
+                if decision and decision.approved_tenure_value != tenure_days:
+                    decision.approved_tenure_value = tenure_days
+                    decision.save(update_fields=["approved_tenure_value", "updated_at"])
         loan.updated_by = user
         loan.save(update_fields=["disbursed_at", "product_snapshot", "updated_by", "updated_at"])
 
@@ -245,6 +274,9 @@ class LoanService:
                 extra_update_fields=["disbursal_sheet_details"],
             )
 
+        from apps.notifications.services.notification_service import NotificationService
+
+        NotificationService.send_loan_disbursed_email(loan=loan, application=application)
         return disbursement
 
     @classmethod

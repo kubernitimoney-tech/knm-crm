@@ -2,7 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from tests.factories import UserFactory, application_factory, customer_factory
+from tests.factories import UserFactory, application_factory, customer_factory, salary_bank_entries
 
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus
@@ -33,7 +33,11 @@ class TestSanctionRevision:
             approved_tenure_value=30,
             interest_rate=Decimal("24"),
             processing_fee=Decimal("500"),
-            sanction_details={"branch": "Delhi", "cibil_score": "750"},
+            sanction_details={
+                "branch": "Delhi",
+                "cibil_score": "750",
+                "salary_banks": salary_bank_entries(),
+            },
         )
 
         application.refresh_from_db()
@@ -56,13 +60,20 @@ class TestSanctionRevision:
             approved_tenure_value=30,
             interest_rate=Decimal("24"),
             processing_fee=Decimal("500"),
-            sanction_details={"branch": "Delhi", "cibil_score": "750"},
+            sanction_details={
+                "branch": "Delhi",
+                "cibil_score": "750",
+                "repayment_date": "2026-10-13",
+                "salary_banks": salary_bank_entries(),
+            },
         )
 
         captured = {}
 
         def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
             captured["context"] = context
+            captured["subject"] = subject
+            captured["template"] = template
 
         with patch.object(
             NotificationService,
@@ -71,9 +82,15 @@ class TestSanctionRevision:
         ):
             ApplicationService.send_sanction_approved_email(user=user, application=application)
 
+        assert captured["template"] == "sanction_approved"
+        assert "Kuberniti Money" in captured["subject"]
         assert captured["context"]["approved_amount"] == "25,000.00"
+        assert captured["context"]["interest_rate"] == "24.00% per day"
+        assert captured["context"]["processing_fee"] == "500.00"
+        assert captured["context"]["due_date"] == "13.10.2026"
+        assert "Indi Rupee" not in captured["subject"]
 
-    def test_sanction_email_puts_customer_in_to_and_officers_in_cc(self):
+    def test_sanction_email_uses_internal_mailboxes_not_officers(self):
         rm = UserFactory(email="rm@example.com")
         cm = UserFactory(email="cm@example.com")
         customer = customer_factory(email="customer@example.com")
@@ -83,9 +100,12 @@ class TestSanctionRevision:
 
         captured = {}
 
-        def _capture_email(*, subject, template, context, recipients, cc=None, **_kwargs):
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
             captured["recipients"] = recipients
             captured["cc"] = cc
+            captured["from_email"] = from_email
 
         with patch.object(
             NotificationService,
@@ -94,8 +114,65 @@ class TestSanctionRevision:
         ):
             NotificationService.send_sanction_approved_email(application)
 
-        assert captured["recipients"] == ["customer@example.com"]
-        assert set(captured["cc"]) == {"rm@example.com", "cm@example.com"}
+        assert captured["recipients"] == [
+            "customer@example.com",
+            "sanction@kubernitimoney.com",
+        ]
+        assert captured["cc"] == ["confirmation@kubernitimoney.com"]
+        assert "sanction@kubernitimoney.com" in captured["from_email"]
+        assert "rm@example.com" not in captured["recipients"]
+        assert "cm@example.com" not in captured["recipients"]
+        assert "rm@example.com" not in captured["cc"]
+        assert "cm@example.com" not in captured["cc"]
+
+    def test_sanction_email_sends_to_official_email(self):
+        user = UserFactory()
+        _assign_role(user, "admin")
+        customer = customer_factory(email="personal@example.com")
+        application = application_factory(customer=customer)
+        application.status = ApplicationStatus.APPROVED
+        application.approved_amount = Decimal("25000")
+        application.save(update_fields=["status", "approved_amount", "updated_at"])
+
+        ApplicationService.decide(
+            user=user,
+            application=application,
+            decision="approved",
+            approved_amount=Decimal("25000"),
+            approved_tenure_value=30,
+            interest_rate=Decimal("1.00"),
+            processing_fee=Decimal("500"),
+            sanction_details={
+                "branch": "Delhi",
+                "official_email": "official@company.com",
+                "salary_banks": salary_bank_entries(),
+            },
+        )
+
+        captured = {}
+
+        def _capture_email(
+            *, subject, template, context, recipients, cc=None, from_email=None, **_kwargs
+        ):
+            captured["recipients"] = recipients
+            captured["cc"] = cc
+            captured["from_email"] = from_email
+
+        with patch.object(
+            NotificationService,
+            "_send_email_on_commit",
+            side_effect=_capture_email,
+        ):
+            NotificationService.send_sanction_approved_email(application)
+
+        assert captured["recipients"] == [
+            "personal@example.com",
+            "official@company.com",
+            "sanction@kubernitimoney.com",
+        ]
+        assert "sanction@kubernitimoney.com" in captured["from_email"]
+        assert captured["cc"] == ["confirmation@kubernitimoney.com"]
+        assert "official@company.com" not in captured["cc"]
 
     def test_sanction_email_requires_customer_email(self):
         customer = customer_factory()
@@ -132,3 +209,32 @@ class TestSanctionRevision:
         assert sent["subject"] == "Test subject"
         assert sent["recipients"] == ["customer@example.com"]
         assert sent["cc"] == ["rm@example.com"]
+
+    def test_send_email_on_commit_queues_smtp_without_blocking(self):
+        from unittest.mock import patch
+
+        from django.test import override_settings
+
+        queued = []
+
+        class FakeThread:
+            def __init__(self, target=None, name=None, daemon=None):
+                queued.append(target)
+
+            def start(self):
+                return None
+
+        with override_settings(EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend"):
+            with patch(
+                "apps.notifications.services.notification_service.threading.Thread",
+                FakeThread,
+            ):
+                with patch("django.db.transaction.on_commit", lambda callback: callback()):
+                    NotificationService._send_email_on_commit(
+                        subject="Test subject",
+                        template="sanction_approved",
+                        context={"customer_name": "Test"},
+                        recipients=["customer@example.com"],
+                    )
+
+        assert len(queued) == 1
