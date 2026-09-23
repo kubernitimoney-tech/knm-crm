@@ -1,0 +1,3 @@
+-r test.txt
+
+ruff==0.15.20

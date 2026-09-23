@@ -1,0 +1,227 @@
+{% extends "emails/base_email.html" %}
+{% block content %}
+<p style="margin:0 0 6px;font-size:13px;line-height:1.55;color:{{ primary_color|default:'#2A2D4F' }};font-weight:700;">
+  Sanction Approval by Credit Team of {{ brand_name }}, a Product of Har Shreejee Finance and Leasing Co. Ltd.
+  (<a href="https://www.kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">www.kubernitimoney.com</a>)
+</p>
+<p style="margin:0 0 4px;font-size:12px;line-height:1.5;color:#374151;">
+  Corporate Office: E-37, 1st Floor, Sector 3, Noida, Uttar Pradesh, 201301
+</p>
+<p style="margin:0 0 18px;font-size:12px;line-height:1.5;color:#374151;">
+  Reg. No. RBI B-14.02044
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:6px 0;font-size:13px;color:#6b7280;width:42%;">Date &amp; time</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ letter_datetime|default:"—" }}</td>
+  </tr>
+  <tr>
+    <td style="padding:6px 0;font-size:13px;color:#6b7280;">Loan Application ID</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ application_number }}</td>
+  </tr>
+  <tr>
+    <td style="padding:6px 0;font-size:13px;color:#6b7280;">Applicant Name</td>
+    <td style="padding:6px 0;font-size:13px;font-weight:600;color:{{ primary_color|default:'#2A2D4F' }};">{{ customer_name }}</td>
+  </tr>
+</table>
+
+<p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>RESOLVED THAT</strong>, based on the assessment of the loan application submitted by the
+  above-mentioned applicant through
+  <a href="https://www.kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">www.kubernitimoney.com</a>,
+  the Credit Team hereby accords approval in principle for the issuance of a short-term personal
+  loan, subject to the disclosures, terms, and conditions as set out below.
+</p>
+
+<p style="margin:0 0 10px;font-size:14px;font-weight:700;letter-spacing:0.4px;color:{{ primary_color|default:'#2A2D4F' }};">
+  SCHEDULE OF SANCTIONED LOAN TERMS
+</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border-collapse:collapse;border:1px solid {{ primary_color|default:'#2A2D4F' }};">
+  <tr>
+    <th align="left" style="padding:9px 12px;font-size:12px;background:{{ primary_color|default:'#2A2D4F' }};color:#ffffff;width:48%;">Particulars</th>
+    <th align="left" style="padding:9px 12px;font-size:12px;background:{{ primary_color|default:'#2A2D4F' }};color:#ffffff;">Details</th>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Loan Amount (Principal)</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if approved_amount %}&#8377; {{ approved_amount }}{% else %}—{% endif %}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Rate of Interest</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ interest_rate|default:"—" }}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Tenure</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{{ tenure|default:"—" }}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Processing Fees</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{% if processing_fee %}&#8377; {{ processing_fee }}{% else %}—{% endif %}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">GST on Processing Fees</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if gst %}&#8377; {{ gst }}{% else %}—{% endif %}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Net Disbursed Amount</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{% if net_disbursed_amount %}&#8377; {{ net_disbursed_amount }}{% else %}—{% endif %}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Repayment Amount (Total)</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{% if repayment_amount %}&#8377; {{ repayment_amount }}{% else %}—{% endif %}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Due Date for Repayment</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ due_date|default:"—" }}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;color:#374151;">Repayment Mode</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;font-weight:600;">{{ repayment_mode }}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};color:#374151;">Penalty Interest</td>
+    <td style="padding:8px 12px;font-size:13px;border-bottom:1px solid #e5e7eb;background:{{ brand_bg_color|default:'#F4F6F9' }};font-weight:600;">{{ penalty_rate|default:"—" }}</td>
+  </tr>
+  <tr>
+    <td style="padding:8px 12px;font-size:13px;color:#374151;">Payment Structure</td>
+    <td style="padding:8px 12px;font-size:13px;font-weight:600;">{{ payment_structure }}</td>
+  </tr>
+</table>
+
+<p style="margin:0 0 14px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>FURTHER RESOLVED THAT</strong> the following disclosures and conditions form an integral
+  part of this resolution and shall be binding upon the Borrower upon acceptance:
+</p>
+
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>I.</strong> This sanction is extended in principle only and does not constitute an
+  unconditional or automatic commitment to disburse funds. Disbursement shall be effected only after
+  successful completion of all mandatory pre-disbursal requirements and the Company's final internal
+  verification and approval at the time of disbursal.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  Acceptance of this sanction must be provided through a clear and unconditional reply confirming
+  that the Borrower has read, understood, and agreed to all terms and conditions. Such acceptance,
+  whether by email or digital confirmation, shall constitute a binding acknowledgment and consent to
+  proceed further.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:collapse;">
+  <tr>
+    <td style="padding:14px 16px;background:{{ brand_bg_color|default:'#F4F6F9' }};border:1px solid {{ primary_color|default:'#2A2D4F' }};border-radius:8px;">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:{{ primary_color|default:'#2A2D4F' }};letter-spacing:0.3px;">
+        Mandatory Acceptance Format
+      </p>
+      <p style="margin:0 0 8px;font-size:13px;line-height:1.55;color:#111827;">
+        I accept the terms and conditions of the loan as mentioned. Please proceed further.
+      </p>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#111827;">
+        Name: {{ customer_name }}<br />
+        Registered Mobile Number: {{ customer_mobile|default:"" }}
+      </p>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>II.</strong> The Borrower is under no obligation to accept this offer. The Company advises
+  the Borrower to review all terms carefully and proceed only if fully understood and agreed upon.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>III.</strong> Following the Borrower's acceptance, the sanctioned loan amount shall be
+  disbursed only after successful completion of the following mandatory steps:
+  (a) physical address/home verification, (b) completion of Video KYC,
+  (c) co-execution of the E-Sign Loan Agreement, and (d) registration of E-Mandate/E-NACH.
+  Upon fulfilment of these conditions, the net disbursed amount shall be credited to the Borrower's
+  verified salary account.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>IV.</strong> While repayment through UPI, IMPS, or online transfer is allowed before or on
+  the due date, the Borrower expressly acknowledges that in the event of non-payment by the due date,
+  the Lender is authorised to initiate debit attempts via E-Mandate / E-NACH or any other permissible
+  recovery process as prescribed under applicable law, until all dues are recovered.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>V.</strong> In the event of non-payment on or before the due date, penal interest at the
+  rate of {{ penalty_rate|default:"1.00% per day" }} shall be levied strictly on the principal loan
+  amount only, for the period of default, from the due date until the date of actual repayment. Such
+  penal interest shall be simple in nature and shall not be compounded, nor charged on accrued
+  interest or other charges.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>VI.</strong> E-Mandate or cheque bounce will attract a penalty charge of &#8377; {{ bounce_penalty }} per instance.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>VII.</strong> There is no cooling-off or look-up period, and no prepayment penalty shall
+  apply if the loan is repaid early.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>VIII.</strong> If the Borrower chooses not to proceed or does not provide acceptance in the
+  prescribed format, this sanction shall be considered cancelled and no fees shall be charged.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>IX.</strong> The Borrower is required to submit a physical blank signed cheque solely as a
+  security instrument. The Borrower acknowledges that such cheque shall be presented for recovery
+  only in the event of non-payment or default, strictly in accordance with the terms of the executed
+  Loan Agreement and applicable law. This cheque shall be securely retained by the Company and will
+  be destroyed only upon: (a) full and final repayment of all dues, (b) issuance of the No Objection
+  Certificate (NOC), and (c) receipt of a written destruction request from the Borrower via email.
+  The destruction shall be completed within 45 days of such request, and photographic confirmation
+  shall be provided to the Borrower via email for their records. Provided that, if any outstanding
+  amount remains payable by the Borrower to the Company, the Company shall retain the cheque securely
+  and reserves the right to present it for recovery in the event of unpaid dues, until all
+  liabilities are cleared.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>X.</strong> The Borrower expressly acknowledges and authorizes the Company to report,
+  disclose, and update the Borrower's loan account information, including repayment behavior, delays,
+  defaults, or closure status, to one or more Credit Information Companies / Credit Bureaus in
+  accordance with applicable law.
+</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>XI.</strong> This sanction letter is supplemental to, and shall form an integral part of,
+  the executed Borrower's Loan Agreement ("BLA"). In the event of any inconsistency, the terms of
+  the BLA shall prevail.
+</p>
+<p style="margin:0 0 16px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>XII.</strong> Any legal disputes shall be subject to the exclusive jurisdiction of Delhi Courts.
+</p>
+
+<p style="margin:0 0 18px;font-size:12px;line-height:1.6;color:#4b5563;text-align:justify;">
+  <em>Note:</em> The effective annualized cost (Annual Percentage Rate – APR), inclusive of all
+  applicable interest, fees, and charges, is reflected in the executed Borrower's Loan Agreement and
+  may be reviewed upon request.
+</p>
+
+<p style="margin:0 0 4px;font-size:13px;font-weight:700;letter-spacing:0.4px;color:{{ primary_color|default:'#2A2D4F' }};">
+  GRIEVANCE REDRESSAL CONTACT
+</p>
+<p style="margin:0 0 18px;font-size:13px;line-height:1.55;color:#111827;">
+  Komal Dhawan<br />
+  Grievance Redressal Officer<br />
+  E-mail: <a href="mailto:grievance@kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">grievance@kubernitimoney.com</a>
+</p>
+
+<p style="margin:0 0 18px;font-size:13px;line-height:1.65;color:#111827;text-align:justify;">
+  <strong>NOTE TO BORROWER:</strong> Timely repayment of this loan not only protects your credit
+  health but also enhances your eligibility for higher amounts and better terms in the future.
+</p>
+
+<p style="margin:0;font-size:13px;line-height:1.6;color:#111827;">
+  Best Regards<br />
+  <strong>{{ brand_name }} – Your Credit Companion</strong><br />
+  A product of Har Shreejee Finance and Leasing Co. Ltd.<br />
+  Approved by: Credit Team, {{ brand_name }}
+</p>
+{% endblock %}
+
+{% block footer %}
+<p style="margin:0 0 6px;font-size:12px;line-height:1.5;color:#6b7280;">
+  Reply to this email using the mandatory acceptance format above to confirm that you have read,
+  understood, and agreed to these terms.
+</p>
+<p style="margin:0;font-size:12px;line-height:1.5;color:#6b7280;">
+  For grievances, contact
+  <a href="mailto:grievance@kubernitimoney.com" style="color:{{ primary_color|default:'#2A2D4F' }};text-decoration:none;">grievance@kubernitimoney.com</a>.
+</p>
+{% endblock %}

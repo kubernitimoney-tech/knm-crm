@@ -1,0 +1,47 @@
+# See https://pre-commit.com for usage.
+# Install: python -m pip install pre-commit && python -m pre_commit install
+# Run all hooks: python -m pre_commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.(png|jpe?g|gif|webp|ico|svg|pdf|woff2?|ttf|eot|zip|gz)$'
+      - id: end-of-file-fixer
+        exclude: '\.(png|jpe?g|gif|webp|ico|svg|pdf|woff2?|ttf|eot|zip|gz)$'
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+  # Local hooks `cd backend` so Ruff matches CI (`working-directory: backend`).
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check (backend)
+        language: python
+        additional_dependencies: ["ruff==0.15.20"]
+        files: ^backend/
+        types: [python]
+        pass_filenames: false
+        entry: python scripts/ruff_backend.py check --fix
+      - id: ruff-format
+        name: ruff format (backend)
+        language: python
+        additional_dependencies: ["ruff==0.15.20"]
+        files: ^backend/
+        types: [python]
+        pass_filenames: false
+        entry: python scripts/ruff_backend.py format
+      - id: eslint-frontend
+        name: eslint (frontend)
+        language: python
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+        entry: python scripts/npm_run.py frontend lint:eslint
+      - id: eslint-marketing-site
+        name: eslint (marketing-site)
+        language: python
+        files: ^marketing-site/.*\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+        entry: python scripts/npm_run.py marketing-site lint:eslint
