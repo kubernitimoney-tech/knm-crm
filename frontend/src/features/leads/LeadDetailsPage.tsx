@@ -531,12 +531,12 @@ export const LeadDetailsPage = () => {
       setCurrentStatus(
         resolveLeadStatusDisplay(updatedLead, callStatus || updatedLead.latest_call_disposition_display || '—'),
       );
-      if (disposition === 'interested') {
+      if (disposition === 'interested' || disposition === 'documents_received') {
         setWorkflowRefresh((n) => n + 1);
         toast({
           title: updatedLead.converted_application ? 'Application created' : 'Call logged',
           description: updatedLead.converted_application
-            ? 'Customer marked Interested — loan application started automatically.'
+            ? 'Loan application started automatically.'
             : `Disposition: ${callStatus}`,
           variant: 'success',
         });
