@@ -81,7 +81,7 @@ export const LoginPage = () => {
         </div>
 
         <div className="relative z-10 flex items-center justify-between text-xs font-medium text-white/50">
-          <p>Copyright © 2026 kubernitimoney - All Rights Reserved.</p>
+          <p>© 2025 Har Shreejee Finance and Leasing Company Ltd | CIN - U65921DL1996PLC082373</p>
           <div className="flex gap-6">
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors">Support</a>

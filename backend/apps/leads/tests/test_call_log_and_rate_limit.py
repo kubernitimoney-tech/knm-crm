@@ -117,7 +117,7 @@ class CallLogDispositionStatusTests(TestCase):
         self.assertIsNotNone(lead.converted_application_id)
         self.assertEqual(lead.converted_application.status, ApplicationStatus.INTERESTED)
 
-    def test_documents_pending_disposition_creates_incomplete_application(self):
+    def test_documents_pending_disposition_does_not_create_application(self):
         from apps.products.models import LoanProduct
 
         call_command("seed_products")
@@ -131,11 +131,7 @@ class CallLogDispositionStatusTests(TestCase):
         lead.refresh_from_db()
 
         self.assertEqual(lead.status, LeadStatus.DOCUMENTS_PENDING)
-        self.assertIsNotNone(lead.converted_application_id)
-        self.assertEqual(
-            lead.converted_application.status,
-            ApplicationStatus.DOCUMENTS_INCOMPLETE,
-        )
+        self.assertIsNone(lead.converted_application_id)
 
     def test_documents_received_disposition_creates_application(self):
         from apps.products.models import LoanProduct
