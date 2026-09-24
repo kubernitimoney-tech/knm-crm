@@ -234,12 +234,18 @@ export const LeadDetailsPage = () => {
           fetchLeadEmployments(id).catch(() => []),
           fetchLeadEsignRequests(id).catch(() => []),
         ]);
-      const applicationStatus = apiLead?.application_status ?? '';
+      const applicationStatus =
+        disbursal.application_status || apiLead?.application_status || '';
       const rejected = Boolean(rejection) || applicationStatus === 'rejected';
       const sanctioned =
         !rejected &&
         (Boolean(sanction) ||
           POST_SANCTION_APPLICATION_STATUSES.has(applicationStatus));
+      const hasDisbursalSheet =
+        disbursal.stage === 'sheet_sent' ||
+        disbursal.stage === 'disbursed' ||
+        applicationStatus === 'disbursal_sheet_sent' ||
+        applicationStatus === 'disbursed';
       const hasDisbursal =
         disbursal.stage === 'disbursed' || applicationStatus === 'disbursed';
       setSanctionRecord(sanction);
@@ -258,6 +264,7 @@ export const LeadDetailsPage = () => {
         ),
         hasSanction: sanctioned,
         hasEsignCompleted: esignRequests.some((row) => row.status === 'signed'),
+        hasDisbursalSheet,
         hasDisbursal,
       });
     } finally {
@@ -524,12 +531,12 @@ export const LeadDetailsPage = () => {
       setCurrentStatus(
         resolveLeadStatusDisplay(updatedLead, callStatus || updatedLead.latest_call_disposition_display || '—'),
       );
-      if (disposition === 'interested') {
+      if (disposition === 'interested' || disposition === 'documents_received') {
         setWorkflowRefresh((n) => n + 1);
         toast({
           title: updatedLead.converted_application ? 'Application created' : 'Call logged',
           description: updatedLead.converted_application
-            ? 'Customer marked Interested — loan application started automatically.'
+            ? 'Loan application started automatically.'
             : `Disposition: ${callStatus}`,
           variant: 'success',
         });

@@ -615,7 +615,7 @@ class LeadDetailActionsMixin:
             except Exception:
                 logger.exception("Could not fetch signed e-sign PDF for request %s", row.pk)
 
-    @rbac_permission("lead.view")
+    @rbac_any_permission("lead.view", "loan.view", "collection.view", "disbursal.view")
     @action(detail=True, methods=["get", "post"], url_path="esign-requests")
     def esign_requests(self, request, pk=None):
         lead = self.get_object()

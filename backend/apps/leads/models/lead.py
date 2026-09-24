@@ -66,13 +66,11 @@ TERMINAL_LEAD_STATUSES = frozenset(
     }
 )
 
-# Lead statuses that must not change when logging a call (matches hidden call-button rules).
+# Call button is hidden for these. A later call must not move the lead backward.
 CALL_LOG_IMMUTABLE_STATUSES = frozenset(
     {
         LeadStatus.CLOSED,
-        LeadStatus.INVALID_NUMBER,
         LeadStatus.INTERESTED,
-        LeadStatus.DOCUMENTS_PENDING,
         LeadStatus.DOCUMENTS_RECEIVED,
         LeadStatus.PAYDAY_PRE_CLOSE,
         LeadStatus.SETTLEMENT,
