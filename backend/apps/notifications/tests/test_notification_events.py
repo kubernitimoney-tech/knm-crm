@@ -439,7 +439,7 @@ class NotificationEventTests(TestCase):
         mock_localdate.return_value = today
 
         collector = UserFactory(email="collector@example.com")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         customer = customer_factory()
         rm = UserFactory(email="rm4@example.com")
@@ -470,7 +470,7 @@ class NotificationEventTests(TestCase):
         mock_localdate.return_value = today
 
         collector = UserFactory(email="collector2@example.com")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         customer = customer_factory()
         rm = UserFactory(email="rm5@example.com")

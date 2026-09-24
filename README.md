@@ -688,7 +688,7 @@ User.objects.create_superuser(
 | Credit Manager        | `cm2@kubernitimoney.com`        | `DeDust!23` | Frontend + API |
 | Field Investigator    | `fi1@kubernitimoney.com`        | `DeDust!23` | Frontend + API |
 | Account & Finance     | `account@kubernitimoney.com`    | `DeDust!23` | Frontend + API |
-| Collection Officer    | `collection@kubernitimoney.com` | `DeDust!23` | Frontend + API |
+| Collection Manager    | `collection@kubernitimoney.com` | `DeDust!23` | Frontend + API |
 
 
 > Passwords are only set when the account has no usable password yet. Existing passwords are left unchanged.

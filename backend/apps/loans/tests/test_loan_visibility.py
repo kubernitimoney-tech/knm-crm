@@ -140,7 +140,7 @@ class VisibleLoansForTests(TestCase):
         collector = UserFactory(email="collector-loans@test.com")
         _assign_role(rm, "relationship-manager")
         _assign_role(cm, "credit-manager")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         lead_disbursed = _create_lead(lead_code="LD-LN-03", rm=rm, cm=cm)
         lead_finance = _create_lead(lead_code="LD-LN-04", rm=rm, cm=cm)
