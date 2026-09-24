@@ -1,9 +1,7 @@
-/** Lead statuses where the Log Call action must be hidden on the lead timeline. */
+/** Hide Log Call only after Interested or Documents Received. */
 export const CALL_LOG_BLOCKED_LEAD_STATUSES = new Set([
   'interested',
-  'documents_pending',
   'documents_received',
-  'invalid_number',
 ]);
 
 type LeadCallAccess = {
