@@ -562,7 +562,7 @@ class TestVisibleApplicationsForCollectionOfficer:
         collector = UserFactory(email="collector-visible@test.com")
         _assign_role(rm, "relationship-manager")
         _assign_role(cm, "credit-manager")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         lead_disbursed = _create_lead(lead_code="LD0601", rm=rm, cm=cm)
         lead_pending = _create_lead(lead_code="LD0602", rm=rm, cm=cm)
