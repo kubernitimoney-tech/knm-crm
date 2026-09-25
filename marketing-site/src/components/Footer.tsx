@@ -17,6 +17,7 @@ const resourceLinks = [
   { to: '/emi-calculator', label: 'EMI Calculator' },
   { to: '/cibil-score', label: 'CIBIL Score Guide' },
   { to: '/track', label: 'Track Application' },
+  { to: '/loan-repayment', label: 'Loan Repayment' },
   { to: '/blog', label: 'Blog' },
   { to: '/faq', label: 'FAQ' },
   { to: '/apply', label: 'Apply' },
@@ -38,6 +39,9 @@ export function Footer() {
             <p className="mt-3 text-xs leading-relaxed text-light-gray">
               Operated by {brand.legalEntity} | CIN - {brand.cin}
             </p>
+            <Link to="/loan-repayment" className="btn-secondary mt-5">
+              Loan Repayment
+            </Link>
           </div>
 
           <div className="min-w-0">
