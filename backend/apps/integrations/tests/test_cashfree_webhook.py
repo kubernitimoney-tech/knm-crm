@@ -56,6 +56,34 @@ def test_cashfree_webhook_rejects_bad_signature():
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
+@override_settings(CASHFREE_WEBHOOK_SECRET="not-the-client-secret", CASHFREE_CLIENT_SECRET=SECRET)
+def test_cashfree_webhook_accepts_client_secret_when_webhook_secret_differs():
+    body = b"{}"
+    response = APIClient().generic(
+        "POST",
+        "/api/v1/webhooks/cashfree",
+        data=body,
+        content_type="application/json",
+        HTTP_X_WEBHOOK_SIGNATURE=_signature(body),
+        HTTP_X_WEBHOOK_TIMESTAMP="1710000000",
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+
+@override_settings(CASHFREE_WEBHOOK_SECRET="", CASHFREE_CLIENT_SECRET=f'"{SECRET}"')
+def test_cashfree_webhook_strips_quotes_around_client_secret():
+    body = b"{}"
+    response = APIClient().generic(
+        "POST",
+        "/api/v1/webhooks/cashfree",
+        data=body,
+        content_type="application/json",
+        HTTP_X_WEBHOOK_SIGNATURE=_signature(body),
+        HTTP_X_WEBHOOK_TIMESTAMP="1710000000",
+    )
+    assert response.status_code == status.HTTP_200_OK
+
+
 @override_settings(CASHFREE_WEBHOOK_SECRET="", CASHFREE_CLIENT_SECRET="")
 def test_cashfree_webhook_accepts_dashboard_test_when_secret_unset():
     response = APIClient().post(
