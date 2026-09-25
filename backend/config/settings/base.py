@@ -291,6 +291,7 @@ DIGIO_WEBHOOK_ALLOW_UNSIGNED = env.bool("DIGIO_WEBHOOK_ALLOW_UNSIGNED", default=
 # Cashfree Secure ID webhooks. Signature key is the client secret from the
 # Cashfree dashboard. Until one of these is set, the endpoint accepts the
 # dashboard URL test so the webhook can be saved.
+CASHFREE_CLIENT_ID = env("CASHFREE_CLIENT_ID", default="")
 CASHFREE_CLIENT_SECRET = env("CASHFREE_CLIENT_SECRET", default="")
 CASHFREE_WEBHOOK_SECRET = env("CASHFREE_WEBHOOK_SECRET", default="")
 _DIGIO_PRODUCTION = DIGIO_ENV in {"production", "prod", "live"}

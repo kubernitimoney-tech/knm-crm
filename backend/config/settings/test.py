@@ -44,6 +44,7 @@ DIGIO_WEBHOOK_SECRET = "test-digio-webhook"
 DIGIO_KYC_TEMPLATE_NAME = "lms-video-kyc"
 DIGIO_ESIGN_SIGN_TYPE = "aadhaar"
 DIGIO_WEBHOOK_ALLOW_UNSIGNED = False
+CASHFREE_CLIENT_ID = "test-cashfree-client"
 CASHFREE_CLIENT_SECRET = ""
 CASHFREE_WEBHOOK_SECRET = "test-cashfree-webhook"
 DIGIO_BASE_URL = "https://ext-api.digio.in"
