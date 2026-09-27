@@ -683,6 +683,7 @@ export interface ApiLeadCollection {
   settlement_amount: string;
   status: string;
   status_display: string;
+  awaiting_approval?: boolean;
   collection_source: string;
   remarks: string;
   recorded_on: string;
@@ -1384,6 +1385,10 @@ export async function fetchLeadCollections(leadId: string): Promise<ApiLeadColle
   return apiGet<ApiLeadCollection[]>(`/leads/${leadId}/collections/`);
 }
 
+export async function approveLeadCollection(leadId: string, repaymentId: string): Promise<ApiLeadCollection> {
+  return apiPost<ApiLeadCollection>(`/leads/${leadId}/collections/${repaymentId}/approve/`, {});
+}
+
 type LeadCollectionPayload = {
   tillDateAmount: string;
   collectedAmount: string;
@@ -1651,6 +1656,7 @@ export function mapCollectionFromApi(entry: ApiLeadCollection) {
     status: normalizeCollectionStatusForForm(
       entry.status_display || mapCollectionStatusFromApi(entry.status),
     ),
+    awaitingApproval: Boolean(entry.awaiting_approval),
     collectionSource: normalizeCollectionSourceForForm(entry.collection_source),
     remarks: entry.remarks,
     recordedOn: entry.recorded_on,

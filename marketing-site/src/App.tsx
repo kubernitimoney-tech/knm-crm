@@ -25,6 +25,9 @@ const CibilScorePage = lazy(() =>
   import('@/pages/CibilScore').then((m) => ({ default: m.CibilScorePage })),
 );
 const TrackPage = lazy(() => import('@/pages/Track').then((m) => ({ default: m.TrackPage })));
+const LoanRepaymentPage = lazy(() =>
+  import('@/pages/LoanRepayment').then((m) => ({ default: m.LoanRepaymentPage })),
+);
 const NotFoundPage = lazy(() =>
   import('@/pages/NotFound').then((m) => ({ default: m.NotFoundPage })),
 );
@@ -47,6 +50,7 @@ export default function App() {
             <Route path="emi-calculator" element={<EmiCalculatorPage />} />
             <Route path="cibil-score" element={<CibilScorePage />} />
             <Route path="track" element={<TrackPage />} />
+            <Route path="loan-repayment" element={<LoanRepaymentPage />} />
             <Route path="blog" element={<BlogIndexPage />} />
             <Route path="blog/:slug" element={<BlogPostPage />} />
             <Route path="testimonials" element={<TestimonialsPage />} />

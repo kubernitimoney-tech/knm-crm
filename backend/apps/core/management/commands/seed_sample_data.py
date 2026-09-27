@@ -46,7 +46,7 @@ SEED_USERS = [
         "email": "collection@kubernitimoney.com",
         "first_name": "Collection",
         "last_name": "",
-        "role_slug": "collection-officer",
+        "role_slug": "collection-manager",
         "is_verified": False,
         "default_password": "DeDust!23",
     },

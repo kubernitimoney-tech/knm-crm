@@ -7,15 +7,15 @@ export interface SystemRole {
 
 export const SYSTEM_ROLES: SystemRole[] = [
   { slug: 'super-admin', name: 'Super Admin', display_name: 'Super Admin' },
-  { slug: 'admin', name: 'Admin', display_name: 'Admin' },
-  { slug: 'production-manager', name: 'Production Manager', display_name: 'Prod. Mgr' },
+  { slug: 'admin', name: 'Admin', display_name: 'Administrator' },
+  { slug: 'production-manager', name: 'Production Manager', display_name: 'Prod. Manager' },
   { slug: 'relationship-manager', name: 'Relationship Manager', display_name: 'RM' },
   { slug: 'senior-relationship-manager', name: 'Senior Relationship Manager', display_name: 'Sr. RM' },
   { slug: 'credit-manager', name: 'Credit Manager', display_name: 'CM' },
   { slug: 'senior-credit-manager', name: 'Senior Credit Manager', display_name: 'Sr. CM' },
   { slug: 'field-investigator', name: 'Field Investigator', display_name: 'FI' },
   { slug: 'account-finance', name: 'Account & Finance', display_name: 'Finance' },
-  { slug: 'collection-officer', name: 'Collection Officer', display_name: 'Collection' },
+  { slug: 'collection-manager', name: 'Collection Manager', display_name: 'Collection' },
   { slug: 'auditor', name: 'Auditor', display_name: 'Auditor' },
 ];
 
@@ -28,7 +28,7 @@ export const ROLE_HIERARCHY_LABEL = `Super Admin
 ├── Relationship Manager (RM)
 ├── Field Investigator (FI)
 ├── Finance
-├── Collection Officer
+├── Collection Manager
 └── Auditor`;
 
 export function getRoleDisplayName(slug: string): string {

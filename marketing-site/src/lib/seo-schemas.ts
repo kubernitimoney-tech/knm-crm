@@ -27,6 +27,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/emi-calculator': 'EMI Calculator',
   '/cibil-score': 'CIBIL Score',
   '/track': 'Track Application',
+  '/loan-repayment': 'Loan Repayment',
   '/blog': 'Blog',
   '/testimonials': 'Customer Stories',
   '/faq': 'FAQ',

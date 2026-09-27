@@ -355,7 +355,7 @@ class NotificationEventTests(TestCase):
             interest_amount=Decimal("8400"),
             total_repayable=Decimal("40000"),
             product_snapshot={"interest_rate": "1", "tenure_days": "21"},
-            due_date=disbursed_on.date(),
+            due_date=disbursed_on.date() + timedelta(days=21),
             status=LoanStatus.ACTIVE,
             disbursed_at=disbursed_on,
         )
@@ -439,7 +439,7 @@ class NotificationEventTests(TestCase):
         mock_localdate.return_value = today
 
         collector = UserFactory(email="collector@example.com")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         customer = customer_factory()
         rm = UserFactory(email="rm4@example.com")
@@ -470,7 +470,7 @@ class NotificationEventTests(TestCase):
         mock_localdate.return_value = today
 
         collector = UserFactory(email="collector2@example.com")
-        _assign_role(collector, "collection-officer")
+        _assign_role(collector, "collection-manager")
 
         customer = customer_factory()
         rm = UserFactory(email="rm5@example.com")
