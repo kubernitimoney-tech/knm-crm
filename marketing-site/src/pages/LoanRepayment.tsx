@@ -1,35 +1,16 @@
-import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { CreditCard, Loader2, Search, ShieldCheck } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { CreditCard, Loader2, Search } from 'lucide-react';
 import { PageHero } from '@/components/PageHero';
 import { SectionHeader } from '@/components/SectionHeader';
+import { confirmLoanPayment, fetchActiveLoan, startLoanCheckout, type ActiveLoan } from '@/lib/repaymentApi';
 import { formatCurrency } from '@/lib/utils';
 
 const INDIAN_MOBILE = /^[6-9]\d{9}$/;
 
-interface ActiveLoan {
-  loanNo: string;
-  name: string;
-  mobile: string;
-  email: string;
-  payableAmount: number;
-}
-
-type Step = 'lookup' | 'details' | 'pay' | 'paid';
+type Step = 'lookup' | 'details';
 
 function normalizeMobile(value: string) {
   return value.replace(/\D/g, '').slice(0, 10);
-}
-
-/** Sample loan until the repayment API is connected. Any valid mobile returns one active loan. */
-function sampleActiveLoan(mobile: string): ActiveLoan {
-  return {
-    loanNo: 'LN000128',
-    name: 'Rahul Sharma',
-    mobile,
-    email: 'rahul.sharma@example.com',
-    payableAmount: 28750,
-  };
 }
 
 function LoanDetailList({ loan }: { loan: ActiveLoan }) {
@@ -60,6 +41,21 @@ export function LoanRepaymentPage() {
   const [error, setError] = useState<string | null>(null);
   const [loan, setLoan] = useState<ActiveLoan | null>(null);
   const [step, setStep] = useState<Step>('lookup');
+  const [returnMessage, setReturnMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const orderId = new URLSearchParams(window.location.search).get('order_id');
+    if (!orderId) return;
+    confirmLoanPayment(orderId)
+      .then(() => {
+        setReturnMessage('Payment received. It is waiting for the accounts team to approve it in the CRM.');
+      })
+      .catch((confirmError: unknown) => {
+        setReturnMessage(
+          confirmError instanceof Error ? confirmError.message : 'Payment is not confirmed yet.',
+        );
+      });
+  }, []);
 
   async function onFetch(event: FormEvent) {
     event.preventDefault();
@@ -73,17 +69,28 @@ export function LoanRepaymentPage() {
 
     setLoading(true);
     setError(null);
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-    setLoan(sampleActiveLoan(mobile));
-    setStep('details');
-    setLoading(false);
+    try {
+      setLoan(await fetchActiveLoan(mobile));
+      setStep('details');
+    } catch (fetchError) {
+      setLoan(null);
+      setStep('lookup');
+      setError(fetchError instanceof Error ? fetchError.message : 'Could not load the loan.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onPay() {
+    const mobile = normalizeMobile(mobileNumber);
     setPaying(true);
-    await new Promise((resolve) => window.setTimeout(resolve, 600));
-    setPaying(false);
-    setStep('paid');
+    setError(null);
+    try {
+      window.location.assign(await startLoanCheckout(mobile));
+    } catch (payError) {
+      setError(payError instanceof Error ? payError.message : 'Could not start payment.');
+      setPaying(false);
+    }
   }
 
   return (
@@ -91,10 +98,10 @@ export function LoanRepaymentPage() {
       <PageHero
         eyebrow="Repayment"
         title="Loan repayment"
-        description="Enter the mobile number on the loan to see the amount due. Online payment will be connected shortly. This screen uses sample loan details."
+        description="Enter the mobile number on the loan to see the amount due, then pay the active loan on Cashfree."
         image="/personal-loan/personal-loan-3.svg"
         imageAlt="Person reviewing a loan repayment on a phone"
-        chips={['Mobile lookup', 'Active loan', 'Sample payment']}
+        chips={['Mobile lookup', 'Active loan', 'Cashfree']}
         actions={
           <a href="#repayment-form" className="btn-primary">
             Fetch loan details
@@ -146,6 +153,7 @@ export function LoanRepaymentPage() {
                 </button>
               </form>
               {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+              {returnMessage ? <p className="mt-4 text-sm text-primary-deep">{returnMessage}</p> : null}
             </>
           ) : null}
 
@@ -154,14 +162,23 @@ export function LoanRepaymentPage() {
               <SectionHeader
                 eyebrow="Active loan"
                 title="Loan details"
-                description="Sample details for this mobile number. Pay now opens a demo payment screen."
+                description="This is the running loan with cash pending. Pay now opens Cashfree for the amount due."
               />
               <div className="mt-8 space-y-5">
                 <LoanDetailList loan={loan} />
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <button type="button" className="btn-primary" onClick={() => setStep('pay')}>
-                    <CreditCard className="h-4 w-4" />
-                    Pay now
+                  <button type="button" className="btn-primary" disabled={paying} onClick={onPay}>
+                    {paying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Opening Cashfree
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="h-4 w-4" />
+                        Pay now
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -174,63 +191,9 @@ export function LoanRepaymentPage() {
                     Search again
                   </button>
                 </div>
+                {error ? <p className="text-sm text-danger">{error}</p> : null}
               </div>
             </>
-          ) : null}
-
-          {step === 'pay' && loan ? (
-            <>
-              <SectionHeader
-                eyebrow="Payment"
-                title="Pay your loan"
-                description="Demo only. No amount is charged and Cashfree is not called yet."
-              />
-              <div className="mt-8 space-y-5">
-                <LoanDetailList loan={loan} />
-                <div className="rounded-2xl border border-card-border bg-bg-app/70 p-5">
-                  <p className="text-sm text-mid-shade">Amount to pay</p>
-                  <p className="mt-1 text-3xl font-bold text-primary-deep">
-                    {formatCurrency(loan.payableAmount)}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button type="button" className="btn-primary" disabled={paying} onClick={onPay}>
-                    {paying ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-4 w-4" />
-                        Pay {formatCurrency(loan.payableAmount)}
-                      </>
-                    )}
-                  </button>
-                  <button type="button" className="btn-secondary" onClick={() => setStep('details')}>
-                    Back to loan details
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : null}
-
-          {step === 'paid' && loan ? (
-            <div className="rounded-2xl border border-card-border bg-bg-app/70 p-6 md:p-8">
-              <div className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-primary-deep" />
-                <div>
-                  <h2 className="text-xl font-bold text-primary-deep">Payment recorded (demo)</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-mid-shade">
-                    {formatCurrency(loan.payableAmount)} for loan {loan.loanNo} was not sent to a
-                    payment gateway. This confirmation is only a preview.
-                  </p>
-                  <Link to="/contact" className="btn-secondary mt-5 inline-flex">
-                    Contact support
-                  </Link>
-                </div>
-              </div>
-            </div>
           ) : null}
         </div>
       </section>

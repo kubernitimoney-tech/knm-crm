@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from apps.loans.services.loan_calculation_service import LoanCalculationService
-from apps.repayments.models import RepaymentStatus
+from apps.repayments.models import PaymentMode, RepaymentStatus
 
 
 def _confirmed_repayments(loan):
@@ -44,6 +44,13 @@ def collection_status_for_repayment(repayment) -> tuple[str, str]:
 
 
 def collection_row_for_repayment(repayment) -> dict:
+    if repayment.status == RepaymentStatus.PENDING:
+        return _collection_row(
+            repayment,
+            status_code="pending_approval",
+            status_display="Pending approval",
+            awaiting_approval=True,
+        )
     loan = repayment.loan
     application = getattr(loan, "application", None)
     as_of = LoanCalculationService.to_date(repayment.payment_date) or timezone.localdate()
@@ -84,6 +91,35 @@ def collection_row_for_repayment(repayment) -> dict:
         till_date_amount = str(metrics_before.amount_due)
 
     status_code, status_display = collection_status_for_repayment(repayment)
+    if repayment.payment_mode == PaymentMode.PAYMENT_LINK and repayment.gateway_reference:
+        status_display = "Approved"
+    return _collection_row(
+        repayment,
+        status_code=status_code,
+        status_display=status_display,
+        awaiting_approval=False,
+        till_date_amount=till_date_amount,
+    )
+
+
+def _collection_row(
+    repayment,
+    *,
+    status_code: str,
+    status_display: str,
+    awaiting_approval: bool,
+    till_date_amount: str | None = None,
+) -> dict:
+    if till_date_amount is None:
+        till_date_amount = "0"
+        loan = repayment.loan
+        application = getattr(loan, "application", None)
+        if application is not None:
+            as_of = LoanCalculationService.to_date(repayment.payment_date) or timezone.localdate()
+            metrics = LoanCalculationService.compute_for_application(
+                application, loan=loan, as_of=as_of
+            )
+            till_date_amount = str(metrics.till_date_amount)
     return {
         "id": str(repayment.id),
         "till_date_amount": till_date_amount,
@@ -98,7 +134,8 @@ def collection_row_for_repayment(repayment) -> dict:
         "settlement_amount": "0",
         "status": status_code,
         "status_display": status_display,
-        "collection_source": repayment.gateway_reference or "",
+        "awaiting_approval": awaiting_approval,
+        "collection_source": "Cashfree" if repayment.gateway_reference else "",
         "remarks": repayment.remarks,
         "recorded_on": repayment.created_at.isoformat() if repayment.created_at else "",
     }
