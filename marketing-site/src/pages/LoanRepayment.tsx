@@ -86,7 +86,7 @@ export function LoanRepaymentPage() {
     setPaying(true);
     setError(null);
     try {
-      window.location.assign(await startLoanCheckout(mobile));
+      await startLoanCheckout(mobile);
     } catch (payError) {
       setError(payError instanceof Error ? payError.message : 'Could not start payment.');
       setPaying(false);

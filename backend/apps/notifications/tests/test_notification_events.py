@@ -355,7 +355,7 @@ class NotificationEventTests(TestCase):
             interest_amount=Decimal("8400"),
             total_repayable=Decimal("40000"),
             product_snapshot={"interest_rate": "1", "tenure_days": "21"},
-            due_date=disbursed_on.date(),
+            due_date=disbursed_on.date() + timedelta(days=21),
             status=LoanStatus.ACTIVE,
             disbursed_at=disbursed_on,
         )

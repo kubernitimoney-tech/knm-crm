@@ -31,13 +31,12 @@ def _api_base() -> str:
     return "https://sandbox.cashfree.com/pg"
 
 
-def checkout_url(payment_session_id: str) -> str:
+def checkout_url() -> str:
+    """Hosted checkout accepts a POST form, not a GET with the session in the query."""
     host = (
-        "https://payments.cashfree.com"
-        if cashfree_is_production()
-        else "https://sandbox.cashfree.com"
+        "https://api.cashfree.com" if cashfree_is_production() else "https://sandbox.cashfree.com"
     )
-    return f"{host}/pg/view/sessions/checkout?payment_session_id={payment_session_id}"
+    return f"{host}/pg/view/sessions/checkout"
 
 
 def fetch_order(order_id: str) -> dict:
@@ -160,5 +159,5 @@ def create_order(
     return {
         "order_id": order_id,
         "payment_session_id": session_id,
-        "checkout_url": checkout_url(session_id),
+        "checkout_url": checkout_url(),
     }
