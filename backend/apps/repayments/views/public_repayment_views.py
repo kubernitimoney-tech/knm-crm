@@ -76,6 +76,7 @@ class PublicLoanRepaymentCheckoutAPIView(APIView):
             data={
                 **loan_lookup_payload(loan),
                 "checkout_url": session["checkout_url"],
+                "payment_session_id": session["payment_session_id"],
             }
         )
 

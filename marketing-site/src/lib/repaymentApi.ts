@@ -17,6 +17,7 @@ interface LookupPayload {
   email: string;
   payable_amount: string;
   checkout_url?: string;
+  payment_session_id?: string;
 }
 
 async function postRepayment(path: string, mobile: string): Promise<LookupPayload> {
@@ -65,10 +66,21 @@ export async function confirmLoanPayment(orderId: string): Promise<void> {
   }
 }
 
-export async function startLoanCheckout(mobile: string): Promise<string> {
+export async function startLoanCheckout(mobile: string): Promise<void> {
   const data = await postRepayment('/leads/public/repayments/checkout/', mobile);
-  if (!data.checkout_url) {
+  const sessionId = data.payment_session_id?.trim();
+  const action = data.checkout_url?.trim();
+  if (!sessionId || !action) {
     throw new Error('Cashfree did not return a checkout page.');
   }
-  return data.checkout_url;
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = action;
+  const session = document.createElement('input');
+  session.type = 'hidden';
+  session.name = 'payment_session_id';
+  session.value = sessionId;
+  form.appendChild(session);
+  document.body.appendChild(form);
+  form.submit();
 }
