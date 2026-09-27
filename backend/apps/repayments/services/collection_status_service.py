@@ -136,6 +136,7 @@ def _collection_row(
         "status_display": status_display,
         "awaiting_approval": awaiting_approval,
         "collection_source": "Cashfree" if repayment.gateway_reference else "",
+        "gateway_reference": repayment.gateway_reference or "",
         "remarks": repayment.remarks,
         "recorded_on": repayment.created_at.isoformat() if repayment.created_at else "",
     }
