@@ -308,8 +308,8 @@ DEFAULT_ROLES = {
         "display_name": "Finance",
         "permissions": ACCOUNT_FINANCE,
     },
-    "collection-officer": {
-        "name": "Collection Officer",
+    "collection-manager": {
+        "name": "Collection Manager",
         "display_name": "Collection",
         "permissions": COLLECTION_OFFICER,
     },
