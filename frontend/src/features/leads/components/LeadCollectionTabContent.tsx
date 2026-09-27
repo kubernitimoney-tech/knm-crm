@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/toast';
 import { LoadingState } from '@/components/ui/loading-state';
 import { getApiErrorMessage } from '@/lib/api';
 import {
+  approveLeadCollection,
   createLeadCollection,
   updateLeadCollection,
   deleteLeadCollection,
@@ -72,6 +73,7 @@ export interface LeadCollectionEntry {
   waveOff: string;
   settlementAmount: string;
   status: string;
+  awaitingApproval?: boolean;
   collectionSource: string;
   remarks: string;
   recordedOn: string;
@@ -148,12 +150,14 @@ function CollectionDetailsTable({
   canDelete = false,
   onEdit,
   onDelete,
+  onApprove,
 }: {
   entries: LeadCollectionEntry[];
   canEdit?: boolean;
   canDelete?: boolean;
   onEdit: (entry: LeadCollectionEntry) => void;
   onDelete: (entryId: string) => void | Promise<void>;
+  onApprove: (entryId: string) => void | Promise<void>;
 }) {
   const showActions = canEdit || canDelete;
 
@@ -200,14 +204,24 @@ function CollectionDetailsTable({
             </TableCell>
             {showActions ? (
               <TableCell>
-                <EditDeleteActions
-                  onEdit={() => onEdit(entry)}
-                  onDelete={() => onDelete(entry.id)}
-                  deleteTitle="Delete this collection?"
-                  deleteDescription="This collection record will be permanently removed."
-                  canEdit={canEdit}
-                  canDelete={canDelete}
-                />
+                {entry.awaitingApproval && canEdit ? (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-bold rounded-lg px-3"
+                    onClick={() => onApprove(entry.id)}
+                  >
+                    Approve
+                  </Button>
+                ) : (
+                  <EditDeleteActions
+                    onEdit={() => onEdit(entry)}
+                    onDelete={() => onDelete(entry.id)}
+                    deleteTitle="Delete this collection?"
+                    deleteDescription="This collection record will be permanently removed."
+                    canEdit={canEdit && !entry.awaitingApproval}
+                    canDelete={canDelete && !entry.awaitingApproval}
+                  />
+                )}
               </TableCell>
             ) : null}
           </TableRow>
@@ -455,6 +469,16 @@ export function LeadCollectionTabContent({
       setCollectionFormError(getApiErrorMessage(error));
     } finally {
       setIsSubmittingCollection(false);
+    }
+  };
+
+  const handleApproveCollection = async (entryId: string) => {
+    try {
+      const approved = mapCollectionFromApi(await approveLeadCollection(leadId, entryId));
+      setCollections((prev) => prev.map((entry) => (entry.id === entryId ? approved : entry)));
+      toast({ title: 'Payment approved', variant: 'success' });
+    } catch (error) {
+      toast({ title: getApiErrorMessage(error), variant: 'error' });
     }
   };
 
@@ -737,6 +761,7 @@ export function LeadCollectionTabContent({
               entries={collections}
               canEdit={canEdit}
               canDelete={canDelete}
+              onApprove={handleApproveCollection}
               onEdit={handleEditCollection}
               onDelete={handleDeleteCollection}
             />

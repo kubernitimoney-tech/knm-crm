@@ -294,6 +294,9 @@ DIGIO_WEBHOOK_ALLOW_UNSIGNED = env.bool("DIGIO_WEBHOOK_ALLOW_UNSIGNED", default=
 CASHFREE_CLIENT_ID = env("CASHFREE_CLIENT_ID", default="")
 CASHFREE_CLIENT_SECRET = env("CASHFREE_CLIENT_SECRET", default="")
 CASHFREE_WEBHOOK_SECRET = env("CASHFREE_WEBHOOK_SECRET", default="")
+# sandbox or production. Empty follows the secret prefix (cfsk_ma_test_ / cfsk_ma_prod_).
+CASHFREE_ENV = env("CASHFREE_ENV", default="")
+PUBLIC_SITE_URL = _env_str("PUBLIC_SITE_URL") or "http://localhost:3001"
 _DIGIO_PRODUCTION = DIGIO_ENV in {"production", "prod", "live"}
 DIGIO_BASE_URL = env(
     "DIGIO_BASE_URL",

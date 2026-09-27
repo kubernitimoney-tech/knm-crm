@@ -524,11 +524,40 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
         loan = getattr(application, "loan", None)
         if loan is None or loan.is_deleted:
             return success_response(data=[])
-        repayments = loan.repayments.filter(status=RepaymentStatus.CONFIRMED).order_by(
-            "-payment_date", "-created_at"
-        )
+        repayments = loan.repayments.filter(
+            status__in=(RepaymentStatus.CONFIRMED, RepaymentStatus.PENDING)
+        ).order_by("-payment_date", "-created_at")
         return success_response(
             data=[collection_row_for_repayment(repayment) for repayment in repayments]
+        )
+
+    @rbac_any_permission("collection.update", "collection.create")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"collections/(?P<repayment_id>[^/.]+)/approve",
+    )
+    def approve_collection(self, request, pk=None, repayment_id=None):
+        from apps.repayments.services.online_repayment_service import approve_online_payment
+        from apps.repayments.services.repayment_service import RepaymentServiceError
+
+        lead = self.get_object()
+        application = (
+            lead.applications.filter(is_deleted=False)
+            .select_related("loan")
+            .order_by("-created_at")
+            .first()
+        )
+        loan = getattr(application, "loan", None) if application else None
+        if loan is None or loan.is_deleted:
+            return error_response(message="Loan was not found.", status_code=404)
+        try:
+            result = approve_online_payment(user=request.user, loan=loan, repayment_id=repayment_id)
+        except RepaymentServiceError as exc:
+            return error_response(message=str(exc), status_code=400)
+        return success_response(
+            data=collection_row_for_repayment(result["repayment"]),
+            message="Payment approved",
         )
 
     @rbac_any_permission(
