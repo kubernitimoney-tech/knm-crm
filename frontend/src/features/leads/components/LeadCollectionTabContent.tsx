@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CreditCard, MessageSquare, Plus } from 'lucide-react';
+import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +59,7 @@ import {
   FormFieldLabel,
   FormSelect,
   EditDeleteActions,
+  GridDetailTable,
   HeavyNavTableSection,
   sectionHeadClassName,
   sectionCellClassName,
@@ -75,6 +83,7 @@ export interface LeadCollectionEntry {
   status: string;
   awaitingApproval?: boolean;
   collectionSource: string;
+  gatewayReference: string;
   remarks: string;
   recordedOn: string;
 }
@@ -144,6 +153,50 @@ function collectionEntryToForm(entry: LeadCollectionEntry) {
   };
 }
 
+function collectionDetailValue(value: string | undefined): string {
+  const text = value?.trim();
+  return text ? text : '—';
+}
+
+function CollectionViewDialog({
+  entry,
+  onClose,
+}: {
+  entry: LeadCollectionEntry | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={entry != null} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Payment details</DialogTitle>
+        </DialogHeader>
+        {entry ? (
+          <GridDetailTable
+            compact
+            columnsPerRow={3}
+            items={[
+              { label: 'Till date amount', value: collectionDetailValue(entry.tillDateAmount) },
+              { label: 'Collected', value: collectionDetailValue(entry.collectedAmount) },
+              { label: 'Penalty', value: collectionDetailValue(entry.penaltyAmount) },
+              { label: 'Wave off', value: collectionDetailValue(entry.waveOff) },
+              { label: 'Settlement amount', value: collectionDetailValue(entry.settlementAmount) },
+              { label: 'Mode', value: collectionDetailValue(entry.collectionMode) },
+              { label: 'UTR', value: collectionDetailValue(entry.utrNumber) },
+              { label: 'Order reference', value: collectionDetailValue(entry.gatewayReference) },
+              { label: 'Date & time', value: formatAppDateTimeOrFallback(entry.collectionDateTime) },
+              { label: 'Recorded on', value: formatAppDateTimeOrFallback(entry.recordedOn) },
+              { label: 'Status', value: collectionDetailValue(entry.status) },
+              { label: 'Source', value: collectionDetailValue(entry.collectionSource) },
+              { label: 'Remarks', value: collectionDetailValue(entry.remarks) },
+            ]}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CollectionDetailsTable({
   entries,
   canEdit = false,
@@ -159,9 +212,10 @@ function CollectionDetailsTable({
   onDelete: (entryId: string) => void | Promise<void>;
   onApprove: (entryId: string) => void | Promise<void>;
 }) {
-  const showActions = canEdit || canDelete;
+  const [viewing, setViewing] = useState<LeadCollectionEntry | null>(null);
 
   return (
+    <>
     <HeavyNavTableSection
       title="Collection Details"
       isEmpty={entries.length === 0}
@@ -178,9 +232,7 @@ function CollectionDetailsTable({
           <TableHead className={sectionHeadClassName()}>Status</TableHead>
           <TableHead className={sectionHeadClassName()}>Source</TableHead>
           <TableHead className={sectionHeadClassName()}>Remarks</TableHead>
-          {showActions ? (
-            <TableHead className={sectionHeadClassName('text-center')}>Action</TableHead>
-          ) : null}
+          <TableHead className={sectionHeadClassName('text-center')}>Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -202,8 +254,13 @@ function CollectionDetailsTable({
             >
               {entry.remarks || '—'}
             </TableCell>
-            {showActions ? (
-              <TableCell>
+            <TableCell>
+              <div className="flex items-center justify-center gap-1">
+                <RowViewButton
+                  title="View payment"
+                  aria-label="View payment details"
+                  onClick={() => setViewing(entry)}
+                />
                 {entry.awaitingApproval && canEdit ? (
                   <Button
                     size="sm"
@@ -222,12 +279,14 @@ function CollectionDetailsTable({
                     canDelete={canDelete && !entry.awaitingApproval}
                   />
                 )}
-              </TableCell>
-            ) : null}
+              </div>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </HeavyNavTableSection>
+    <CollectionViewDialog entry={viewing} onClose={() => setViewing(null)} />
+    </>
   );
 }
 
