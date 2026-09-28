@@ -140,8 +140,15 @@ def payment_success_from_webhook(payload: dict) -> dict | None:
 def record_online_payment(
     *, loan_id: str, order_id: str, amount: Decimal, utr: str
 ) -> LoanRepayment | None:
-    if LoanRepayment.objects.filter(gateway_reference=order_id).exists():
-        return LoanRepayment.objects.filter(gateway_reference=order_id).first()
+    """Record one pending collection per Cashfree order.
+
+    The webhook and the browser return both call this. Lock the loan first so
+    the second call updates the same row instead of inserting a duplicate.
+    """
+    order_id = (order_id or "").strip()
+    utr = (utr or "").strip()
+    if not order_id:
+        return None
     try:
         loan = Loan.objects.select_for_update().get(id=loan_id, is_deleted=False)
     except (Loan.DoesNotExist, ValidationError, ValueError):
@@ -150,8 +157,16 @@ def record_online_payment(
     if loan.status not in OPEN_LOAN_STATUSES:
         logger.info("Cashfree payment ignored for closed loan %s", loan_id)
         return None
-    if utr and LoanRepayment.objects.filter(utr=utr).exists():
-        utr = ""
+    existing = (
+        LoanRepayment.objects.select_for_update()
+        .filter(loan=loan, gateway_reference=order_id)
+        .first()
+    )
+    if existing is not None:
+        if utr and not existing.utr:
+            existing.utr = utr
+            existing.save(update_fields=["utr", "updated_at"])
+        return existing
     return LoanRepayment.objects.create(
         loan=loan,
         amount=amount,

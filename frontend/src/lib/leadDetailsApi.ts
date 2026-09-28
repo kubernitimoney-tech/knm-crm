@@ -685,6 +685,7 @@ export interface ApiLeadCollection {
   status_display: string;
   awaiting_approval?: boolean;
   collection_source: string;
+  gateway_reference?: string;
   remarks: string;
   recorded_on: string;
 }
@@ -1658,6 +1659,7 @@ export function mapCollectionFromApi(entry: ApiLeadCollection) {
     ),
     awaitingApproval: Boolean(entry.awaiting_approval),
     collectionSource: normalizeCollectionSourceForForm(entry.collection_source),
+    gatewayReference: entry.gateway_reference ?? '',
     remarks: entry.remarks,
     recordedOn: entry.recorded_on,
   };
