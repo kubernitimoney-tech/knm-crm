@@ -66,7 +66,7 @@ import {
   textareaClassName,
 } from '@/features/leads/components/leadDetailSectionShared';
 import { cn } from '@/lib/utils';
-import { remarkPriorityBadgeClass } from '@/lib/badgeStyles';
+import { collectionStatusBadgeClass, remarkPriorityBadgeClass } from '@/lib/badgeStyles';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback, fromDateTimeLocalInputValue, toDateTimeLocalInputValue, validateDateTimeLocalNotAfterNow, currentDateTimeLocalInputValue } from '@/lib/dateUtils';
 import { selectPlaceholder } from '@/lib/placeholders';
 
@@ -153,6 +153,11 @@ function collectionEntryToForm(entry: LeadCollectionEntry) {
   };
 }
 
+function CollectionStatusBadge({ status }: { status: string }) {
+  const label = status.trim() || '—';
+  return <Badge className={collectionStatusBadgeClass(label)}>{label}</Badge>;
+}
+
 function collectionDetailValue(value: string | undefined): string {
   const text = value?.trim();
   return text ? text : '—';
@@ -186,7 +191,7 @@ function CollectionViewDialog({
               { label: 'Order reference', value: collectionDetailValue(entry.gatewayReference) },
               { label: 'Date & time', value: formatAppDateTimeOrFallback(entry.collectionDateTime) },
               { label: 'Recorded on', value: formatAppDateTimeOrFallback(entry.recordedOn) },
-              { label: 'Status', value: collectionDetailValue(entry.status) },
+              { label: 'Status', value: <CollectionStatusBadge status={entry.status} /> },
               { label: 'Source', value: collectionDetailValue(entry.collectionSource) },
               { label: 'Remarks', value: collectionDetailValue(entry.remarks) },
             ]}
@@ -246,7 +251,9 @@ function CollectionDetailsTable({
             <TableCell className={cn(sectionCellClassName, 'whitespace-nowrap')}>
               {formatAppDateTimeOrFallback(entry.collectionDateTime)}
             </TableCell>
-            <TableCell className={sectionCellClassName}>{entry.status}</TableCell>
+            <TableCell className={sectionCellClassName}>
+              <CollectionStatusBadge status={entry.status} />
+            </TableCell>
             <TableCell className={sectionCellClassName}>{entry.collectionSource}</TableCell>
             <TableCell
               className={cn(sectionCellClassName, 'max-w-[180px] truncate')}
