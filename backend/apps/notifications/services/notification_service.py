@@ -625,14 +625,14 @@ class NotificationService:
             raise ValueError("Video KYC link is missing.")
         cls._send_email_on_commit(
             subject=(
-                "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+                "Please complete your Video KYC for Kuberniti Money with Har Shreejee Finance "
                 "& Leasing Company Limited."
             ),
-            template="esign_request",
+            template="video_kyc_request",
             context={
                 "customer_name": customer_label,
                 "lead_id": lead.lead_id,
-                "signing_url": request_url.strip(),
+                "kyc_url": request_url.strip(),
             },
             recipients=[email],
             raise_on_error=True,
