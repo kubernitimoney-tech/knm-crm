@@ -257,11 +257,11 @@ class TestDigioEsignAndVideoKyc:
         assert f"/verify-kyc/{row.id}" in mail.outbox[0].body
         assert mail.outbox[0].to == [lead.customer.email]
         assert mail.outbox[0].subject == (
-            "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+            "Please complete your Video KYC for Kuberniti Money with Har Shreejee Finance "
             "& Leasing Company Limited."
         )
-        assert "Start KYC Process" in mail.outbox[0].body
-        assert "Know Your Customer (KYC)" in mail.outbox[0].body
+        assert "Start Video KYC" in mail.outbox[0].body
+        assert "Aadhaar, PAN, selfie" in mail.outbox[0].body
         from apps.notifications.services.sms_service import SmsService
 
         assert SmsService.outbox
