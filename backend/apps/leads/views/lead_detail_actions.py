@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from apps.accounts.permissions import rbac_any_permission, rbac_permission, require_rbac
-from apps.accounts.services.role_helpers import user_has_permission
+from apps.accounts.services.role_helpers import is_super_admin, user_has_permission
 from apps.applications.models import LoanApplication
 from apps.core.responses import error_response, success_response
 from apps.core.serializers.status_history_serializers import (
@@ -629,6 +629,11 @@ class LeadDetailActionsMixin:
             )
 
         require_rbac(self, request, permission="lead.convert")
+        if LeadEsignRequest.objects.filter(lead=lead).exists() and not is_super_admin(request.user):
+            return error_response(
+                message="Only a super admin can resend the e-sign link.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
         email = request.data.get("recipient_email") or lead.customer.email
 
@@ -726,6 +731,13 @@ class LeadDetailActionsMixin:
             )
 
         require_rbac(self, request, permission="lead.convert")
+        if LeadVideoKycRequest.objects.filter(lead=lead).exists() and not is_super_admin(
+            request.user
+        ):
+            return error_response(
+                message="Only a super admin can resend the Video KYC link.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
         email = request.data.get("recipient_email") or lead.customer.email
 

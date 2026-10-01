@@ -75,7 +75,7 @@ export function LeadEsignDetailsSection({
   refreshToken = 0,
   onEsignCompleted,
 }: LeadEsignDetailsSectionProps) {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isSuperAdmin } = usePermissions();
   const canViewDocument = hasPermission('document.view');
   const canDownloadDocument = hasPermission('document.download');
   const [entries, setEntries] = useState<LeadEsignEntry[]>([]);
@@ -140,14 +140,14 @@ export function LeadEsignDetailsSection({
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
           Customer verifies email on our page, then Sign Now opens Aadhaar eSign (Protean). OTP goes to the Aadhaar-linked mobile.
         </p>
-        {canSendRequest ? (
+        {canSendRequest && !isLoading && (entries.length === 0 || isSuperAdmin) ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
             onClick={() => void handleSendRequest()}
             disabled={isSending}
-            title="Request E-Sign"
+            title={entries.length > 0 ? 'Resend E-Sign' : 'Request E-Sign'}
           >
             <Mail size={15} className="text-primary-deep" />
           </Button>
