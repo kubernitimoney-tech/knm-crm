@@ -6,7 +6,11 @@ from apps.leads.models import (
     Lead,
     LeadActivity,
     LeadAssignmentHistory,
+    LeadEsignRequest,
+    LeadFollowUpRemark,
     LeadSource,
+    LeadStatusHistory,
+    LeadVideoKycRequest,
 )
 
 
@@ -83,3 +87,54 @@ class DeletedLeadAdmin(admin.ModelAdmin):
 admin.site.register(LeadAssignmentHistory)
 admin.site.register(CallLog)
 admin.site.register(LeadActivity)
+
+
+@admin.register(LeadFollowUpRemark)
+class LeadFollowUpRemarkAdmin(admin.ModelAdmin):
+    list_display = (
+        "lead",
+        "remark_category",
+        "priority",
+        "follow_up_date",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("priority", "remark_category")
+    search_fields = ("lead__lead_id", "notes")
+
+
+@admin.register(LeadStatusHistory)
+class LeadStatusHistoryAdmin(admin.ModelAdmin):
+    list_display = ("lead", "from_status", "to_status", "changed_by", "changed_at")
+    list_filter = ("to_status",)
+    search_fields = ("lead__lead_id", "remarks")
+
+
+@admin.register(LeadEsignRequest)
+class LeadEsignRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "lead",
+        "status",
+        "sign_type",
+        "recipient_email",
+        "requested_by",
+        "created_at",
+    )
+    list_filter = ("status", "sign_type", "provider")
+    search_fields = ("lead__lead_id", "recipient_email", "provider_request_id")
+    readonly_fields = ("access_token",)
+
+
+@admin.register(LeadVideoKycRequest)
+class LeadVideoKycRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "lead",
+        "status",
+        "session_label",
+        "recipient_email",
+        "requested_by",
+        "created_at",
+    )
+    list_filter = ("status", "provider")
+    search_fields = ("lead__lead_id", "recipient_email", "provider_request_id")
+    readonly_fields = ("access_token",)
