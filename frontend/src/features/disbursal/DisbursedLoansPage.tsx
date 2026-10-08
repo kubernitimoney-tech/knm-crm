@@ -85,6 +85,7 @@ export const DisbursedLoansPage = () => {
     deleteRequest: (target) => deleteDisbursedLoan(target.id),
     deleteTitle: 'Delete disbursed loan?',
     deleteConfirmLabel: 'Delete loan',
+    deleteErrorTitle: 'Failed to delete disbursed loan',
     deletedToastTitle: 'Disbursed loan deleted',
     deletedToastDescription: (target) =>
       `Loan ${target.loanNo || target.leadId} has been deleted.`,
