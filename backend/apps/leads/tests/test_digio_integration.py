@@ -221,6 +221,43 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
         assert LeadEsignRequest.objects.filter(lead=lead).count() == 0
 
+    def test_resend_esign_and_video_kyc_requires_super_admin(self):
+        admin = UserFactory(email="admin-kyc-resend@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        existing_esign = LeadEsignRequest.objects.create(lead=lead, requested_by=admin)
+        existing_vkyc = LeadVideoKycRequest.objects.create(lead=lead, requested_by=admin)
+        client = APIClient()
+        client.force_authenticate(user=admin)
+
+        esign = client.post(reverse("lead-esign-requests", kwargs={"pk": lead.id}), {})
+        vkyc = client.post(reverse("lead-video-kyc-requests", kwargs={"pk": lead.id}), {})
+
+        assert esign.status_code == status.HTTP_403_FORBIDDEN
+        assert vkyc.status_code == status.HTTP_403_FORBIDDEN
+        assert LeadEsignRequest.objects.filter(lead=lead).count() == 1
+        assert LeadVideoKycRequest.objects.filter(lead=lead).count() == 1
+
+        admin.is_superuser = True
+        admin.save(update_fields=["is_superuser"])
+        with (
+            patch(
+                "apps.leads.views.lead_detail_actions.create_lead_esign_request",
+                return_value=existing_esign,
+            ) as esign_create,
+            patch(
+                "apps.leads.views.lead_detail_actions.create_lead_video_kyc_request",
+                return_value=existing_vkyc,
+            ) as vkyc_create,
+        ):
+            esign_ok = client.post(reverse("lead-esign-requests", kwargs={"pk": lead.id}), {})
+            vkyc_ok = client.post(reverse("lead-video-kyc-requests", kwargs={"pk": lead.id}), {})
+
+        assert esign_ok.status_code == status.HTTP_201_CREATED
+        assert vkyc_ok.status_code == status.HTTP_201_CREATED
+        esign_create.assert_called_once()
+        vkyc_create.assert_called_once()
+
     def test_send_video_kyc_persists_provider_id(self):
         admin = UserFactory(email="admin-digio-vkyc@test.com")
         _assign_role(admin, "admin")

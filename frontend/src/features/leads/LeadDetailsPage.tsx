@@ -80,6 +80,7 @@ import {
   fetchLeadDisbursal,
   fetchLeadEmployments,
   fetchLeadEsignRequests,
+  fetchLeadVideoKycRequests,
   sendLeadEsignRequest,
   sendLeadVideoKycRequest,
   type ApiLeadSanction,
@@ -207,6 +208,8 @@ export const LeadDetailsPage = () => {
   const [esignKycRefresh, setEsignKycRefresh] = useState(0);
   const [isRequestingTimelineEsign, setIsRequestingTimelineEsign] = useState(false);
   const [isRequestingTimelineVideoKyc, setIsRequestingTimelineVideoKyc] = useState(false);
+  const [hasEsignRequest, setHasEsignRequest] = useState(false);
+  const [hasVideoKycRequest, setHasVideoKycRequest] = useState(false);
 
   const loadWorkflowReadiness = useCallback(async (options?: {
     freshSanction?: ApiLeadSanction | null;
@@ -220,7 +223,7 @@ export const LeadDetailsPage = () => {
       const sanctionPromise = options?.freshSanction !== undefined
         ? Promise.resolve(options.freshSanction)
         : fetchLeadSanction(id).catch(() => null);
-      const [documents, addresses, disbursal, sanction, rejection, employments, esignRequests] =
+      const [documents, addresses, disbursal, sanction, rejection, employments, esignRequests, videoKycRequests] =
         await Promise.all([
           fetchLeadDocuments(id).catch(() => []),
           fetchLeadAddresses(id).catch(() => []),
@@ -233,6 +236,7 @@ export const LeadDetailsPage = () => {
           fetchLeadRejection(id).catch(() => null),
           fetchLeadEmployments(id).catch(() => []),
           fetchLeadEsignRequests(id).catch(() => []),
+          fetchLeadVideoKycRequests(id).catch(() => []),
         ]);
       const applicationStatus =
         disbursal.application_status || apiLead?.application_status || '';
@@ -252,6 +256,8 @@ export const LeadDetailsPage = () => {
       setHasRejection(rejected);
       setHasSanction(sanctioned);
       setLeadEmployments(employments);
+      setHasEsignRequest(esignRequests.length > 0);
+      setHasVideoKycRequest(videoKycRequests.length > 0);
       if (rejected) {
         setSanctionAccordionValue('rejection_item');
       } else if (sanctioned) {
@@ -864,10 +870,18 @@ export const LeadDetailsPage = () => {
                   }
                 : undefined
             }
-            onRequestEsign={canRequestEsignVideoKyc ? handleTimelineEsignRequest : undefined}
-            onRequestVideoKyc={
-              canRequestEsignVideoKyc ? handleTimelineVideoKycRequest : undefined
+            onRequestEsign={
+              canRequestEsignVideoKyc && (!hasEsignRequest || isSuperAdmin)
+                ? handleTimelineEsignRequest
+                : undefined
             }
+            onRequestVideoKyc={
+              canRequestEsignVideoKyc && (!hasVideoKycRequest || isSuperAdmin)
+                ? handleTimelineVideoKycRequest
+                : undefined
+            }
+            esignButtonTitle={hasEsignRequest ? 'Resend E-Sign' : 'Request E-Sign'}
+            videoKycButtonTitle={hasVideoKycRequest ? 'Resend Video KYC' : 'Request Video KYC'}
             isRequestingEsign={isRequestingTimelineEsign}
             isRequestingVideoKyc={isRequestingTimelineVideoKyc}
           />

@@ -317,3 +317,21 @@ class LoanService:
         loan.updated_by = user
         loan.save(update_fields=["updated_by", "updated_at"])
         return disbursement
+
+    @classmethod
+    @transaction.atomic
+    def soft_delete_disbursed_loans_for_lead(cls, *, user, lead) -> int:
+        """Hide disbursed loans without removing the lead."""
+        loans = list(
+            Loan.objects.select_for_update().filter(
+                application__lead=lead,
+                application__is_deleted=False,
+                disbursed_at__isnull=False,
+                is_deleted=False,
+            )
+        )
+        if not loans:
+            raise LoanServiceError("This lead has no disbursed loan to delete.")
+        for loan in loans:
+            loan.delete(user=user)
+        return len(loans)

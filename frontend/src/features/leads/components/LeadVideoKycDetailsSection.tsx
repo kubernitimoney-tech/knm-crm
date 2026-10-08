@@ -67,7 +67,7 @@ export function LeadVideoKycDetailsSection({
   canSendRequest = false,
   refreshToken = 0,
 }: LeadVideoKycDetailsSectionProps) {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isSuperAdmin } = usePermissions();
   const canViewDocument = hasPermission('document.view');
   const canDownloadDocument = hasPermission('document.download');
   const [entries, setEntries] = useState<LeadVideoKycEntry[]>([]);
@@ -132,14 +132,14 @@ export function LeadVideoKycDetailsSection({
           Uses the “AadharPAN with selfie and OCR” DigiStudio workflow to collect DigiLocker
           identity data, selfie/video and OCR results.
         </p>
-        {canSendRequest ? (
+        {canSendRequest && !isLoading && (entries.length === 0 || isSuperAdmin) ? (
           <Button
             size="icon"
             variant="outline"
             className="h-8 w-8 rounded-lg border-slate-200 shrink-0"
             onClick={() => void handleSendRequest()}
             disabled={isSending}
-            title="Request Video KYC"
+            title={entries.length > 0 ? 'Resend Video KYC' : 'Request Video KYC'}
           >
             <Mail size={15} className="text-primary-deep" />
           </Button>

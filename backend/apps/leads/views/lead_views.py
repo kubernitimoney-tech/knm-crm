@@ -60,6 +60,7 @@ from apps.leads.utils.lead_enrichment import (
 )
 from apps.leads.views.lead_detail_actions import LeadDetailActionsMixin
 from apps.loans.services.loan_calculation_service import LoanCalculationService
+from apps.loans.services.loan_service import LoanService, LoanServiceError
 from apps.products.models import LoanProduct
 from apps.repayments.models import RepaymentStatus
 from apps.repayments.services.collection_status_service import collection_row_for_repayment
@@ -252,6 +253,16 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
         lead = self.get_object()
         LeadService.delete_lead(user=request.user, lead=lead)
         return success_response(message="Lead deleted")
+
+    @rbac_any_permission("lead.delete", "loan.delete", "disbursal.delete")
+    @action(detail=True, methods=["delete"], url_path="disbursed-loan")
+    def delete_disbursed_loan(self, request, pk=None):
+        lead = self.get_object()
+        try:
+            LoanService.soft_delete_disbursed_loans_for_lead(user=request.user, lead=lead)
+        except LoanServiceError as exc:
+            return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
+        return success_response(message="Disbursed loan deleted")
 
     @rbac_permission("lead.assign")
     @action(detail=True, methods=["post"], url_path="transfer")
