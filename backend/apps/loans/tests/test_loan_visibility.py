@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.core.management import call_command
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -10,6 +11,7 @@ from tests.factories import UserFactory, customer_factory, grant_permission
 
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus
+from apps.applications.selectors.application_selectors import applications_for_pipeline_stage
 from apps.applications.services.application_service import ApplicationService
 from apps.leads.models import Lead, LeadSource
 from apps.loans.models import Loan, LoanStatus
@@ -235,3 +237,31 @@ class LoanListAPIScopingTests(TestCase):
         client.force_authenticate(user=outsider)
         response = client.get(f"/api/v1/loans/{loan.id}/")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class TestSoftDeleteDisbursedLoan(VisibleLoansForTests):
+    def test_delete_disbursed_loan_soft_deletes_loan_and_keeps_lead(self):
+        admin = UserFactory(email="admin-del-disbursed@test.com")
+        rm = UserFactory(email="rm-del-disbursed@test.com")
+        cm = UserFactory(email="cm-del-disbursed@test.com")
+        _assign_role(admin, "admin")
+        grant_permission(admin, "lead.delete")
+        _assign_role(rm, "relationship-manager")
+        _assign_role(cm, "credit-manager")
+
+        lead = _create_lead(lead_code="LD-LN-DEL-01", rm=rm, cm=cm)
+        loan = _create_disbursed_loan(user=rm, lead=lead, rm=rm, cm=cm, account_suffix="DEL01")
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        response = client.delete(reverse("lead-delete-disbursed-loan", kwargs={"pk": lead.id}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        lead.refresh_from_db()
+        self.assertFalse(lead.is_deleted)
+        deleted = Loan.all_objects.get(pk=loan.pk)
+        self.assertTrue(deleted.is_deleted)
+        self.assertEqual(deleted.deleted_by_id, admin.id)
+        self.assertFalse(Loan.objects.filter(pk=loan.pk).exists())
+        rows = applications_for_pipeline_stage(user=admin, stage="disbursed")
+        self.assertNotIn(loan.application_id, {row.id for row in rows})

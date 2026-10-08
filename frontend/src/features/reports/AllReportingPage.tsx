@@ -69,7 +69,9 @@ import {
   type DisbursedReportRow,
 } from '@/lib/reportsApi';
 import { toast } from '@/components/ui/toast';
-import { useLeadListingActions } from '@/hooks/useLeadListingActions';
+import { disbursedLoanDeleteDescription, useLeadListingActions } from '@/hooks/useLeadListingActions';
+import { deleteLead } from '@/lib/leadsApi';
+import { deleteDisbursedLoan } from '@/lib/loansApi';
 import {
   DataTableListingActions,
   DataTableActionHead,
@@ -146,8 +148,22 @@ export function AllReportingPage() {
     loadReportData();
   }, [loadReportData]);
 
+  const deletingDisbursedLoan = activeTab === 'disbursed';
   const { openEditByLeadUuid, setDeleteTarget, dialogs: leadActionDialogs } = useLeadListingActions({
     onDeleted: loadReportData,
+    deleteRequest: deletingDisbursedLoan
+      ? (target) => deleteDisbursedLoan(target.id)
+      : (target) => deleteLead(target.id),
+    deleteTitle: deletingDisbursedLoan ? 'Delete disbursed loan?' : 'Delete this lead?',
+    deleteConfirmLabel: deletingDisbursedLoan ? 'Delete loan' : 'Delete lead',
+    deletedToastTitle: deletingDisbursedLoan ? 'Disbursed loan deleted' : 'Lead deleted',
+    deletedToastDescription: deletingDisbursedLoan
+      ? (target) => `Loan ${target.loanNo || target.leadId} has been deleted.`
+      : undefined,
+    deleteDescription: (target) =>
+      deletingDisbursedLoan
+        ? disbursedLoanDeleteDescription(target.loanNo || target.leadId)
+        : `${target.leadId} will be permanently removed.`,
   });
   const actionCol = useLeadListingActionColumn();
 
@@ -674,9 +690,11 @@ function DisbursedTable({ paginatedData, currentPage, itemsPerPage, handleSort, 
                   visibility={actionCol}
                   viewTo={leadDetailsPath(item.id)}
                   onEdit={() => openEditByLeadUuid(item.id)}
-                  onDelete={() => setDeleteTarget({ id: item.id, leadId: item.leadId })}
+                  onDelete={() =>
+                    setDeleteTarget({ id: item.id, leadId: item.leadId, loanNo: item.loanNo })
+                  }
                   externalDeleteConfirm
-                  deleteDescription={`${item.leadId} will be permanently removed.`}
+                  deleteDescription={disbursedLoanDeleteDescription(item.loanNo || item.leadId)}
                 />
               </TableCell>
               )}

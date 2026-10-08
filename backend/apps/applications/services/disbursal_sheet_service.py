@@ -1,7 +1,3 @@
-from apps.applications.models import LoanApplication
-from apps.core.validators.india import normalize_cheque_number
-
-
 class DisbursalSheetServiceError(Exception):
     pass
 
@@ -14,18 +10,9 @@ class DisbursalSheetService:
         *,
         application_id=None,
     ) -> bool:
-        normalized = normalize_cheque_number(cheque_no or "")
-        if not normalized:
-            return False
-
-        app_qs = LoanApplication.objects.filter(is_deleted=False)
-        if application_id is not None:
-            app_qs = app_qs.exclude(id=application_id)
-
-        for details in app_qs.values_list("disbursal_sheet_details", flat=True):
-            existing = normalize_cheque_number((details or {}).get("cheque_no"))
-            if existing == normalized:
-                return True
+        # Cheque numbers are not unique. Collection managers often reuse 000000
+        # when a physical cheque number is not available.
+        del cheque_no, application_id
         return False
 
     @classmethod

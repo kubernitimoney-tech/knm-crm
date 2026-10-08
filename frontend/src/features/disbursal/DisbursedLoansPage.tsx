@@ -56,12 +56,13 @@ import { cn, exportRowsToExcel, formatCurrency, formatPersonName, formatRatePerc
 import { leadDetailsPath } from '@/lib/leadNavigation';
 import { DateRangePicker } from '@/components/ui/date-picker';
 import { usePipelineRows } from '@/hooks/usePipelineRows';
-import { useLeadListingActions } from '@/hooks/useLeadListingActions';
+import { disbursedLoanDeleteDescription, useLeadListingActions } from '@/hooks/useLeadListingActions';
 import {
   DataTableListingActions,
   DataTableActionHead,
   useLeadListingActionColumn,
 } from '@/components/ui/data-table-listing-actions';
+import { deleteDisbursedLoan } from '@/lib/loansApi';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 
 export const DisbursedLoansPage = () => {
@@ -81,6 +82,14 @@ export const DisbursedLoansPage = () => {
   const { rows: disbursedRows, isLoading, refetch } = usePipelineRows('disbursed');
   const { openEditByLeadUuid, setDeleteTarget, dialogs: leadActionDialogs } = useLeadListingActions({
     onDeleted: refetch,
+    deleteRequest: (target) => deleteDisbursedLoan(target.id),
+    deleteTitle: 'Delete disbursed loan?',
+    deleteConfirmLabel: 'Delete loan',
+    deletedToastTitle: 'Disbursed loan deleted',
+    deletedToastDescription: (target) =>
+      `Loan ${target.loanNo || target.leadId} has been deleted.`,
+    deleteDescription: (target) =>
+      disbursedLoanDeleteDescription(target.loanNo || target.leadId),
   });
   const actionCol = useLeadListingActionColumn();
   const tableColSpan = actionCol.showColumn ? 21 : 20;
@@ -371,9 +380,15 @@ export const DisbursedLoansPage = () => {
                         visibility={actionCol}
                         viewTo={leadDetailsPath(lead.id)}
                         onEdit={() => openEditByLeadUuid(lead.id)}
-                        onDelete={() => setDeleteTarget({ id: lead.id, leadId: lead.leadId })}
+                        onDelete={() =>
+                          setDeleteTarget({
+                            id: lead.id,
+                            leadId: lead.leadId,
+                            loanNo: lead.loanNo || lead.loanAccount,
+                          })
+                        }
                         externalDeleteConfirm
-                        deleteDescription={`${lead.leadId} will be permanently removed.`}
+                        deleteDescription={disbursedLoanDeleteDescription(lead.loanNo || lead.loanAccount || lead.leadId)}
                       />
                     </TableCell>
                     )}
