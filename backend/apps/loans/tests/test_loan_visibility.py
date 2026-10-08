@@ -265,3 +265,25 @@ class TestSoftDeleteDisbursedLoan(VisibleLoansForTests):
         self.assertFalse(Loan.objects.filter(pk=loan.pk).exists())
         rows = applications_for_pipeline_stage(user=admin, stage="disbursed")
         self.assertNotIn(loan.application_id, {row.id for row in rows})
+
+    def test_delete_disbursed_loan_when_lead_already_deleted(self):
+        admin = UserFactory(email="admin-del-gone-lead@test.com")
+        rm = UserFactory(email="rm-del-gone-lead@test.com")
+        cm = UserFactory(email="cm-del-gone-lead@test.com")
+        _assign_role(admin, "admin")
+        grant_permission(admin, "lead.delete")
+        _assign_role(rm, "relationship-manager")
+        _assign_role(cm, "credit-manager")
+
+        lead = _create_lead(lead_code="LD-LN-DEL-02", rm=rm, cm=cm)
+        loan = _create_disbursed_loan(user=rm, lead=lead, rm=rm, cm=cm, account_suffix="DEL02")
+        lead.delete(user=admin)
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        response = client.delete(reverse("lead-delete-disbursed-loan", kwargs={"pk": lead.id}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(Loan.all_objects.get(pk=loan.pk).is_deleted)
+        rows = applications_for_pipeline_stage(user=admin, stage="disbursed")
+        self.assertNotIn(loan.application_id, {row.id for row in rows})
