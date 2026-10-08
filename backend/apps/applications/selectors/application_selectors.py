@@ -147,6 +147,8 @@ def applications_for_pipeline_stage(*, user, stage: str):
         return _base_application_queryset().none()
 
     qs = _base_application_queryset().filter(status__in=statuses)
+    if stage == "disbursed":
+        qs = qs.exclude(loan__is_deleted=True)
 
     if stage in SANCTION_QUEUE_STAGES:
         if is_super_admin(user) or is_admin_user(user):

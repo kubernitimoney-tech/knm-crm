@@ -84,9 +84,24 @@ class DeletedLeadAdmin(admin.ModelAdmin):
         return False
 
 
-admin.site.register(LeadAssignmentHistory)
-admin.site.register(CallLog)
-admin.site.register(LeadActivity)
+@admin.register(LeadAssignmentHistory)
+class LeadAssignmentHistoryAdmin(admin.ModelAdmin):
+    list_display = ("lead", "old_rm", "new_rm", "old_cm", "new_cm", "assigned_by", "created_at")
+    search_fields = ("lead__lead_id", "remarks")
+
+
+@admin.register(CallLog)
+class CallLogAdmin(admin.ModelAdmin):
+    list_display = ("lead", "disposition", "created_by", "created_at")
+    list_filter = ("disposition",)
+    search_fields = ("lead__lead_id", "remarks")
+
+
+@admin.register(LeadActivity)
+class LeadActivityAdmin(admin.ModelAdmin):
+    list_display = ("lead", "activity_type", "description", "created_by", "created_at")
+    list_filter = ("activity_type",)
+    search_fields = ("lead__lead_id", "description")
 
 
 @admin.register(LeadFollowUpRemark)

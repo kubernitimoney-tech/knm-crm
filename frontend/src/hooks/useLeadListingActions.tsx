@@ -5,14 +5,50 @@ import { toast } from '@/components/ui/toast';
 import { deleteLead, fetchLead, mapApiLeadToRow } from '@/lib/leadsApi';
 import type { Lead } from '@/types';
 
+interface DeleteTarget {
+  id: string;
+  leadId: string;
+  loanNo?: string;
+}
+
+export function disbursedLoanDeleteDescription(loanNo: string): string {
+  return `Loan ${loanNo} has already been disbursed. Deleting it may permanently remove associated financial and repayment records.\n\nAre you sure you want to continue?`;
+}
+
 interface LeadListingActionsOptions {
   onDeleted?: () => void;
+  /** Replaces lead delete. Disbursed loans use this to soft-delete the loan. */
+  deleteRequest?: (target: DeleteTarget) => Promise<void>;
+  deleteTitle?: string | ((target: DeleteTarget) => string);
+  deleteConfirmLabel?: string | ((target: DeleteTarget) => string);
+  deleteDescription?: (target: DeleteTarget) => string;
+  deletedToastTitle?: string | ((target: DeleteTarget) => string);
+  deletedToastDescription?: (target: DeleteTarget) => string;
+}
+
+function resolveDeleteText(
+  value: string | ((target: DeleteTarget) => string) | undefined,
+  target: DeleteTarget | null,
+  fallback: string,
+): string {
+  if (typeof value === 'function') {
+    return target ? value(target) : fallback;
+  }
+  return value ?? fallback;
 }
 
 /** Shared edit/delete state and dialogs for lead-based listing pages. */
-export function useLeadListingActions({ onDeleted }: LeadListingActionsOptions = {}) {
+export function useLeadListingActions({
+  onDeleted,
+  deleteRequest,
+  deleteTitle,
+  deleteConfirmLabel,
+  deleteDescription,
+  deletedToastTitle,
+  deletedToastDescription,
+}: LeadListingActionsOptions = {}) {
   const [editLead, setEditLead] = useState<Lead | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; leadId: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const openEditByLeadUuid = useCallback(async (leadUuid: string) => {
@@ -34,10 +70,15 @@ export function useLeadListingActions({ onDeleted }: LeadListingActionsOptions =
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await deleteLead(deleteTarget.id);
+      if (deleteRequest) {
+        await deleteRequest(deleteTarget);
+      } else {
+        await deleteLead(deleteTarget.id);
+      }
       toast({
-        title: 'Lead deleted',
-        description: `${deleteTarget.leadId} removed.`,
+        title: resolveDeleteText(deletedToastTitle, deleteTarget, 'Lead deleted'),
+        description:
+          deletedToastDescription?.(deleteTarget) ?? `${deleteTarget.leadId} removed.`,
         variant: 'success',
       });
       setDeleteTarget(null);
@@ -71,13 +112,14 @@ export function useLeadListingActions({ onDeleted }: LeadListingActionsOptions =
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
         }}
-        title="Delete this lead?"
+        title={resolveDeleteText(deleteTitle, deleteTarget, 'Delete this lead?')}
         description={
           deleteTarget
-            ? `${deleteTarget.leadId} will be permanently removed.`
+            ? (deleteDescription?.(deleteTarget)
+              ?? `${deleteTarget.leadId} will be permanently removed.`)
             : undefined
         }
-        confirmLabel="Delete lead"
+        confirmLabel={resolveDeleteText(deleteConfirmLabel, deleteTarget, 'Delete lead')}
         isDeleting={isDeleting}
         onConfirm={handleConfirmDelete}
       />
