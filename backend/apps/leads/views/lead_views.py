@@ -27,7 +27,7 @@ from apps.collections.services.collection_activity_service import CollectionActi
 from apps.core.responses import error_response, success_response
 from apps.customers.services.customer_service import CustomerService
 from apps.leads.constants import MAX_LEADS_PER_CUSTOMER_PER_HOUR
-from apps.leads.models import LeadCategory, LeadFollowUpRemark, LeadSource, LeadStatus
+from apps.leads.models import Lead, LeadCategory, LeadFollowUpRemark, LeadSource, LeadStatus
 from apps.leads.permissions import LeadObjectPermission
 from apps.leads.selectors.lead_list_selectors import (
     constrain_leads_to_status_display,
@@ -257,7 +257,16 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
     @rbac_any_permission("lead.delete", "loan.delete", "disbursal.delete")
     @action(detail=True, methods=["delete"], url_path="disbursed-loan")
     def delete_disbursed_loan(self, request, pk=None):
-        lead = self.get_object()
+        # Include an already soft-deleted lead. Older deletes removed the lead
+        # and left the disbursed loan on the list.
+        lead = Lead.all_objects.filter(pk=pk).first()
+        if lead is None:
+            return error_response(message="Lead not found.", status_code=status.HTTP_404_NOT_FOUND)
+        if not lead.check_user_access(request.user):
+            return error_response(
+                message="You do not have permission to delete this disbursed loan.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
         try:
             LoanService.soft_delete_disbursed_loans_for_lead(user=request.user, lead=lead)
         except LoanServiceError as exc:

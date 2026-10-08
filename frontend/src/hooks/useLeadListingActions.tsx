@@ -24,6 +24,7 @@ interface LeadListingActionsOptions {
   deleteDescription?: (target: DeleteTarget) => string;
   deletedToastTitle?: string | ((target: DeleteTarget) => string);
   deletedToastDescription?: (target: DeleteTarget) => string;
+  deleteErrorTitle?: string;
 }
 
 function resolveDeleteText(
@@ -46,6 +47,7 @@ export function useLeadListingActions({
   deleteDescription,
   deletedToastTitle,
   deletedToastDescription,
+  deleteErrorTitle = 'Failed to delete lead',
 }: LeadListingActionsOptions = {}) {
   const [editLead, setEditLead] = useState<Lead | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -85,7 +87,7 @@ export function useLeadListingActions({
       onDeleted?.();
     } catch (err) {
       toast({
-        title: 'Failed to delete lead',
+        title: deleteErrorTitle,
         description: err instanceof Error ? err.message : 'Please try again.',
         variant: 'error',
       });
