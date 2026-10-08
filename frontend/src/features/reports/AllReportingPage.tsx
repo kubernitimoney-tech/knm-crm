@@ -156,6 +156,9 @@ export function AllReportingPage() {
       : (target) => deleteLead(target.id),
     deleteTitle: deletingDisbursedLoan ? 'Delete disbursed loan?' : 'Delete this lead?',
     deleteConfirmLabel: deletingDisbursedLoan ? 'Delete loan' : 'Delete lead',
+    deleteErrorTitle: deletingDisbursedLoan
+      ? 'Failed to delete disbursed loan'
+      : 'Failed to delete lead',
     deletedToastTitle: deletingDisbursedLoan ? 'Disbursed loan deleted' : 'Lead deleted',
     deletedToastDescription: deletingDisbursedLoan
       ? (target) => `Loan ${target.loanNo || target.leadId} has been deleted.`
