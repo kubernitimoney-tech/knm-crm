@@ -7,6 +7,7 @@ import hmac
 import logging
 import re
 import time
+import urllib.request
 from typing import Any
 
 from django.conf import settings
@@ -269,26 +270,28 @@ def refresh_video_kyc_from_provider(
     event = "kyc.completed" if force or row.status == VideoKycRequestStatus.COMPLETED else ""
     _apply_kyc_response(row, response=response, client=client, event=event)
     row.refresh_from_db()
-    details = dict(row.session_details or {})
-    details["media_sync_attempted"] = True
-    row.session_details = details
-    row.save(update_fields=["session_details", "updated_at"])
+    if row.recording_file:
+        details = dict(row.session_details or {})
+        details["media_sync_attempted"] = True
+        row.session_details = details
+        row.save(update_fields=["session_details", "updated_at"])
+    elif row.status == VideoKycRequestStatus.COMPLETED:
+        logger.warning(
+            "Video KYC %s completed without a recording; will retry media download",
+            row.provider_request_id or row.pk,
+        )
     return row
 
 
 def _vkyc_needs_refresh(row: LeadVideoKycRequest) -> bool:
     if row.status == VideoKycRequestStatus.EXPIRED:
         return False
+    if not row.recording_file:
+        return True
     details = row.session_details or {}
-    geo = normalize_geolocation(details.get("geolocation") or {})
-    has_geo = (
-        geo.get("latitude") is not None
-        or geo.get("longitude") is not None
-        or bool(geo.get("address"))
-    )
-    if row.status == VideoKycRequestStatus.COMPLETED and row.recording_file and has_geo:
-        return False
-    return not details.get("media_sync_attempted")
+    if not row.selfie_file and not details.get("media_sync_attempted"):
+        return True
+    return False
 
 
 def _kyc_is_completed(response: dict, *, event: str = "") -> bool:
@@ -331,12 +334,20 @@ def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     request_id = row.provider_request_id or str(response.get("id") or "kyc")
     video, selfie = _extract_kyc_media(response, client=client, request_id=request_id)
     if video and not row.recording_file:
-        row.recording_file.save(f"{request_id}.mp4", ContentFile(video), save=False)
+        row.recording_file.save(
+            f"{request_id}{_media_extension(video, '.mp4')}",
+            ContentFile(video),
+            save=False,
+        )
     if selfie and not row.selfie_file:
-        row.selfie_file.save(f"{request_id}.jpg", ContentFile(selfie), save=False)
+        row.selfie_file.save(
+            f"{request_id}{_media_extension(selfie, '.jpg')}",
+            ContentFile(selfie),
+            save=False,
+        )
     ids = dict(row.session_details.get("ids_found") or {})
-    ids["video"] = bool(ids.get("video") or row.recording_file or video)
-    ids["selfie"] = bool(ids.get("selfie") or row.selfie_file or selfie)
+    ids["video"] = bool(row.recording_file)
+    ids["selfie"] = bool(row.selfie_file)
     row.session_details["ids_found"] = ids
     row.status = VideoKycRequestStatus.COMPLETED
     if not row.completed_at:
@@ -374,6 +385,7 @@ def _unwrap_kyc_response(response: dict) -> dict:
     ):
         merged = dict(response)
         merged.update(request_details)
+        merged.pop("request_details", None)
         return merged
     return response
 
@@ -536,28 +548,89 @@ def _map_kyc_session(response: dict) -> dict:
 
 
 def _decode_media(value) -> bytes:
+    if isinstance(value, dict):
+        return _decode_media(
+            value.get("file_data")
+            or value.get("file_base64")
+            or value.get("data")
+            or value.get("content")
+        )
+    if isinstance(value, (bytes, bytearray)):
+        data = bytes(value)
+        stripped = data.lstrip()
+        if _media_kind_from_bytes(data) or stripped.startswith(b"%PDF"):
+            return data
+        if re.fullmatch(rb"[A-Za-z0-9+/=\s]+", data) and len(data) > 24:
+            try:
+                return _decode_media(data.decode("ascii")) or data
+            except UnicodeDecodeError:
+                return data
+        return data
     if not isinstance(value, str) or not value:
         return b""
     encoded = value.split(",", 1)[-1] if value.startswith("data:") else value
+    encoded = "".join(encoded.split())
+    pad = len(encoded) % 4
+    if pad:
+        encoded += "=" * (4 - pad)
     try:
-        return base64.b64decode(encoded, validate=True)
+        return base64.b64decode(encoded)
     except (ValueError, binascii.Error):
         return b""
 
 
-def _classify_action_media(action_type: str, key: str, media: bytes) -> str:
-    blob = f"{action_type} {key}".lower()
-    if any(token in blob for token in ("video", "vkyc", "two_way")):
-        return "video"
-    if any(token in blob for token in ("selfie", "image", "photo")):
-        return "selfie"
+def _media_kind_from_bytes(media: bytes) -> str:
     if media[:3] == b"\xff\xd8\xff" or media[:8] == b"\x89PNG\r\n\x1a\n":
         return "selfie"
-    return "video"
+    if media[:6] in (b"GIF87a", b"GIF89a"):
+        return "selfie"
+    if media[:4] == b"RIFF" and b"WEBP" in media[8:16]:
+        return "selfie"
+    if b"ftyp" in media[:32] or (media[:4] == b"RIFF" and b"AVI " in media[8:16]):
+        return "video"
+    return ""
+
+
+def _media_extension(media: bytes, default: str) -> str:
+    kind = _media_kind_from_bytes(media)
+    if media[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if media[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    if kind == "selfie":
+        return ".jpg"
+    return default
+
+
+def _classify_action_media(action_type: str, key: str, media: bytes) -> str:
+    by_bytes = _media_kind_from_bytes(media)
+    if by_bytes:
+        return by_bytes
+    blob = f"{action_type} {key}".lower()
+    if any(token in blob for token in ("video", "vkyc", "two_way", "recording")):
+        return "video"
+    if any(token in blob for token in ("selfie", "image", "photo", "face")):
+        return "selfie"
+    return ""
+
+
+def _assign_media(kind: str, media: bytes, video: bytes, selfie: bytes) -> tuple[bytes, bytes]:
+    if not media or media.startswith(b"%PDF"):
+        return video, selfie
+    resolved = kind or _classify_action_media("", "", media)
+    if resolved == "selfie":
+        if not selfie:
+            return video, media
+        return video, selfie
+    if resolved == "video" and not video:
+        return media, selfie
+    return video, selfie
 
 
 def _download_kyc_file(client, file_id: str, request_id: str) -> bytes:
     if client is None or not file_id:
+        return b""
+    if file_id.upper().startswith(("KID", "DID")):
         return b""
     downloader = getattr(client, "download_kyc_media", None)
     if not callable(downloader):
@@ -576,50 +649,106 @@ def _download_kyc_file(client, file_id: str, request_id: str) -> bytes:
     return bytes(content) if isinstance(content, (bytes, bytearray)) else b""
 
 
+def _download_media_url(url: str) -> bytes:
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        return b""
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "kuberniti-lms-digio"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            content = response.read()
+    except Exception:
+        logger.exception("Failed to download KYC media URL")
+        return b""
+    return content if isinstance(content, (bytes, bytearray)) else b""
+
+
+def _file_id_candidates(mapping: dict) -> list[str]:
+    keys = (
+        "file_id",
+        "sub_file_id",
+        "media_id",
+        "video_file_id",
+        "selfie_file_id",
+        "exec_file_id",
+        "document_file_id",
+    )
+    values = [mapping.get(key) for key in keys]
+    extra = mapping.get("additional_file_ids")
+    if isinstance(extra, list):
+        values.extend(extra)
+    for key, nested in mapping.items():
+        if str(key).lower().endswith("file_id"):
+            values.append(nested)
+    found: list[str] = []
+    for candidate in values:
+        if isinstance(candidate, (int, float)):
+            candidate = str(int(candidate))
+        if not isinstance(candidate, str):
+            continue
+        file_id = candidate.strip()
+        if not file_id or file_id.startswith(("http://", "https://")):
+            continue
+        found.append(file_id)
+    return found
+
+
 def _extract_kyc_media(response: dict, *, client=None, request_id: str = "") -> tuple[bytes, bytes]:
-    video = _decode_media(response.get("video_file") or response.get("file_data"))
-    selfie = _decode_media(response.get("selfie_file") or response.get("selfie"))
+    video, selfie = b"", b""
+    for key in ("selfie_file", "selfie", "video_file", "file_data"):
+        media = _decode_media(response.get(key))
+        video, selfie = _assign_media(
+            _classify_action_media("", key, media),
+            media,
+            video,
+            selfie,
+        )
     request_id = request_id or str(response.get("id") or "").strip()
+    url_keys = (
+        "file_url",
+        "video_url",
+        "media_url",
+        "recording_url",
+        "selfie_url",
+        "download_url",
+    )
 
     for mapping in _walk_dicts(response):
         action_type = str(mapping.get("type") or mapping.get("action_type") or "").lower()
         for key in ("file_base64", "file_data", "video_file", "selfie_file", "subfile_base64"):
             media = _decode_media(mapping.get(key))
-            if not media or media.startswith(b"%PDF"):
+            video, selfie = _assign_media(
+                _classify_action_media(action_type, key, media),
+                media,
+                video,
+                selfie,
+            )
+        for key in url_keys:
+            url = mapping.get(key)
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
                 continue
-            kind = _classify_action_media(action_type, key, media)
-            if kind == "video" and not video:
-                video = media
-            elif kind == "selfie" and not selfie:
-                selfie = media
+            media = _download_media_url(url)
+            video, selfie = _assign_media(
+                _classify_action_media(action_type, key, media),
+                media,
+                video,
+                selfie,
+            )
 
     if client is not None:
         seen: set[str] = set()
         for mapping in _walk_dicts(response):
             action_type = str(mapping.get("type") or mapping.get("action_type") or "").lower()
-            candidates = [
-                mapping.get("file_id"),
-                mapping.get("sub_file_id"),
-                mapping.get("media_id"),
-                mapping.get("video_file_id"),
-                mapping.get("selfie_file_id"),
-            ]
-            extra = mapping.get("additional_file_ids")
-            if isinstance(extra, list):
-                candidates.extend(extra)
-            for candidate in candidates:
-                if not isinstance(candidate, str):
-                    continue
-                file_id = candidate.strip()
-                if not file_id or file_id in seen:
+            for file_id in _file_id_candidates(mapping):
+                if file_id in seen:
                     continue
                 seen.add(file_id)
                 media = _download_kyc_file(client, file_id, request_id)
-                if not media:
-                    continue
-                kind = _classify_action_media(action_type, "file_id", media)
-                if kind == "video" and not video:
-                    video = media
-                elif kind == "selfie" and not selfie:
-                    selfie = media
+                video, selfie = _assign_media(
+                    _classify_action_media(action_type, "file_id", media),
+                    media,
+                    video,
+                    selfie,
+                )
+            if video and selfie:
+                break
     return video, selfie
