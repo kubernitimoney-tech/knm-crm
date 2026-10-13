@@ -501,8 +501,8 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         session = obj.session_details or {}
         ids = session.get("ids_found") or {}
         return {
-            "video": bool(obj.recording_file),
-            "selfie": bool(obj.selfie_file or ids.get("selfie")),
+            "video": bool(ids.get("video", bool(obj.recording_file))),
+            "selfie": bool(ids.get("selfie", bool(obj.selfie_file))),
             "aadhaar": bool(ids.get("aadhaar", _customer_has_document(customer, "aadhaar"))),
             "pan": bool(ids.get("pan", _customer_has_document(customer, "pan"))),
         }
