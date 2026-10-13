@@ -5,7 +5,7 @@ Full-stack FinTech LMS: **Django REST API** (`backend/`) + **React dashboard** (
 ## Project layout
 
 ```
-lms/
+knm-crm/
 ├── docker-compose.yml   # ← use this (repo root)
 ├── backend/             # Django 5.2 API, PostgreSQL, Redis, Celery, RBAC
 │   └── apps/
@@ -15,7 +15,7 @@ lms/
 │       ├── loans, ledger, repayments, collections
 │       ├── documents, workflow, activities, audit_logs
 │       └── dashboard, reports, notifications
-└── frontend/            # React (Vite) + TypeScript UI (LMS employee app, :3000)
+└── frontend/            # React (Vite) + TypeScript UI (CRM employee app, :3000)
 └── marketing-site/      # Customer marketing SPA (:3001)
 ```
 
