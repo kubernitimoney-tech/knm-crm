@@ -251,7 +251,7 @@ jobs:
             || echo "Promotion PR already open."
 
   # ---------------------------------------------------------------------------
-  # Deploy staging → same test/staging VPS (201.18.192.131)
+  # Deploy staging → same test/staging VPS (xxx.xxx.xxx.xxx)
   # Secrets: same VPS_* as testing
   # ---------------------------------------------------------------------------
   deploy-staging:

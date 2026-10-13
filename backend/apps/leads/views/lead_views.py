@@ -27,7 +27,7 @@ from apps.collections.services.collection_activity_service import CollectionActi
 from apps.core.responses import error_response, success_response
 from apps.customers.services.customer_service import CustomerService
 from apps.leads.constants import MAX_LEADS_PER_CUSTOMER_PER_HOUR
-from apps.leads.models import LeadCategory, LeadFollowUpRemark, LeadSource, LeadStatus
+from apps.leads.models import Lead, LeadCategory, LeadFollowUpRemark, LeadSource, LeadStatus
 from apps.leads.permissions import LeadObjectPermission
 from apps.leads.selectors.lead_list_selectors import (
     constrain_leads_to_status_display,
@@ -60,6 +60,7 @@ from apps.leads.utils.lead_enrichment import (
 )
 from apps.leads.views.lead_detail_actions import LeadDetailActionsMixin
 from apps.loans.services.loan_calculation_service import LoanCalculationService
+from apps.loans.services.loan_service import LoanService, LoanServiceError
 from apps.products.models import LoanProduct
 from apps.repayments.models import RepaymentStatus
 from apps.repayments.services.collection_status_service import collection_row_for_repayment
@@ -252,6 +253,25 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
         lead = self.get_object()
         LeadService.delete_lead(user=request.user, lead=lead)
         return success_response(message="Lead deleted")
+
+    @rbac_any_permission("lead.delete", "loan.delete", "disbursal.delete")
+    @action(detail=True, methods=["delete"], url_path="disbursed-loan")
+    def delete_disbursed_loan(self, request, pk=None):
+        # Include an already soft-deleted lead. Older deletes removed the lead
+        # and left the disbursed loan on the list.
+        lead = Lead.all_objects.filter(pk=pk).first()
+        if lead is None:
+            return error_response(message="Lead not found.", status_code=status.HTTP_404_NOT_FOUND)
+        if not lead.check_user_access(request.user):
+            return error_response(
+                message="You do not have permission to delete this disbursed loan.",
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            LoanService.soft_delete_disbursed_loans_for_lead(user=request.user, lead=lead)
+        except LoanServiceError as exc:
+            return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
+        return success_response(message="Disbursed loan deleted")
 
     @rbac_permission("lead.assign")
     @action(detail=True, methods=["post"], url_path="transfer")
@@ -524,11 +544,40 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
         loan = getattr(application, "loan", None)
         if loan is None or loan.is_deleted:
             return success_response(data=[])
-        repayments = loan.repayments.filter(status=RepaymentStatus.CONFIRMED).order_by(
-            "-payment_date", "-created_at"
-        )
+        repayments = loan.repayments.filter(
+            status__in=(RepaymentStatus.CONFIRMED, RepaymentStatus.PENDING)
+        ).order_by("-payment_date", "-created_at")
         return success_response(
             data=[collection_row_for_repayment(repayment) for repayment in repayments]
+        )
+
+    @rbac_any_permission("collection.update", "collection.create")
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"collections/(?P<repayment_id>[^/.]+)/approve",
+    )
+    def approve_collection(self, request, pk=None, repayment_id=None):
+        from apps.repayments.services.online_repayment_service import approve_online_payment
+        from apps.repayments.services.repayment_service import RepaymentServiceError
+
+        lead = self.get_object()
+        application = (
+            lead.applications.filter(is_deleted=False)
+            .select_related("loan")
+            .order_by("-created_at")
+            .first()
+        )
+        loan = getattr(application, "loan", None) if application else None
+        if loan is None or loan.is_deleted:
+            return error_response(message="Loan was not found.", status_code=404)
+        try:
+            result = approve_online_payment(user=request.user, loan=loan, repayment_id=repayment_id)
+        except RepaymentServiceError as exc:
+            return error_response(message=str(exc), status_code=400)
+        return success_response(
+            data=collection_row_for_repayment(result["repayment"]),
+            message="Payment approved",
         )
 
     @rbac_any_permission(

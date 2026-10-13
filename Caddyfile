@@ -1,13 +1,13 @@
 # Edge reverse proxy for Kuberniti Money.
 # Caddy provisions and renews free HTTPS certificates automatically.
 #
-# Production VPS (187.127.174.47) — DNS must point these here:
+# Production VPS (xxx.xxx.xxx.xxx) — DNS must point these here:
 #   kubernitimoney.com            -> marketing site
 #   www.kubernitimoney.com        -> redirect to apex
 #   app.kubernitimoney.com        -> CRM (frontend)
 #   api.kubernitimoney.com        -> Django API (+ /media/)
 #
-# Test / staging VPS (201.18.192.131) — DNS must point these here:
+# Test / staging VPS (xxx.xxx.xxx.xxx) — DNS must point these here:
 #   dev.kubernitimoney.com        -> marketing site
 #   test.kubernitimoney.com       -> CRM (frontend)
 #   api-test.kubernitimoney.com   -> Django API (+ /media/)

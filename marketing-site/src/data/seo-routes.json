@@ -85,6 +85,11 @@
     "description": "Track all your loan enquiries and application status using PAN or registered mobile number. See the latest application and current stage online."
   },
   {
+    "path": "/loan-repayment",
+    "title": "Loan Repayment | Pay Your Active Loan | Kuberniti Money",
+    "description": "Look up an active loan with your mobile number and review the payable amount. Online repayment is coming soon."
+  },
+  {
     "path": "/blog",
     "title": "Loan Tips & Financial Guides Blog | Kuberniti Money",
     "description": "Read expert guides on personal loans, CIBIL scores, EMI planning, eligibility, and financial planning for Indian borrowers. Explore articles and apply today."

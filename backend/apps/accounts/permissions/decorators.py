@@ -34,7 +34,13 @@ def require_rbac(
     """
     Re-check RBAC inside an action when method-specific permissions differ
     (e.g. GET loan.view, POST loan.update on the same endpoint).
+
+    Do not call ``view.check_permissions()``. That calls ``get_permissions()``,
+    which replaces these codes with the action decorator's list.
     """
+    from apps.accounts.permissions.rbac import HasRBACPermission
+
     view.required_permission = permission
-    view.required_permissions = permissions
-    view.check_permissions(request)
+    view.required_permissions = list(permissions) if permissions else None
+    if not HasRBACPermission().has_permission(request, view):
+        view.permission_denied(request)

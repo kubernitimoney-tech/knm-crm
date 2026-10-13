@@ -22,6 +22,8 @@ interface CustomerTimelineCardProps {
   onLogCall?: () => void;
   onRequestEsign?: () => void;
   onRequestVideoKyc?: () => void;
+  esignButtonTitle?: string;
+  videoKycButtonTitle?: string;
   isRequestingEsign?: boolean;
   isRequestingVideoKyc?: boolean;
 }
@@ -142,6 +144,8 @@ export function CustomerTimelineCard({
   onLogCall,
   onRequestEsign,
   onRequestVideoKyc,
+  esignButtonTitle = 'Request E-Sign',
+  videoKycButtonTitle = 'Request Video KYC',
   isRequestingEsign = false,
   isRequestingVideoKyc = false,
 }: CustomerTimelineCardProps) {
@@ -168,7 +172,7 @@ export function CustomerTimelineCard({
                 className="h-7 w-7 rounded-lg"
                 onClick={onRequestEsign}
                 disabled={isRequestingEsign}
-                title="Request E-Sign"
+                title={esignButtonTitle}
               >
                 <Fingerprint className="h-3.5 w-3.5 text-primary-deep" />
               </Button>
@@ -181,7 +185,7 @@ export function CustomerTimelineCard({
                 className="h-7 w-7 rounded-lg"
                 onClick={onRequestVideoKyc}
                 disabled={isRequestingVideoKyc}
-                title="Request Video KYC"
+                title={videoKycButtonTitle}
               >
                 <Video className="h-3.5 w-3.5 text-primary-deep" />
               </Button>

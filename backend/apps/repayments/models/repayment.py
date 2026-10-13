@@ -11,6 +11,7 @@ class PaymentMode(models.TextChoices):
     RTGS = "rtgs", "RTGS"
     CHEQUE = "cheque", "Cheque"
     CASH = "cash", "Cash"
+    PAYMENT_LINK = "payment_link", "Payment Link"
 
 
 class RepaymentStatus(models.TextChoices):

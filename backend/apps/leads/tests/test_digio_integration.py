@@ -221,6 +221,43 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_502_BAD_GATEWAY
         assert LeadEsignRequest.objects.filter(lead=lead).count() == 0
 
+    def test_resend_esign_and_video_kyc_requires_super_admin(self):
+        admin = UserFactory(email="admin-kyc-resend@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        existing_esign = LeadEsignRequest.objects.create(lead=lead, requested_by=admin)
+        existing_vkyc = LeadVideoKycRequest.objects.create(lead=lead, requested_by=admin)
+        client = APIClient()
+        client.force_authenticate(user=admin)
+
+        esign = client.post(reverse("lead-esign-requests", kwargs={"pk": lead.id}), {})
+        vkyc = client.post(reverse("lead-video-kyc-requests", kwargs={"pk": lead.id}), {})
+
+        assert esign.status_code == status.HTTP_403_FORBIDDEN
+        assert vkyc.status_code == status.HTTP_403_FORBIDDEN
+        assert LeadEsignRequest.objects.filter(lead=lead).count() == 1
+        assert LeadVideoKycRequest.objects.filter(lead=lead).count() == 1
+
+        admin.is_superuser = True
+        admin.save(update_fields=["is_superuser"])
+        with (
+            patch(
+                "apps.leads.views.lead_detail_actions.create_lead_esign_request",
+                return_value=existing_esign,
+            ) as esign_create,
+            patch(
+                "apps.leads.views.lead_detail_actions.create_lead_video_kyc_request",
+                return_value=existing_vkyc,
+            ) as vkyc_create,
+        ):
+            esign_ok = client.post(reverse("lead-esign-requests", kwargs={"pk": lead.id}), {})
+            vkyc_ok = client.post(reverse("lead-video-kyc-requests", kwargs={"pk": lead.id}), {})
+
+        assert esign_ok.status_code == status.HTTP_201_CREATED
+        assert vkyc_ok.status_code == status.HTTP_201_CREATED
+        esign_create.assert_called_once()
+        vkyc_create.assert_called_once()
+
     def test_send_video_kyc_persists_provider_id(self):
         admin = UserFactory(email="admin-digio-vkyc@test.com")
         _assign_role(admin, "admin")
@@ -257,11 +294,11 @@ class TestDigioEsignAndVideoKyc:
         assert f"/verify-kyc/{row.id}" in mail.outbox[0].body
         assert mail.outbox[0].to == [lead.customer.email]
         assert mail.outbox[0].subject == (
-            "Please complete KYC process of Kuberniti Money with Har Shreejee Finance "
+            "Please complete your Video KYC for Kuberniti Money with Har Shreejee Finance "
             "& Leasing Company Limited."
         )
-        assert "Start KYC Process" in mail.outbox[0].body
-        assert "Know Your Customer (KYC)" in mail.outbox[0].body
+        assert "Start Video KYC" in mail.outbox[0].body
+        assert "Aadhaar, PAN, selfie" in mail.outbox[0].body
         from apps.notifications.services.sms_service import SmsService
 
         assert SmsService.outbox
@@ -825,7 +862,7 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_200_OK
         row.refresh_from_db()
         assert row.status == VideoKycRequestStatus.COMPLETED
-        assert row.session_details.get("ids_found", {}).get("video") is True
+        assert row.session_details.get("ids_found", {}).get("video") is False
         from django.core import mail
 
         completed_mail = [
@@ -980,6 +1017,62 @@ class TestDigioEsignAndVideoKyc:
         row.refresh_from_db()
         assert row.recording_file
         mock_client.download_kyc_media.assert_called()
+
+    def test_completed_vkyc_retries_missing_recording_on_view(self):
+        admin = UserFactory(email="admin-vkyc-retry-media@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.COMPLETED,
+            provider_request_id="KIDRETRYVIDEO12345",
+            session_details={
+                "media_sync_attempted": True,
+                "ids_found": {"video": True, "selfie": True},
+            },
+        )
+        video = b"\x00\x00\x00\x18ftypmp42" + b"2" * 40
+        selfie = b"\xff\xd8\xff" + b"jpeg" + b"3" * 20
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDRETRYVIDEO12345",
+            "status": "approved",
+            "actions": [
+                {"type": "video", "file_id": "FIDRETRYVIDEO"},
+                {"type": "selfie", "file_id": "FIDRETRYSELFIE"},
+            ],
+        }
+
+        def _download(file_id, request_id=""):
+            if file_id == "FIDRETRYVIDEO":
+                return video
+            if file_id == "FIDRETRYSELFIE":
+                return selfie
+            return b""
+
+        mock_client.download_kyc_media.side_effect = _download
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(
+                reverse(
+                    "lead-video-kyc-request-detail",
+                    kwargs={"pk": lead.id, "request_id": row.id},
+                )
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.recording_file
+        assert row.selfie_file
+        assert response.data["data"]["ids_found"]["video"] is True
+        assert response.data["data"]["video_details"]["recording_file_url"]
+        assert response.data["data"]["video_details"]["selfie_file_url"]
 
     def test_public_esign_aadhaar_otp_signs_document(self):
         import base64

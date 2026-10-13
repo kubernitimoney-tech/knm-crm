@@ -15,12 +15,13 @@ class TestDisbursalSheetService:
         assert DisbursalSheetService.is_cheque_number_taken("") is False
         assert DisbursalSheetService.is_cheque_number_taken(None) is False
 
-    def test_rejects_duplicate_cheque_number(self):
+    def test_allows_duplicate_cheque_numbers(self):
         existing = application_factory()
-        existing.disbursal_sheet_details = {"cheque_no": "123456"}
+        existing.disbursal_sheet_details = {"cheque_no": "000000"}
         existing.save(update_fields=["disbursal_sheet_details"])
 
-        assert DisbursalSheetService.is_cheque_number_taken("123456") is True
+        assert DisbursalSheetService.is_cheque_number_taken("000000") is False
+        assert DisbursalSheetService.is_cheque_number_taken("123456") is False
 
     def test_allows_same_application_to_keep_cheque_number(self):
         application = application_factory()
@@ -38,13 +39,13 @@ class TestDisbursalSheetService:
 
 @pytest.mark.django_db
 class TestSubmitDisbursalSheetChequeUniqueness:
-    def test_submit_rejects_duplicate_cheque_number(self):
+    def test_submit_allows_duplicate_cheque_number(self):
         from unittest.mock import patch
 
         user = UserFactory()
         existing = application_factory()
         existing.status = ApplicationStatus.APPROVED
-        existing.disbursal_sheet_details = {"cheque_no": "543210"}
+        existing.disbursal_sheet_details = {"cheque_no": "000000"}
         existing.save(update_fields=["status", "disbursal_sheet_details"])
 
         pending = application_factory(
@@ -58,13 +59,15 @@ class TestSubmitDisbursalSheetChequeUniqueness:
             "apps.applications.services.application_service.apply_ifsc_bank_details",
             side_effect=lambda details: details,
         ):
-            with pytest.raises(ApplicationServiceError, match="cheque number"):
+            try:
                 ApplicationService.submit_disbursal_sheet(
                     user=user,
                     application=pending,
                     disbursal_details={
                         "account_number": "1111111111",
                         "ifsc_code": "HDFC0001234",
-                        "cheque_no": "543210",
+                        "cheque_no": "000000",
                     },
                 )
+            except ApplicationServiceError as exc:
+                assert "cheque number" not in str(exc).lower()

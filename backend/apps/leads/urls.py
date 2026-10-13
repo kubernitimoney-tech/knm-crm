@@ -17,6 +17,11 @@ from apps.leads.views.public_esign_views import (
     PublicEsignVerifyOtpAPIView,
 )
 from apps.leads.views.public_video_kyc_views import PublicVideoKycAPIView
+from apps.repayments.views.public_repayment_views import (
+    PublicLoanRepaymentCheckoutAPIView,
+    PublicLoanRepaymentConfirmAPIView,
+    PublicLoanRepaymentLookupAPIView,
+)
 
 router = DefaultRouter()
 router.register("", LeadViewSet, basename="lead")
@@ -49,6 +54,21 @@ urlpatterns = [
         "esign/<uuid:pk>/document/",
         PublicEsignDocumentAPIView.as_view(),
         name="public-esign-document",
+    ),
+    path(
+        "public/repayments/lookup/",
+        PublicLoanRepaymentLookupAPIView.as_view(),
+        name="public-repayment-lookup",
+    ),
+    path(
+        "public/repayments/checkout/",
+        PublicLoanRepaymentCheckoutAPIView.as_view(),
+        name="public-repayment-checkout",
+    ),
+    path(
+        "public/repayments/confirm/",
+        PublicLoanRepaymentConfirmAPIView.as_view(),
+        name="public-repayment-confirm",
     ),
     path("customer-lookup/", CustomerLookupAPIView.as_view(), name="lead-customer-lookup"),
     path("sources/", LeadSourceListAPIView.as_view(), name="lead-sources"),

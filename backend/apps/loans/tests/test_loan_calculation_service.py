@@ -167,6 +167,40 @@ class LoanCalculationServiceTests(SimpleTestCase):
         )
         self.assertEqual(metrics.repay_amount, Decimal("130000"))
 
+    def test_late_disbursal_shortens_tenure_and_defers_penalty(self):
+        """Sanction 26-09, repay 03-10 stays fixed. Disburse 28-09 → tenure 5."""
+        principal = Decimal("40000")
+        roi = Decimal("1")
+        penalty_rate = Decimal("0.25")
+        disbursal = date(2026, 9, 28)
+        repayment = date(2026, 10, 3)
+
+        on_repay_date = LoanCalculationService.compute_summary(
+            principal_amount=principal,
+            roi_percent=roi,
+            penalty_rate_percent=penalty_rate,
+            disbursed_at=disbursal,
+            due_date=repayment,
+            contract_tenure_days=7,
+            as_of=date(2026, 10, 3),
+        )
+        self.assertEqual(on_repay_date.tenure_days, 5)
+        self.assertEqual(on_repay_date.real_days, 5)
+        self.assertEqual(on_repay_date.penalty_days, 0)
+        self.assertEqual(on_repay_date.penalty_interest, Decimal("0"))
+
+        day_after = LoanCalculationService.compute_summary(
+            principal_amount=principal,
+            roi_percent=roi,
+            penalty_rate_percent=penalty_rate,
+            disbursed_at=disbursal,
+            due_date=repayment,
+            contract_tenure_days=7,
+            as_of=date(2026, 10, 4),
+        )
+        self.assertEqual(day_after.real_days, 6)
+        self.assertEqual(day_after.penalty_days, 1)
+
     def test_paid_amount_reduces_till_date_amount(self):
         metrics = LoanCalculationService.compute_summary(
             principal_amount=Decimal("50000"),

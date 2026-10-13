@@ -59,7 +59,6 @@ class LeadConversionService:
 
     LEAD_TO_APPLICATION_STATUS = {
         LeadStatus.INTERESTED: ApplicationStatus.INTERESTED,
-        LeadStatus.DOCUMENTS_PENDING: ApplicationStatus.DOCUMENTS_INCOMPLETE,
         LeadStatus.DOCUMENTS_RECEIVED: ApplicationStatus.DOCUMENTS_RECEIVED,
     }
 

@@ -8,7 +8,7 @@ from tests.factories import UserFactory, customer_factory
 from apps.accounts.models import Role, UserRole
 from apps.applications.models import ApplicationStatus
 from apps.applications.services.application_service import ApplicationService
-from apps.leads.models import Lead, LeadSource
+from apps.leads.models import EsignRequestStatus, Lead, LeadEsignRequest, LeadSource
 
 
 def _assign_role(user, slug: str) -> None:
@@ -150,3 +150,47 @@ class TestAccountFinanceLeadAccess:
         client.force_authenticate(user=finance)
         response = client.get(reverse("lead-detail", kwargs={"pk": lead.id}))
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_finance_can_read_signed_esign_for_disbursal_gate(self):
+        """Disbursal tab unlocks from signed e-sign. Finance has no lead.view."""
+        from apps.products.models import LoanProduct
+
+        rm = UserFactory(email="rm-finance-esign@test.com")
+        cm = UserFactory(email="cm-finance-esign@test.com")
+        finance = UserFactory(email="finance-esign@test.com")
+        _assign_role(rm, "relationship-manager")
+        _assign_role(cm, "credit-manager")
+        _assign_role(finance, "account-finance")
+
+        lead = _create_lead(lead_code="LD0605", rm=rm, cm=cm)
+        product = LoanProduct.objects.filter(product_code="PAYDAY").first()
+        application = ApplicationService.create_application(
+            user=rm,
+            customer=lead.customer,
+            product=product,
+            data={
+                "requested_amount": 50000,
+                "tenure_value": 30,
+                "assigned_rm": rm,
+                "assigned_cm": cm,
+            },
+        )
+        application.lead = lead
+        application.status = ApplicationStatus.APPROVED
+        application.save(update_fields=["lead", "status"])
+        LeadEsignRequest.objects.create(
+            lead=lead,
+            status=EsignRequestStatus.SIGNED,
+            requested_by=cm,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=finance)
+        response = client.get(reverse("lead-esign-requests", kwargs={"pk": lead.id}))
+        assert response.status_code == status.HTTP_200_OK
+        rows = response.data["data"]
+        assert len(rows) == 1
+        assert rows[0]["status"] == EsignRequestStatus.SIGNED
+
+        denied = client.post(reverse("lead-esign-requests", kwargs={"pk": lead.id}), {})
+        assert denied.status_code == status.HTTP_403_FORBIDDEN

@@ -271,7 +271,12 @@ export function enachStatusBadgeClass(status: string, className?: string): strin
 
 export function collectionStatusBadgeClass(status: string, className?: string): string {
   const normalized = status.toLowerCase();
-  if (normalized.includes('received') || normalized.includes('close') || normalized.includes('paid')) {
+  if (
+    normalized.includes('approved')
+    || normalized.includes('received')
+    || normalized.includes('close')
+    || normalized.includes('paid')
+  ) {
     return badgeClass('success', className);
   }
   if (normalized.includes('fail')) return badgeClass('danger', className);

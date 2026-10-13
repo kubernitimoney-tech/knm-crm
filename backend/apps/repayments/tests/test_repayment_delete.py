@@ -93,7 +93,7 @@ class TestRepaymentDelete:
         officer = UserFactory(email="co-repay-del@test.com")
         _assign_role(rm, "relationship-manager")
         _assign_role(cm, "credit-manager")
-        _assign_role(officer, "collection-officer")
+        _assign_role(officer, "collection-manager")
 
         lead = _create_lead(lead_code="LD0701", rm=rm, cm=cm)
         loan = _create_disbursed_loan(user=cm, lead=lead, rm=rm, cm=cm)
@@ -124,7 +124,7 @@ class TestRepaymentDelete:
         officer = UserFactory(email="co-repay-api@test.com")
         _assign_role(rm, "relationship-manager")
         _assign_role(cm, "credit-manager")
-        _assign_role(officer, "collection-officer")
+        _assign_role(officer, "collection-manager")
 
         lead = _create_lead(lead_code="LD0702", rm=rm, cm=cm)
         loan = _create_disbursed_loan(user=cm, lead=lead, rm=rm, cm=cm)

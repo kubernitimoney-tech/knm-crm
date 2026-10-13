@@ -318,16 +318,18 @@ class LoanCalculationService:
 
         disbursal_date = cls.to_date(disbursed_at)
         repayment_date = due_date
-        tenure_days = contract_tenure_days
-        if tenure_days is None and disbursal_date and repayment_date:
+        # Once money is out, tenure is disbursal → repayment. A late disbursal
+        # shortens that span. The repayment date itself stays as sanctioned.
+        if disbursal_date and repayment_date:
             tenure_days = cls.tenure_days(disbursal_date=disbursal_date, due_date=repayment_date)
-        tenure_days = tenure_days or 0
+        else:
+            tenure_days = contract_tenure_days or 0
 
         real_days = 0
+        penalty_days_count = 0
         if disbursal_date:
             real_days = cls.elapsed_days(disbursal_date=disbursal_date, as_of=as_of_date)
-
-        penalty_days_count = cls.penalty_days(repayment_date=repayment_date, as_of=as_of_date)
+            penalty_days_count = max(real_days - tenure_days, 0)
         daily_interest = cls.daily_interest(principal=principal_amount, roi_percent=roi_percent)
         real_interest = (daily_interest * Decimal(real_days)).quantize(Decimal("0.01"))
         penalty_interest = cls.penalty_interest_amount(
@@ -397,7 +399,9 @@ class LoanCalculationService:
             disbursal_sheet_sent_date=sheet_sent_date,
             sanction_date=sanction_date,
         )
-        if contract_tenure <= 0:
+        # A disbursed loan keeps a 0-day tenure when it was disbursed on the
+        # repayment date. Do not put the original sanctioned tenure back.
+        if contract_tenure <= 0 and not actual_disbursal_date:
             snapshot = (loan.product_snapshot or {}) if loan is not None else {}
             stored_tenure = snapshot.get("tenure_days")
             if stored_tenure not in (None, ""):

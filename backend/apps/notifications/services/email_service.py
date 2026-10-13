@@ -195,6 +195,32 @@ class EmailService:
             )
             return "\n".join(lines)
 
+        if template == "video_kyc_request":
+            kyc_url = (ctx.get("kyc_url") or "").strip()
+            lead_id = (ctx.get("lead_id") or "").strip()
+            lines = [
+                "Complete your identity verification",
+                "",
+                f"Dear {customer_name.title() if customer_name else 'Customer'},",
+                "",
+                "Please complete your Aadhaar, PAN, selfie and OCR verification.",
+            ]
+            if lead_id:
+                lines.extend(["", f"Lead: {lead_id}"])
+            if kyc_url:
+                lines.extend(["", "Start Video KYC", kyc_url])
+            lines.extend(
+                [
+                    "",
+                    "Do not share this verification link with anyone.",
+                    "",
+                    f"Thank you for choosing {brand_name}.",
+                    "",
+                    footer,
+                ]
+            )
+            return "\n".join(lines)
+
         if template == "esign_signed":
             document_reference = (ctx.get("document_reference") or "").strip()
             signed_date = (ctx.get("signed_date") or "").strip()

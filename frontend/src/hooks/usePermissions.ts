@@ -72,7 +72,7 @@ export function usePermissions() {
     return isSuperAdmin || roles.some((role) => role.slug === slug);
   }
 
-  const isCollectionOfficer = hasRole('collection-officer');
+  const isCollectionOfficer = hasRole('collection-manager');
 
   function hasPathPermission(pathname: string) {
     const required = getRequiredPermissionsForPath(pathname);

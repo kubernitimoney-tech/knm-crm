@@ -173,6 +173,11 @@ export async function updateLoanRepayment(
   );
 }
 
+/** Soft-delete the disbursed loan for a lead. The lead itself stays. */
+export async function deleteDisbursedLoan(leadId: string): Promise<void> {
+  await apiDelete<unknown>(`/leads/${leadId}/disbursed-loan/`);
+}
+
 export async function deleteLoanRepayment(
   loanId: string,
   repaymentId: string,

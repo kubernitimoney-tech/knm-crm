@@ -38,7 +38,7 @@ export const ROLE_NAV_SECTIONS: Record<string, NavSection[]> = {
   'credit-manager': ['dashboard', 'leads', 'sanction', 'disbursal', 'collection', 'red-flag', 'reporting', 'kyc'],
   'senior-credit-manager': ['dashboard', 'leads', 'sanction', 'disbursal', 'collection', 'red-flag', 'reporting', 'kyc'],
   'account-finance': ['dashboard', 'sanction', 'disbursal', 'collection', 'reporting'],
-  'collection-officer': ['dashboard', 'collection'],
+  'collection-manager': ['dashboard', 'collection'],
   auditor: ['dashboard', 'leads', 'sanction', 'disbursal', 'collection', 'red-flag', 'reporting', 'kyc'],
   // field-investigator: intentionally omitted — no UI access for now
 };
