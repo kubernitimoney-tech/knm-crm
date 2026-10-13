@@ -245,50 +245,84 @@ class LeadService:
         return lead
 
     @classmethod
-    def _sync_application_rm(cls, *, user, lead: Lead, new_rm) -> None:
+    def _sync_application_assignee(cls, *, user, lead: Lead, field: str, new_user) -> None:
         from apps.applications.models import LoanApplication
 
         for application in LoanApplication.objects.filter(lead=lead, is_deleted=False):
-            if application.assigned_rm_id == new_rm.id:
+            if getattr(application, f"{field}_id") == new_user.id:
                 continue
-            application.assigned_rm = new_rm
+            setattr(application, field, new_user)
             application.updated_by = user
-            application.save(update_fields=["assigned_rm", "updated_by", "updated_at"])
+            application.save(update_fields=[field, "updated_by", "updated_at"])
+
+    @classmethod
+    def _sync_application_rm(cls, *, user, lead: Lead, new_rm) -> None:
+        cls._sync_application_assignee(user=user, lead=lead, field="assigned_rm", new_user=new_rm)
+
+    @classmethod
+    def _sync_application_cm(cls, *, user, lead: Lead, new_cm) -> None:
+        cls._sync_application_assignee(user=user, lead=lead, field="assigned_cm", new_user=new_cm)
 
     @classmethod
     @transaction.atomic
-    def transfer_lead(cls, *, user, lead: Lead, new_rm, remarks: str = "") -> Lead:
-        """Reassign RM only — lead category (Fresh/Reloan) and pipeline status stay unchanged."""
-        if new_rm is None:
-            raise LeadServiceError("A target relationship manager is required.")
+    def transfer_lead(
+        cls, *, user, lead: Lead, new_rm=None, new_cm=None, remarks: str = ""
+    ) -> Lead:
+        """Reassign RM and/or CM — lead category and pipeline status stay unchanged."""
         old_rm = lead.assigned_rm
-        if old_rm and old_rm.id == new_rm.id:
-            raise LeadServiceError("Lead is already assigned to this relationship manager.")
+        old_cm = lead.assigned_cm
+        rm_changed = new_rm is not None and (old_rm is None or old_rm.id != new_rm.id)
+        cm_changed = new_cm is not None and (old_cm is None or old_cm.id != new_cm.id)
+        if not rm_changed and not cm_changed:
+            if new_rm is None and new_cm is None:
+                raise LeadServiceError(
+                    "Select a relationship manager or credit manager to transfer to."
+                )
+            raise LeadServiceError("Lead is already assigned to the selected manager(s).")
 
         original_category = lead.category
         original_status = lead.status
-
-        lead.assigned_rm = new_rm
+        update_fields = ["updated_by", "updated_at"]
         lead.updated_by = user
-        lead.save(update_fields=["assigned_rm", "updated_by", "updated_at"])
+        if rm_changed:
+            lead.assigned_rm = new_rm
+            update_fields.append("assigned_rm")
+        if cm_changed:
+            lead.assigned_cm = new_cm
+            update_fields.append("assigned_cm")
+        lead.save(update_fields=update_fields)
 
-        cls._sync_application_rm(user=user, lead=lead, new_rm=new_rm)
+        if rm_changed:
+            cls._sync_application_rm(user=user, lead=lead, new_rm=new_rm)
+        if cm_changed:
+            cls._sync_application_cm(user=user, lead=lead, new_cm=new_cm)
 
+        history_new_rm = new_rm if rm_changed else old_rm
+        history_new_cm = new_cm if cm_changed else old_cm
         LeadAssignmentHistory.objects.create(
             lead=lead,
             assigned_by=user,
-            old_rm=old_rm,
-            new_rm=new_rm,
+            old_rm=old_rm if rm_changed else None,
+            new_rm=history_new_rm if rm_changed else None,
+            old_cm=old_cm if cm_changed else None,
+            new_cm=history_new_cm if cm_changed else None,
             remarks=remarks or "Lead transferred",
         )
+        targets = []
+        if rm_changed:
+            targets.append(getattr(new_rm, "email", new_rm))
+        if cm_changed:
+            targets.append(getattr(new_cm, "email", new_cm))
         ActivityService.log(
             actor=user,
             verb="transferred",
             description="Lead Transferred",
             target=lead,
             metadata={
-                "old_rm": str(old_rm.id) if old_rm else None,
-                "new_rm": str(new_rm.id),
+                "old_rm": str(old_rm.id) if rm_changed and old_rm else None,
+                "new_rm": str(new_rm.id) if rm_changed else None,
+                "old_cm": str(old_cm.id) if cm_changed and old_cm else None,
+                "new_cm": str(new_cm.id) if cm_changed else None,
                 "category": original_category,
                 "status": original_status,
             },
@@ -296,11 +330,13 @@ class LeadService:
         UserActivityService.log(
             user=user,
             action=UserActivityAction.ASSIGN,
-            description=(f"Assigned lead {lead.lead_id} to {getattr(new_rm, 'email', new_rm)}"),
+            description=f"Assigned lead {lead.lead_id} to {', '.join(str(item) for item in targets)}",
             metadata={
                 "lead_id": str(lead.pk),
-                "old_rm": str(old_rm.id) if old_rm else None,
-                "new_rm": str(new_rm.id),
+                "old_rm": str(old_rm.id) if rm_changed and old_rm else None,
+                "new_rm": str(new_rm.id) if rm_changed else None,
+                "old_cm": str(old_cm.id) if cm_changed and old_cm else None,
+                "new_cm": str(new_cm.id) if cm_changed else None,
             },
         )
         return lead

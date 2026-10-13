@@ -249,7 +249,7 @@ export async function fetchAssignmentRoster(type: 'rm' | 'cm'): Promise<RosterMe
     id: member.id,
     name: member.name,
     email: member.email,
-    designation: type === 'rm' ? 'Relationship Manager' : 'Collection Manager',
+    designation: type === 'rm' ? 'Relationship Manager' : 'Credit Manager',
     status: true,
   }));
 }

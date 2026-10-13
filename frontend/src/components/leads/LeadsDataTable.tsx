@@ -136,8 +136,8 @@ export function LeadsDataTable({
   onClearFilters,
   listReturnTo,
 }: LeadsDataTableProps) {
-  const { hasPermission, isSuperAdmin, isAdmin } = usePermissions();
-  const canTransfer = hasPermission('lead.assign') && (isSuperAdmin || isAdmin) && !!onTransfer;
+  const { hasPermission } = usePermissions();
+  const canTransfer = hasPermission('lead.transfer') && !!onTransfer;
   const actionCol = useLeadListingActionColumn({
     extra: canTransfer,
   });

@@ -862,7 +862,7 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_200_OK
         row.refresh_from_db()
         assert row.status == VideoKycRequestStatus.COMPLETED
-        assert row.session_details.get("ids_found", {}).get("video") is True
+        assert row.session_details.get("ids_found", {}).get("video") is False
         from django.core import mail
 
         completed_mail = [
@@ -1017,6 +1017,62 @@ class TestDigioEsignAndVideoKyc:
         row.refresh_from_db()
         assert row.recording_file
         mock_client.download_kyc_media.assert_called()
+
+    def test_completed_vkyc_retries_missing_recording_on_view(self):
+        admin = UserFactory(email="admin-vkyc-retry-media@test.com")
+        _assign_role(admin, "admin")
+        lead = _create_lead()
+        row = LeadVideoKycRequest.objects.create(
+            lead=lead,
+            recipient_email=lead.customer.email,
+            status=VideoKycRequestStatus.COMPLETED,
+            provider_request_id="KIDRETRYVIDEO12345",
+            session_details={
+                "media_sync_attempted": True,
+                "ids_found": {"video": True, "selfie": True},
+            },
+        )
+        video = b"\x00\x00\x00\x18ftypmp42" + b"2" * 40
+        selfie = b"\xff\xd8\xff" + b"jpeg" + b"3" * 20
+        mock_client = MagicMock()
+        mock_client.get_kyc_response.return_value = {
+            "id": "KIDRETRYVIDEO12345",
+            "status": "approved",
+            "actions": [
+                {"type": "video", "file_id": "FIDRETRYVIDEO"},
+                {"type": "selfie", "file_id": "FIDRETRYSELFIE"},
+            ],
+        }
+
+        def _download(file_id, request_id=""):
+            if file_id == "FIDRETRYVIDEO":
+                return video
+            if file_id == "FIDRETRYSELFIE":
+                return selfie
+            return b""
+
+        mock_client.download_kyc_media.side_effect = _download
+
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        with patch(
+            "apps.integrations.digio.webhooks.DigioClient.from_settings",
+            return_value=mock_client,
+        ):
+            response = client.get(
+                reverse(
+                    "lead-video-kyc-request-detail",
+                    kwargs={"pk": lead.id, "request_id": row.id},
+                )
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        row.refresh_from_db()
+        assert row.recording_file
+        assert row.selfie_file
+        assert response.data["data"]["ids_found"]["video"] is True
+        assert response.data["data"]["video_details"]["recording_file_url"]
+        assert response.data["data"]["video_details"]["selfie_file_url"]
 
     def test_public_esign_aadhaar_otp_signs_document(self):
         import base64

@@ -35,6 +35,7 @@ class TestRoleMatrix:
         assert "user.create" in codes
         assert "permission.grant" in codes
         assert "lead.update" in codes
+        assert "lead.transfer" in codes
         assert "application.update" in codes
         assert "loan.update" not in codes
         assert "collection.update" not in codes
@@ -97,6 +98,7 @@ class TestRoleMatrix:
         role = Role.objects.get(slug="relationship-manager")
         codes = {rp.permission.code for rp in role.role_permissions.select_related("permission")}
         assert "lead.view" in codes
+        assert "lead.transfer" not in codes
         assert "call_log.create" in codes
         assert "document.upload" not in codes
         assert "application.submit" not in codes

@@ -13,4 +13,6 @@ class LeadObjectPermission(HasRBACPermission):
         user = request.user
         if is_super_admin(user) or is_admin_user(user):
             return True
+        if getattr(view, "action", None) == "transfer":
+            return True
         return super()._check_object_access(request, view, obj)
