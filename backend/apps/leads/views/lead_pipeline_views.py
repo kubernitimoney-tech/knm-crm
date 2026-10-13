@@ -31,13 +31,22 @@ class LeadPipelineAPIView(APIView):
 
 class AssignmentRosterAPIView(APIView):
     permission_classes = [HasRBACPermission]
-    required_permission = "lead.view"
+    required_permissions = ["lead.view", "lead.transfer"]
 
     def get(self, request):
+        roster_type = (request.query_params.get("type") or "rm").strip().lower()
+        if roster_type == "cm":
+            managers = LeadService.get_credit_managers()
+            leads_attr = "cm_leads"
+        else:
+            managers = LeadService.get_relationship_managers()
+            leads_attr = "rm_leads"
+
         roster = []
-        for manager in LeadService.get_relationship_managers():
+        for manager in managers:
             active_count = (
-                manager.rm_leads.filter(is_deleted=False)
+                getattr(manager, leads_attr)
+                .filter(is_deleted=False)
                 .exclude(status__in=TERMINAL_LEAD_STATUSES)
                 .count()
             )

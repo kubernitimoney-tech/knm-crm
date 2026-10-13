@@ -20,8 +20,8 @@ import {
 import { toast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 import { dataTableFilterControlClass } from '@/components/ui/data-table';
-import { fetchUsers } from '@/lib/usersApi';
 import { transferLead } from '@/lib/leadsApi';
+import { fetchAssignmentRoster } from '@/lib/pipelineApi';
 import type { Lead } from '@/types';
 import {
   handleDialogOpenChange,
@@ -35,9 +35,6 @@ interface TransferLeadDialogProps {
   lead: Lead | null;
   onTransferred: () => void;
 }
-
-const RM_ROLE_SLUGS = ['relationship-manager', 'senior-relationship-manager'];
-const CM_ROLE_SLUGS = ['credit-manager', 'senior-credit-manager'];
 
 type ManagerOption = { id: string; label: string };
 
@@ -63,24 +60,14 @@ export const TransferLeadDialog = ({
     setNewCm('');
     setRemarks('');
     setError('');
-    fetchUsers({ page_size: 100, is_active: true })
-      .then((res) => {
-        const toOption = (u: { id: string; full_name?: string; email: string }) => ({
+    Promise.all([fetchAssignmentRoster('rm'), fetchAssignmentRoster('cm')])
+      .then(([rmList, cmList]) => {
+        const toOption = (u: { id: string; name: string; email: string }) => ({
           id: u.id,
-          label: u.full_name || u.email,
+          label: u.name || u.email,
         });
-        setRms(
-          res.results
-            .filter((u) => u.roles.some((r) => RM_ROLE_SLUGS.includes(r.slug)))
-            .filter((u) => u.id !== lead?.assignedRmId)
-            .map(toOption),
-        );
-        setCms(
-          res.results
-            .filter((u) => u.roles.some((r) => CM_ROLE_SLUGS.includes(r.slug)))
-            .filter((u) => u.id !== lead?.assignedCmId)
-            .map(toOption),
-        );
+        setRms(rmList.filter((u) => u.id !== lead?.assignedRmId).map(toOption));
+        setCms(cmList.filter((u) => u.id !== lead?.assignedCmId).map(toOption));
       })
       .catch(() => {
         setRms([]);

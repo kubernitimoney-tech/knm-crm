@@ -286,3 +286,23 @@ class LeadTransferPreservesCategoryTests(TestCase):
         lead.refresh_from_db()
         self.assertEqual(lead.assigned_rm_id, self.new_rm.id)
         self.assertEqual(lead.assigned_cm_id, self.new_cm.id)
+
+    def test_assignment_roster_lists_rms_and_cms_for_senior_cm(self):
+        sr_cm = UserFactory(email="transfer-srcm-roster@test.com")
+        _assign_role(sr_cm, "senior-credit-manager", "Senior Credit Manager")
+        client = APIClient()
+        client.force_authenticate(user=sr_cm)
+
+        rm_response = client.get(reverse("lead-assignment-roster"), {"type": "rm"})
+        cm_response = client.get(reverse("lead-assignment-roster"), {"type": "cm"})
+
+        self.assertEqual(rm_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(cm_response.status_code, status.HTTP_200_OK)
+        rm_ids = {row["id"] for row in rm_response.data["data"]}
+        cm_ids = {row["id"] for row in cm_response.data["data"]}
+        self.assertIn(str(self.old_rm.id), rm_ids)
+        self.assertIn(str(self.new_rm.id), rm_ids)
+        self.assertNotIn(str(self.old_cm.id), rm_ids)
+        self.assertIn(str(self.old_cm.id), cm_ids)
+        self.assertIn(str(self.new_cm.id), cm_ids)
+        self.assertNotIn(str(self.old_rm.id), cm_ids)
