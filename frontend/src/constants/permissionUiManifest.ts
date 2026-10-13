@@ -80,6 +80,7 @@ export const PERMISSION_UI_MANIFEST = {
       update: 'lead.update',
       delete: 'lead.delete',
       assign: 'lead.assign',
+      transfer: 'lead.transfer',
       export: 'lead.export',
       create: 'lead.create',
     },
