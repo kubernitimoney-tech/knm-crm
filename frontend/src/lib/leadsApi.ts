@@ -405,12 +405,12 @@ export async function createLead(payload: CreateLeadPayload): Promise<ApiLead> {
 
 export async function transferLead(
   leadId: string,
-  newRmId: string,
-  remarks: string,
+  payload: { newRmId?: string; newCmId?: string; remarks?: string },
 ): Promise<ApiLead> {
   return apiPost<ApiLead>(`/leads/${leadId}/transfer/`, {
-    new_rm: newRmId,
-    remarks,
+    ...(payload.newRmId ? { new_rm: payload.newRmId } : {}),
+    ...(payload.newCmId ? { new_cm: payload.newCmId } : {}),
+    remarks: payload.remarks ?? '',
   });
 }
 
@@ -762,6 +762,7 @@ export function mapApiLeadToRow(
     assignedRmId: lead.assigned_rm,
     assignedRmEmail: lead.assigned_rm_email ?? undefined,
     assignedCM: lead.assigned_cm_name ?? '—',
+    assignedCmId: lead.assigned_cm,
     customerId: lead.customer,
     email: lead.email,
     mobile: lead.mobile_number,

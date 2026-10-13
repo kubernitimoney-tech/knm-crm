@@ -521,8 +521,16 @@ class LeadUpdateSerializer(serializers.ModelSerializer):
 
 
 class LeadTransferSerializer(serializers.Serializer):
-    new_rm = serializers.UUIDField()
+    new_rm = serializers.UUIDField(required=False, allow_null=True)
+    new_cm = serializers.UUIDField(required=False, allow_null=True)
     remarks = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if not attrs.get("new_rm") and not attrs.get("new_cm"):
+            raise serializers.ValidationError(
+                "Select a relationship manager or credit manager to transfer to."
+            )
+        return attrs
 
 
 class LeadConvertSerializer(serializers.Serializer):
