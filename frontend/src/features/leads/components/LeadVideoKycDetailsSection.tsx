@@ -188,7 +188,10 @@ export function LeadVideoKycDetailsSection({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2 text-[10px] font-bold rounded-md"
-                        disabled={entry.status !== 'completed' || !entry.recordingFileUrl}
+                        disabled={
+                          entry.status !== 'completed' ||
+                          (!entry.recordingFileUrl && !entry.selfieFileUrl)
+                        }
                         onClick={() => {
                           const mediaUrl = entry.recordingFileUrl || entry.selfieFileUrl;
                           if (mediaUrl) {
