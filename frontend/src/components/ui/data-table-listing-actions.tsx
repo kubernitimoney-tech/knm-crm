@@ -81,7 +81,7 @@ export function usePermissionActionColumn(options: {
 
 /**
  * Lead/pipeline listing pages: view / edit / delete gate on permission codes.
- * Transfer (extra) must be enabled by the parent when the user has lead.assign.
+ * Transfer (extra) must be enabled by the parent when the user has lead.transfer.
  */
 export function useLeadListingActionColumn(options?: {
   extra?: boolean;

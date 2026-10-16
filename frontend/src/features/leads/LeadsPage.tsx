@@ -100,9 +100,9 @@ function leadCategoryAccent(status: string) {
 
 export const LeadsPage = () => {
   useTitle('Leads Management');
-  const { hasPermission, isSuperAdmin, isAdmin } = usePermissions();
+  const { hasPermission } = usePermissions();
   const canCreateLead = hasPermission('lead.create');
-  const canTransfer = hasPermission('lead.assign') && (isSuperAdmin || isAdmin);
+  const canTransfer = hasPermission('lead.transfer');
   const actionCol = useLeadListingActionColumn({ extra: canTransfer });
   const tableColSpan = actionCol.showColumn ? 15 : 14;
 

@@ -62,6 +62,8 @@ class PermissionAction(models.TextChoices):
 
     ASSIGN = "assign", "Assign"
 
+    TRANSFER = "transfer", "Transfer"
+
     UPLOAD = "upload", "Upload"
 
     REUPLOAD = "reupload", "Reupload"

@@ -332,27 +332,28 @@ class DigioClient:
         )
 
     def download_kyc_media(self, file_id: str, request_id: str = "") -> bytes:
-        paths = [f"/client/kyc/v2/media/{file_id}"]
+        quoted = quote(file_id, safe="")
+        attempts: list[tuple[str, str]] = [
+            ("GET", f"/client/kyc/v2/media/{quoted}"),
+            ("GET", f"/client/kyc/v2/file/{quoted}"),
+        ]
         if request_id:
-            paths.insert(0, f"/client/kyc/v2/{request_id}/media/{file_id}")
-        for path in paths:
+            rid = quote(request_id, safe="")
+            attempts = [
+                ("GET", f"/client/kyc/v2/{rid}/media/{quoted}"),
+                ("GET", f"/client/kyc/v2/{rid}/file/{quoted}"),
+                ("POST", f"/client/kyc/v2/{rid}/media/{quoted}"),
+            ] + attempts
+        for method, path in attempts:
             try:
-                content = self.request("GET", path, raw=True)
+                content = self.request(method, path, raw=True)
             except DigioAPIError as exc:
-                if exc.status_code in {404, 405}:
+                if exc.status_code in {400, 404, 405, 415}:
                     continue
                 raise
-            if isinstance(content, dict):
-                encoded = content.get("file_data") or content.get("file_base64")
-                if encoded:
-                    return base64.b64decode(encoded)
-                continue
-            if not content:
-                continue
-            stripped = content.lstrip()
-            if stripped.startswith(b"{") or stripped.startswith(b"<"):
-                continue
-            return content
+            media = _kyc_media_bytes(content)
+            if media:
+                return media
         return b""
 
     def generate_aadhaar_esign_otp(
@@ -390,6 +391,59 @@ class DigioClient:
         if document_id:
             payload["document_id"] = document_id
         return self.request("POST", "/v2/client/aadhaar/esign", payload)
+
+
+def _kyc_media_bytes(payload) -> bytes:
+    """Return raw KYC video/image bytes from a Digio media download."""
+    if payload in (None, "", b"", {}, []):
+        return b""
+    if isinstance(payload, dict):
+        encoded = (
+            payload.get("file_data")
+            or payload.get("file_base64")
+            or payload.get("video_file")
+            or payload.get("selfie_file")
+            or payload.get("data")
+        )
+        nested = payload.get("file")
+        if not encoded and isinstance(nested, dict):
+            encoded = nested.get("file_data") or nested.get("file_base64") or nested.get("data")
+        if not encoded:
+            return b""
+        return _decode_loose_base64(encoded)
+    if isinstance(payload, str):
+        payload = payload.encode("utf-8", errors="ignore")
+    if not isinstance(payload, (bytes, bytearray)):
+        return b""
+    data = bytes(payload)
+    stripped = data.lstrip()
+    if stripped.startswith(b"<"):
+        return b""
+    if stripped.startswith(b"{") or stripped.startswith(b'"'):
+        try:
+            parsed = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return b""
+        return _kyc_media_bytes(parsed)
+    return data
+
+
+def _decode_loose_base64(value) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        text = bytes(value).decode("ascii", errors="ignore")
+    else:
+        text = str(value or "")
+    if not text:
+        return b""
+    encoded = text.split(",", 1)[-1] if text.startswith("data:") else text
+    encoded = "".join(encoded.split())
+    pad = len(encoded) % 4
+    if pad:
+        encoded += "=" * (4 - pad)
+    try:
+        return base64.b64decode(encoded)
+    except (ValueError, binascii.Error):
+        return b""
 
 
 def extract_entity_id(payload: dict) -> str:

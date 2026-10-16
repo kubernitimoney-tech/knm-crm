@@ -33,6 +33,7 @@ export interface Lead {
   pipelineStatus?: string;
   assignedRmId?: string | null;
   assignedRmEmail?: string;
+  assignedCmId?: string | null;
   customerId?: string;
 }
 
