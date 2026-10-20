@@ -1,7 +1,6 @@
 import { AxiosError } from 'axios';
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api';
-import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
-import { formatCurrency, formatPersonName } from '@/lib/utils';
+import { formatPersonName } from '@/lib/utils';
 import type { ApiEnvelope } from '@/types/auth';
 import { fetchPipelineRows, type PipelineRow } from '@/lib/pipelineApi';
 
@@ -836,11 +835,11 @@ export function formatLeadListExportRow(lead: LeadRow, index: number): Record<st
     Email: lead.email,
     'Mobile No.': lead.mobile,
     'PAN No.': (lead.pancard || '').toUpperCase(),
-    'Monthly Income': formatCurrency(lead.monthlyIncome || 0),
+    'Monthly Income': lead.monthlyIncome || 0,
     City: lead.city,
     'Employment Type': (lead.employmentType || '—').toUpperCase(),
     Source: lead.source,
-    'Lead Coming Date & Time': formatAppDateTimeOrFallback(lead.createdAt),
+    'Lead Coming Date & Time': lead.createdAt,
   };
 }
 
