@@ -1,5 +1,5 @@
 import { fetchApplications } from '@/lib/applicationsApi';
-import { fetchLeads } from '@/lib/leadsApi';
+import { fetchAllLeads } from '@/lib/leadsApi';
 import { formatRate } from '@/lib/utils';
 import type { SanctionLead } from '@/types';
 
@@ -177,11 +177,10 @@ export async function fetchPipelineRows(stage: PipelineStage): Promise<PipelineR
   }
 
   if (stage === 'red-flag') {
-    const leads = await fetchLeads({
-      page_size: 100,
+    const leads = await fetchAllLeads({
       status: 'not_interested',
     });
-    return leads.results.map((lead) => ({
+    return leads.map((lead) => ({
       id: lead.id,
       leadId: lead.lead_id,
       customerName: lead.customer_name,
