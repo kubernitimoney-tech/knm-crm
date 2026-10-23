@@ -86,7 +86,7 @@ def _as_decimal(value) -> Decimal | None:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
-    if amount <= 0:
+    if not amount.is_finite() or amount <= 0:
         return None
     return amount.quantize(Decimal("0.01"))
 
@@ -98,6 +98,20 @@ def _nested(payload: dict, *keys):
             return None
         current = current.get(key)
     return current
+
+
+def loan_payment_amount(*, order: dict, payment: dict) -> Decimal | None:
+    """Credit the loan portion only, excluding gateway convenience charges.
+
+    The order is created from the loan payable amount. A gateway payment may
+    include an additional customer service charge, which is not loan income.
+    Never credit more than either the order or the actual payment amount.
+    """
+    order_amount = _as_decimal(order.get("order_amount"))
+    payment_amount = _as_decimal(payment.get("payment_amount"))
+    if order_amount is not None and payment_amount is not None:
+        return min(order_amount, payment_amount)
+    return order_amount if order_amount is not None else payment_amount
 
 
 def payment_success_from_webhook(payload: dict) -> dict | None:
@@ -119,12 +133,15 @@ def payment_success_from_webhook(payload: dict) -> dict | None:
     tags = order.get("order_tags") if isinstance(order.get("order_tags"), dict) else {}
     loan_id = str(tags.get("loan_id") or "").strip()
     order_id = str(order.get("order_id") or data.get("order_id") or "").strip()
-    amount = _as_decimal(
-        payment.get("payment_amount")
-        or order.get("order_amount")
-        or data.get("order_amount")
-        or data.get("link_amount_paid")
+    amount = loan_payment_amount(
+        order={
+            **order,
+            "order_amount": order.get("order_amount") or data.get("order_amount"),
+        },
+        payment=payment,
     )
+    if amount is None:
+        amount = _as_decimal(data.get("link_amount_paid"))
     utr = str(
         payment.get("cf_payment_id")
         or order.get("transaction_id")
@@ -163,9 +180,17 @@ def record_online_payment(
         .first()
     )
     if existing is not None:
+        update_fields = []
+        # A verified retry may correct a pending row recorded before fee
+        # separation was introduced. Never rewrite an already posted payment.
+        if existing.status == RepaymentStatus.PENDING and existing.amount != amount:
+            existing.amount = amount
+            update_fields.append("amount")
         if utr and not existing.utr:
             existing.utr = utr
-            existing.save(update_fields=["utr", "updated_at"])
+            update_fields.append("utr")
+        if update_fields:
+            existing.save(update_fields=[*update_fields, "updated_at"])
         return existing
     return LoanRepayment.objects.create(
         loan=loan,
@@ -197,6 +222,14 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
     as_of = LoanCalculationService.to_date(repayment.payment_date) or timezone.localdate()
     metrics = LoanCalculationService.compute_for_application(application, loan=loan, as_of=as_of)
     collected_after = LoanCalculationService.paid_amount_for_loan(loan) + repayment.amount
+
+    balance = LedgerPostingService.get_balance(loan.id)
+    if repayment.amount > balance:
+        raise RepaymentServiceError(
+            f"Loan repayment amount {repayment.amount:.2f} exceeds ledger outstanding "
+            f"{balance:.2f}. Check convenience fees and previously posted collections; "
+            "deleting a repayment record does not reverse its ledger entry."
+        )
 
     repayment.status = RepaymentStatus.CONFIRMED
     repayment.updated_by = user

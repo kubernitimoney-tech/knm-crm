@@ -12,9 +12,21 @@ from apps.loans.models import (
 
 @admin.register(Loan)
 class LoanAdmin(admin.ModelAdmin):
-    list_display = ("loan_account_number", "customer", "status", "principal_amount", "due_date")
+    list_display = (
+        "loan_account_number",
+        "application",
+        "application__lead",
+        "customer",
+        "status",
+        "principal_amount",
+        "due_date",
+    )
     list_filter = ("status", "product")
-    search_fields = ("loan_account_number", "customer__customer_code")
+    search_fields = (
+        "loan_account_number",
+        "customer__customer_code",
+        "application__application_number",
+    )
 
 
 @admin.register(LoanDisbursement)
