@@ -62,6 +62,8 @@ import { DateRangePicker } from '@/components/ui/date-picker';
 import { Badge } from '@/components/ui/badge';
 import { badgeClass, leadPipelineStatusBadgeClass, collectionStatusBadgeClass } from '@/lib/badgeStyles';
 import {
+  fetchAllCollectionReportRows,
+  fetchAllDisbursedReportRows,
   fetchCollectionReportRows,
   fetchDisbursedReportRows,
   fetchReportingFilters,
@@ -83,6 +85,64 @@ const REPORTING_TAB_ITEMS = [
   { value: 'disbursed', label: 'Disbursal' },
   { value: 'collection', label: 'Collection' },
 ] as const;
+
+function filterReportingRows<T extends { name: string; email: string; mob: string; leadId: string; loanNo: string; branch: string }>(
+  rows: T[],
+  {
+    searchQuery,
+    branchFilter,
+    dateFilter,
+    dateRange,
+    sortConfig,
+    dateValue,
+  }: {
+    searchQuery: string;
+    branchFilter: string;
+    dateFilter: string;
+    dateRange: { from: Date | undefined; to: Date | undefined };
+    sortConfig: { key: string; direction: 'asc' | 'desc' | null };
+    dateValue: (item: T) => string;
+  },
+): T[] {
+  const result = rows.filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.mob.includes(searchQuery) ||
+      item.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.loanNo.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBranch = branchFilter === 'All' || item.branch === branchFilter;
+    let matchesDate = true;
+    const targetDate = new Date(dateValue(item));
+    if (dateFilter === 'Today') {
+      matchesDate = isWithinInterval(targetDate, {
+        start: startOfDay(new Date()),
+        end: endOfDay(new Date()),
+      });
+    } else if (dateFilter === 'Last 7 Days') {
+      matchesDate = targetDate >= subDays(new Date(), 7);
+    } else if (dateFilter === 'Current Month') {
+      matchesDate = targetDate >= startOfMonth(new Date());
+    } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
+      matchesDate = isWithinInterval(targetDate, {
+        start: startOfDay(dateRange.from),
+        end: endOfDay(dateRange.to),
+      });
+    }
+    return matchesSearch && matchesBranch && matchesDate;
+  });
+
+  if (sortConfig.key && sortConfig.direction) {
+    result.sort((a, b) => {
+      const aVal = a[sortConfig.key as keyof T] ?? '';
+      const bVal = b[sortConfig.key as keyof T] ?? '';
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+  return result;
+}
 
 export function AllReportingPage() {
   useTitle('All Reporting Data');
@@ -205,60 +265,52 @@ export function AllReportingPage() {
   };
 
   const currentData = activeTab === 'disbursed' ? disbursedData : collectionData;
+  const reportFilters = { searchQuery, branchFilter, dateFilter, dateRange, sortConfig };
 
   const filteredAndSortedData = useMemo(() => {
-    const result = currentData.filter(item => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.mob.includes(searchQuery) ||
-        item.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.loanNo.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesBranch = branchFilter === 'All' || item.branch === branchFilter;
-
-      let matchesDate = true;
-      const targetDate = new Date(activeTab === 'disbursed' ? item.disbursalDate : item.repayDate);
-
-      if (dateFilter === 'Today') {
-        matchesDate = isWithinInterval(targetDate, {
-          start: startOfDay(new Date()),
-          end: endOfDay(new Date())
-        });
-      } else if (dateFilter === 'Last 7 Days') {
-        matchesDate = targetDate >= subDays(new Date(), 7);
-      } else if (dateFilter === 'Current Month') {
-        matchesDate = targetDate >= startOfMonth(new Date());
-      } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-        matchesDate = isWithinInterval(targetDate, {
-          start: startOfDay(dateRange.from),
-          end: endOfDay(dateRange.to)
-        });
-      }
-
-      return matchesSearch && matchesBranch && matchesDate;
-    });
-
-    if (sortConfig.key && sortConfig.direction) {
-      result.sort((a, b) => {
-        const aVal = a[sortConfig.key] ?? '';
-        const bVal = b[sortConfig.key] ?? '';
-
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
+    if (activeTab === 'disbursed') {
+      return filterReportingRows(disbursedData, {
+        ...reportFilters,
+        dateValue: (item) => item.disbursalDate,
       });
     }
-
-    return result;
-  }, [searchQuery, branchFilter, dateFilter, dateRange, sortConfig, activeTab, currentData]);
+    return filterReportingRows(collectionData, {
+      ...reportFilters,
+      dateValue: (item) => item.repayDate,
+    });
+  }, [searchQuery, branchFilter, dateFilter, dateRange, sortConfig, activeTab, disbursedData, collectionData]);
 
   const serverTotal = activeTab === 'disbursed' ? disbursedTotal : collectionTotal;
   const footerTotal = hasActiveFilters ? filteredAndSortedData.length : serverTotal;
 
   const paginatedData = filteredAndSortedData;
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    let exportRows: DisbursedReportRow[] | CollectionReportRow[] = [];
+    try {
+      if (activeTab === 'disbursed') {
+        exportRows = filterReportingRows(await fetchAllDisbursedReportRows(), {
+          ...reportFilters,
+          dateValue: (item) => item.disbursalDate,
+        });
+      } else {
+        exportRows = filterReportingRows(await fetchAllCollectionReportRows(), {
+          ...reportFilters,
+          dateValue: (item) => item.repayDate,
+        });
+      }
+    } catch {
+      toast({ title: 'Export failed', description: 'Could not load all matching rows.', variant: 'error' });
+      return;
+    }
+    if (!exportRows.length) {
+      toast({
+        title: 'Nothing to export',
+        description: 'No rows match the current filters.',
+        variant: 'error',
+      });
+      return;
+    }
     if (activeTab === 'disbursed') {
       const headers = [
         { label: 'Lead ID', key: 'leadId' },
@@ -275,9 +327,9 @@ export function AllReportingPage() {
         { label: 'Credited By', key: 'credBy' },
         { label: 'PD By', key: 'pdBy' },
         { label: 'Employment Status', key: 'employed' },
-        { label: 'Monthly Income', key: (item: any) => `${parseFloat(item.monthlyIncome)}` },
-        { label: 'Monthly Obligation', key: (item: any) => `${parseFloat(item.monthlyObligation)}` },
-        { label: 'Loan Amount', key: (item: any) => `${parseFloat(item.loanAmt)}` },
+        { label: 'Monthly Income', key: (item: any) => Number(item.monthlyIncome) },
+        { label: 'Monthly Obligation', key: (item: any) => Number(item.monthlyObligation) },
+        { label: 'Loan Amount', key: (item: any) => Number(item.loanAmt) },
         { label: 'Tenure', key: 'tenure' },
         { label: 'ROI', key: 'roi' },
         { label: 'Status', key: 'status' },
@@ -293,14 +345,14 @@ export function AllReportingPage() {
         { label: 'E-Nach Details', key: 'enachDetails' },
         { label: 'Disbursal Ref No.', key: 'disbursalRefNo' },
         { label: 'Company Account', key: 'companyAccount' },
-        { label: 'Processing Fee', key: (item: any) => `${parseFloat(item.processingFee)}` },
-        { label: 'Tax', key: (item: any) => `${parseFloat(item.tax)}` },
+        { label: 'Processing Fee', key: (item: any) => Number(item.processingFee) },
+        { label: 'Tax', key: (item: any) => Number(item.tax) },
         { label: 'CIBIL Score', key: 'cibil' },
         { label: 'UTM Search', key: 'utm' },
         { label: 'State', key: 'state' },
         { label: 'Red Flagged', key: 'redFlag' },
       ];
-      exportToExcel(filteredAndSortedData, headers as any, `Disbursed_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Disbursal');
+      exportToExcel(exportRows, headers as any, `Disbursed_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Disbursal');
     } else {
       const headers = [
         { label: 'Lead ID', key: 'leadId' },
@@ -312,21 +364,21 @@ export function AllReportingPage() {
         { label: 'PAN No.', key: 'pan' },
         { label: 'State', key: 'state' },
         { label: 'Repay Date', key: 'repayDate' },
-        { label: 'Collected Amount', key: (item: any) => `${parseFloat(item.collectedAmount)}` },
-        { label: 'Principal Amount', key: (item: any) => `${parseFloat(item.principalAmt)}` },
-        { label: 'Interest Amount', key: (item: any) => `${parseFloat(item.interestAmt)}` },
-        { label: 'Penal Interest', key: (item: any) => `${parseFloat(item.penalInterest)}` },
+        { label: 'Collected Amount', key: (item: any) => Number(item.collectedAmount) },
+        { label: 'Principal Amount', key: (item: any) => Number(item.principalAmt) },
+        { label: 'Interest Amount', key: (item: any) => Number(item.interestAmt) },
+        { label: 'Penal Interest', key: (item: any) => Number(item.penalInterest) },
         { label: 'Collected Mode', key: 'collectedMode' },
         { label: 'Reference No.', key: 'referenceNo' },
-        { label: 'Wave-Off', key: (item: any) => `${parseFloat(item.waveOff)}` },
-        { label: 'Settlement Amount', key: (item: any) => `${parseFloat(item.settelmentAmt)}` },
+        { label: 'Wave-Off', key: (item: any) => Number(item.waveOff) },
+        { label: 'Settlement Amount', key: (item: any) => Number(item.settelmentAmt) },
         { label: 'Collection Source', key: 'collectionSource' },
         { label: 'Collection Team', key: 'collectionTeam' },
         { label: 'Status', key: 'status' },
         { label: 'Remarks', key: 'remarks' },
         { label: 'Collection Date Time', key: 'collectionDateTime' },
       ];
-      exportToExcel(filteredAndSortedData, headers as any, `Collection_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Collection');
+      exportToExcel(exportRows, headers as any, `Collection_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Collection');
     }
   };
 
