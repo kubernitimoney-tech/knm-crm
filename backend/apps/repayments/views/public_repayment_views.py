@@ -1,6 +1,5 @@
 import logging
 import time
-from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from rest_framework.permissions import AllowAny
@@ -16,6 +15,7 @@ from apps.integrations.cashfree.orders import (
 from apps.repayments.services.online_repayment_service import (
     find_cash_pending_loan,
     loan_lookup_payload,
+    loan_payment_amount,
     payable_amount,
     record_online_payment,
 )
@@ -98,9 +98,8 @@ class PublicLoanRepaymentConfirmAPIView(APIView):
             return error_response(message="Payment is not successful yet.", status_code=404)
         tags = order.get("order_tags") if isinstance(order.get("order_tags"), dict) else {}
         loan_id = str(tags.get("loan_id") or "").strip()
-        try:
-            amount = Decimal(str(payment.get("payment_amount") or order.get("order_amount")))
-        except (InvalidOperation, TypeError):
+        amount = loan_payment_amount(order=order, payment=payment)
+        if amount is None:
             return error_response(message="Payment amount was missing.", status_code=400)
         record_online_payment(
             loan_id=loan_id,
