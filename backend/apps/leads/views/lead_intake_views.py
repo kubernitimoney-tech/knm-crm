@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
+from apps.core.client_ip import get_client_ip
 from apps.core.responses import error_response, success_response
 from apps.leads.serializers import PublicLeadCreateSerializer, PublicLeadTrackSerializer
 from apps.leads.services.lead_intake_service import LeadIntakeError, LeadIntakeService
@@ -10,8 +11,7 @@ from apps.notifications.services.notification_service import NotificationService
 
 
 def _client_key(request) -> str:
-    forwarded = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")[0].strip()
-    return forwarded or request.META.get("REMOTE_ADDR") or "anon"
+    return get_client_ip(request) or "anon"
 
 
 class PublicLeadIntakeAPIView(APIView):
