@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.applications.models import ApplicationStatus
+from apps.core.masking import mask_email, mask_mobile, mask_name
 from apps.ledger.models import TransactionType
 from apps.ledger.services.ledger_posting_service import LedgerPostingError, LedgerPostingService
 from apps.loans.models import Loan, LoanStatus
@@ -67,14 +68,19 @@ def payable_amount(loan: Loan) -> Decimal:
 
 
 def loan_lookup_payload(loan: Loan) -> dict:
+    """Public payload: enough for the borrower to recognise the loan, nothing more.
+
+    This is returned to anyone who types a mobile number, so personal details
+    are masked and internal identifiers are not exposed.
+    """
     customer = loan.customer
     amount = payable_amount(loan)
+    loan_no = LoanService.display_loan_account_number(loan.loan_account_number) or ""
     return {
-        "loan_id": str(loan.id),
-        "loan_no": LoanService.display_loan_account_number(loan.loan_account_number),
-        "customer_name": customer.full_name,
-        "mobile": _mobile_digits(customer.mobile_number),
-        "email": customer.email,
+        "loan_no": f"{'*' * max(len(loan_no) - 4, 0)}{loan_no[-4:]}",
+        "customer_name": mask_name(customer.full_name),
+        "mobile": mask_mobile(customer.mobile_number),
+        "email": mask_email(customer.email),
         "payable_amount": str(amount.quantize(Decimal("0.01"))),
     }
 
@@ -201,6 +207,34 @@ def record_online_payment(
         gateway_reference=order_id,
         status=RepaymentStatus.PENDING,
         remarks="Cashfree payment link",
+    )
+
+
+def record_verified_order(order_id: str) -> LoanRepayment | None:
+    """Fetch the order and payment from Cashfree, then record the verified amount.
+
+    Used by the webhook and the browser return so neither trusts client- or
+    webhook-supplied loan ids or amounts.
+    """
+    from apps.integrations.cashfree.orders import fetch_order, fetch_successful_payment
+
+    order_id = (order_id or "").strip()
+    if not order_id.startswith("rp-"):
+        return None
+    order = fetch_order(order_id)
+    payment = fetch_successful_payment(order_id)
+    if payment is None:
+        return None
+    tags = order.get("order_tags") if isinstance(order.get("order_tags"), dict) else {}
+    loan_id = str(tags.get("loan_id") or "").strip()
+    amount = loan_payment_amount(order=order, payment=payment)
+    if not loan_id or amount is None:
+        return None
+    return record_online_payment(
+        loan_id=loan_id,
+        order_id=order_id,
+        amount=amount,
+        utr=str(payment.get("cf_payment_id") or ""),
     )
 
 

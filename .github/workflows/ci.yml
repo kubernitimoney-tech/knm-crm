@@ -222,19 +222,28 @@ jobs:
           script: |
             set -e
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+            export STACK=test
             export VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d /knm-crm/.git ]; then
-              git clone --branch testing "$REPO_URL" /knm-crm
+            DEPLOY_DIR=/knm-crm
+            COMPOSE="-p knm-crm -f docker-compose.prod.yml --profile edge"
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              git clone --branch testing "$REPO_URL" "$DEPLOY_DIR"
             fi
-            cd /knm-crm
+            cd "$DEPLOY_DIR"
             git remote set-url origin "$REPO_URL"
             git fetch origin testing
             git checkout testing
             git reset --hard origin/testing
-            docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ ! -f backend/.env ]; then
+              echo "Missing /knm-crm/backend/.env — create it (separate database, secrets) before deploying test." >&2
+              exit 1
+            fi
+            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
+            docker compose $COMPOSE build --parallel django frontend marketing
+            docker compose $COMPOSE up -d --remove-orphans
+            docker compose $COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile
             docker image prune -f
 
       - name: Open promotion PR
@@ -251,7 +260,9 @@ jobs:
             || echo "Promotion PR already open."
 
   # ---------------------------------------------------------------------------
-  # Deploy staging → same test/staging VPS (xxx.xxx.xxx.xxx)
+  # Deploy staging → same test/staging VPS (xxx.xxx.xxx.xxx), but as its own
+  # Compose project (/knm-crm-staging, project knm-staging) with its own
+  # database, Redis and media. The test stack's Caddy routes staging hostnames.
   # Secrets: same VPS_* as testing
   # ---------------------------------------------------------------------------
   deploy-staging:
@@ -279,19 +290,27 @@ jobs:
           script: |
             set -e
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+            export STACK=staging
             export VITE_API_URL=https://api-staging.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d /knm-crm/.git ]; then
-              git clone --branch staging "$REPO_URL" /knm-crm
+            DEPLOY_DIR=/knm-crm-staging
+            COMPOSE="-p knm-staging -f docker-compose.prod.yml"
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              git clone --branch staging "$REPO_URL" "$DEPLOY_DIR"
             fi
-            cd /knm-crm
+            cd "$DEPLOY_DIR"
             git remote set-url origin "$REPO_URL"
             git fetch origin staging
             git checkout staging
             git reset --hard origin/staging
-            docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ ! -f backend/.env ]; then
+              echo "Missing /knm-crm-staging/backend/.env — create it (separate database, secrets) before deploying staging." >&2
+              exit 1
+            fi
+            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
+            docker compose $COMPOSE build --parallel django frontend marketing
+            docker compose $COMPOSE up -d --remove-orphans
             docker image prune -f
 
       - name: Open promotion PR
@@ -335,17 +354,26 @@ jobs:
           script: |
             set -e
             export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
+            export STACK=prod
             export VITE_API_URL=https://api.kubernitimoney.com/api/v1
             export VITE_SITE_URL=https://kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            if [ ! -d /knm-crm/.git ]; then
-              git clone --branch production "$REPO_URL" /knm-crm
+            DEPLOY_DIR=/knm-crm
+            COMPOSE="-p knm-crm -f docker-compose.prod.yml --profile edge"
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              git clone --branch production "$REPO_URL" "$DEPLOY_DIR"
             fi
-            cd /knm-crm
+            cd "$DEPLOY_DIR"
             git remote set-url origin "$REPO_URL"
             git fetch origin production
             git checkout production
             git reset --hard origin/production
-            docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            if [ ! -f backend/.env ]; then
+              echo "Missing /knm-crm/backend/.env — create it (separate database, secrets) before deploying prod." >&2
+              exit 1
+            fi
+            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
+            docker compose $COMPOSE build --parallel django frontend marketing
+            docker compose $COMPOSE up -d --remove-orphans
+            docker compose $COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile
             docker image prune -f

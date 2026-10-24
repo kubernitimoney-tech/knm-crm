@@ -23,11 +23,22 @@ CACHES = {
     }
 }
 
+# Tests share one client IP; throttling is covered by dedicated tests.
+REST_FRAMEWORK = {  # noqa: F405
+    **REST_FRAMEWORK,  # noqa: F405
+    "DEFAULT_THROTTLE_CLASSES": (),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10000/min",
+        "public_lookup": "10000/min",
+        "otp": "10000/min",
+    },
+}
+
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": {"BACKEND": "apps.core.media.SignedMediaStorage"},
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 
