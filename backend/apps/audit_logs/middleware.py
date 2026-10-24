@@ -45,10 +45,9 @@ def get_audit_context():
 
 
 def _get_client_ip(request):
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
+    from apps.core.client_ip import get_client_ip
+
+    return get_client_ip(request) or None
 
 
 class AuditContextMiddleware:
@@ -69,9 +68,9 @@ class UserActivityLoggingMiddleware:
     MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
     SKIP_PATH_PREFIXES = (
         "/api/v1/audit-logs/user-activity/log/",
-        "/api/v1/accounts/auth/login/",
-        "/api/v1/accounts/auth/logout/",
-        "/api/v1/accounts/auth/token/refresh/",
+        "/api/v1/auth/login/",
+        "/api/v1/auth/logout/",
+        "/api/v1/auth/refresh/",
     )
 
     def __init__(self, get_response):

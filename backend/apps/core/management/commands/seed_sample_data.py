@@ -1,3 +1,6 @@
+import secrets
+
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -140,7 +143,18 @@ class Command(BaseCommand):
                 user.save()
 
         if not user.has_usable_password():
-            user.set_password(entry.get("default_password", "DeDust!23"))
+            if settings.ALLOW_DEMO_PASSWORDS:
+                password = entry.get("default_password", "DeDust!23")
+            else:
+                # Deployed servers never get the README demo passwords.
+                password = secrets.token_urlsafe(12)
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Generated password for {user.email}: {password} "
+                        "(shown once; share securely and ask the user to change it)"
+                    )
+                )
+            user.set_password(password)
             user.save(update_fields=["password"])
 
         return user

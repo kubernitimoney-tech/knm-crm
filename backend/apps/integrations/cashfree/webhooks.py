@@ -37,8 +37,8 @@ def verify_webhook_signature(*, raw_body: bytes, signature: str, timestamp: str)
     provided = (signature or "").strip()
     signed_at = (timestamp or "").strip()
     if not secrets:
-        logger.warning("Cashfree webhook accepted without a configured secret")
-        return True
+        # Fail closed: an unsigned request can never be trusted.
+        return False
     if not provided or not signed_at:
         return False
     signed = signed_at.encode() + raw_body

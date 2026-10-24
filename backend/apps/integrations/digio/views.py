@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class DigioWebhookAPIView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = []
 
     def post(self, request):
         raw_body = request.body or b""
