@@ -669,6 +669,9 @@ export interface ApiDisbursalResponse {
   stage?: 'none' | 'sheet_sent' | 'disbursed';
   application_status?: string | null;
   application_status_display?: string | null;
+  /** Loan status: active | overdue | defaulted | closed. */
+  loan_status?: string | null;
+  loan_closed_at?: string | null;
 }
 
 export interface ApiLeadCollection {

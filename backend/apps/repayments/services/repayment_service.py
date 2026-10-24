@@ -30,6 +30,24 @@ COLLECTION_STATUS_OVERRIDE_LABELS = {
 }
 
 
+def _as_aware_datetime(value):
+    """Collection dates arrive as date or datetime; closed_at needs an aware datetime."""
+    from datetime import date, datetime, time
+
+    if value is None:
+        return timezone.now()
+    if isinstance(value, datetime):
+        return value if timezone.is_aware(value) else timezone.make_aware(value)
+    if isinstance(value, date):
+        return timezone.make_aware(datetime.combine(value, time.max.replace(microsecond=0)))
+    return timezone.now()
+
+
+def _drop_settlement(loan: Loan) -> None:
+    """A reopened loan is no longer settled."""
+    LoanSettlement.objects.filter(loan=loan).delete()
+
+
 class RepaymentService:
     @classmethod
     def _validate_collection_status_for_dates(
@@ -87,9 +105,13 @@ class RepaymentService:
         as_of,
         status_code: str,
         status_display: str,
+        closing_time=None,
     ) -> dict:
         if status_code in ("close", "payday_pre_close", "settlement"):
-            loan.closed_at = timezone.now()
+            # Interest and penalty stop on the closing collection's date. Keep the
+            # original close time when an already-closed loan is edited again.
+            if loan.status != LoanStatus.CLOSED or loan.closed_at is None:
+                loan.closed_at = _as_aware_datetime(closing_time)
             close_remarks = (
                 "Loan pre-closed on disbursal date"
                 if status_code == "payday_pre_close"
@@ -156,6 +178,7 @@ class RepaymentService:
                 )
                 loan.closed_at = None
                 loan.save(update_fields=["closed_at", "updated_at"])
+                _drop_settlement(loan)
                 if application.status == ApplicationStatus.CLOSED:
                     change_application_status(
                         application=application,
@@ -180,6 +203,7 @@ class RepaymentService:
                 )
                 loan.closed_at = None
                 loan.save(update_fields=["closed_at", "updated_at"])
+                _drop_settlement(loan)
             if application.status == ApplicationStatus.CLOSED:
                 change_application_status(
                     application=application,
@@ -237,16 +261,10 @@ class RepaymentService:
         )
         amount_due = metrics_before.amount_due
         collected_after = (collected_before + amount).quantize(Decimal("0.01"))
-
-        if amount_due > 0 and collected_after > amount_due:
-            raise RepaymentServiceError("Repayment amount exceeds amount due.")
-
-        balance = LedgerPostingService.get_balance(loan.id)
-        if balance <= 0 and amount_due <= collected_before:
-            raise RepaymentServiceError("Loan has no outstanding balance.")
-
-        if amount > balance and balance > 0:
-            raise RepaymentServiceError("Repayment amount exceeds outstanding balance.")
+        # Business rule: no upper limit on a collection. Accounts may collect more
+        # than the till-date amount (e.g. 13,000 against 12,000) and close the loan.
+        if amount <= 0:
+            raise RepaymentServiceError("Collected amount must be greater than zero.")
 
         cls._validate_collection_status_for_dates(
             collection_status=collection_status,
@@ -289,6 +307,7 @@ class RepaymentService:
                 idempotency_key=idempotency_key,
                 user=user,
                 transaction_date=payment_date,
+                allow_negative=True,
             )
         except LedgerPostingError as exc:
             raise RepaymentServiceError(str(exc)) from exc
@@ -321,6 +340,7 @@ class RepaymentService:
             as_of=as_of,
             status_code=status_code,
             status_display=status_display,
+            closing_time=payment_date,
         )
 
         CollectionActivityService.log_repayment(
@@ -402,9 +422,8 @@ class RepaymentService:
             as_of=as_of,
         )
         amount_due = metrics.amount_due
-
-        if amount_due > 0 and collected_after > amount_due:
-            raise RepaymentServiceError("Repayment amount exceeds amount due.")
+        if new_amount <= 0:
+            raise RepaymentServiceError("Collected amount must be greater than zero.")
 
         cls._validate_collection_status_for_dates(
             collection_status=collection_status,
@@ -415,9 +434,6 @@ class RepaymentService:
 
         delta = (new_amount - old_amount).quantize(Decimal("0.01"))
         if delta > 0:
-            balance = LedgerPostingService.get_balance(loan.id)
-            if delta > balance and balance > 0:
-                raise RepaymentServiceError("Repayment amount exceeds outstanding balance.")
             try:
                 LedgerPostingService.post(
                     loan=loan,
@@ -429,6 +445,7 @@ class RepaymentService:
                     idempotency_key=f"repay-update-{repayment.id}-{delta}",
                     user=user,
                     transaction_date=new_payment_date,
+                    allow_negative=True,
                 )
             except LedgerPostingError as exc:
                 raise RepaymentServiceError(str(exc)) from exc
@@ -492,6 +509,7 @@ class RepaymentService:
             as_of=as_of,
             status_code=status_code,
             status_display=status_display,
+            closing_time=new_payment_date,
         )
 
         CollectionActivityService.log(

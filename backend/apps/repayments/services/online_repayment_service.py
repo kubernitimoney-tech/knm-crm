@@ -238,6 +238,28 @@ def record_verified_order(order_id: str) -> LoanRepayment | None:
     )
 
 
+def _verified_gateway_amount(repayment: LoanRepayment) -> Decimal | None:
+    """Order amount (excluding convenience fee) for a Cashfree collection, or None."""
+    from apps.integrations.cashfree.orders import (
+        CashfreeOrderError,
+        fetch_order,
+        fetch_successful_payment,
+    )
+
+    order_id = (repayment.gateway_reference or "").strip()
+    if not order_id.startswith("rp-"):
+        return None
+    try:
+        order = fetch_order(order_id)
+        payment = fetch_successful_payment(order_id)
+    except CashfreeOrderError:
+        logger.warning("Could not re-check Cashfree order %s; using stored amount", order_id)
+        return None
+    if payment is None:
+        raise RepaymentServiceError("Cashfree does not show a successful payment for this order.")
+    return loan_payment_amount(order=order, payment=payment)
+
+
 @transaction.atomic
 def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
     try:
@@ -253,21 +275,29 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
     if application is None:
         raise RepaymentServiceError("Loan application was not found.")
 
+    # Credit only the loan amount (order amount), never the gateway convenience
+    # fee. Older pending rows may hold order + fee, so re-read it from Cashfree.
+    verified_amount = _verified_gateway_amount(repayment)
+    update_fields = ["status", "updated_by", "updated_at"]
+    if verified_amount is not None and verified_amount != repayment.amount:
+        logger.info(
+            "Correcting Cashfree collection %s from %s to %s (order amount)",
+            repayment.id,
+            repayment.amount,
+            verified_amount,
+        )
+        repayment.amount = verified_amount
+        update_fields.append("amount")
+
     as_of = LoanCalculationService.to_date(repayment.payment_date) or timezone.localdate()
     metrics = LoanCalculationService.compute_for_application(application, loan=loan, as_of=as_of)
     collected_after = LoanCalculationService.paid_amount_for_loan(loan) + repayment.amount
 
-    balance = LedgerPostingService.get_balance(loan.id)
-    if repayment.amount > balance:
-        raise RepaymentServiceError(
-            f"Loan repayment amount {repayment.amount:.2f} exceeds ledger outstanding "
-            f"{balance:.2f}. Check convenience fees and previously posted collections; "
-            "deleting a repayment record does not reverse its ledger entry."
-        )
-
+    # No upper limit (business rule): a payment above the ledger outstanding is
+    # posted and leaves the ledger in credit instead of blocking approval.
     repayment.status = RepaymentStatus.CONFIRMED
     repayment.updated_by = user
-    repayment.save(update_fields=["status", "updated_by", "updated_at"])
+    repayment.save(update_fields=update_fields)
 
     try:
         entry = LedgerPostingService.post(
@@ -280,6 +310,7 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
             idempotency_key=f"repay-{loan.id}-{repayment.gateway_reference or repayment.id}",
             user=user,
             transaction_date=repayment.payment_date,
+            allow_negative=True,
         )
     except LedgerPostingError as exc:
         raise RepaymentServiceError(str(exc)) from exc
@@ -305,5 +336,6 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
         as_of=as_of,
         status_code=status_code,
         status_display=status_display,
+        closing_time=repayment.payment_date,
     )
     return {"repayment": repayment, **outcome}
