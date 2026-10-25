@@ -268,7 +268,9 @@ jobs:
   deploy-staging:
     name: Deploy — Staging (staging.kubernitimoney.com)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    # Disabled: there is no staging server yet. To enable, set STAGING_DEPLOY_ENABLED
+    # to "true" under GitHub → Settings → Secrets and variables → Actions → Variables.
+    if: vars.STAGING_DEPLOY_ENABLED == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/staging'
     needs:
       - backend-lint
       - backend-test
