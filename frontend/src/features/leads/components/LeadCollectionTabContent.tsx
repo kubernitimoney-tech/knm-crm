@@ -699,9 +699,8 @@ export function LeadCollectionTabContent({
           <AccordionContent className="pb-5 space-y-4">
             {isLoanClosed ? (
               <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-[11px] font-medium leading-relaxed text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
-                This loan is closed{loanClosedAt ? ` (${formatAppDateTimeOrFallback(loanClosedAt)})` : ''}. Interest and
-                penalty have stopped, so no new collection can be added. If a collection was recorded on this loan by
-                mistake, delete it below and the loan reopens with its previous status.
+                Loan closed{loanClosedAt ? ` on ${formatAppDateTimeOrFallback(loanClosedAt)}` : ''} — no further
+                interest or penalty. Wrong collection? Delete it below to reopen the loan.
               </p>
             ) : (
             <>
