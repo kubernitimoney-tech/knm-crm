@@ -13,6 +13,11 @@ from apps.leads.models import LeadStatus
 from apps.loans.models import LoanStatus
 
 PERCENTAGE_DISBURSAL_TYPE = "percentage"
+_CLOSING_LABELS = {
+    "close": "Closed",
+    "payday_pre_close": "Payday Pre-Close",
+    "settlement": "Settlement",
+}
 DEFAULT_PERCENTAGE_PENALTY_RATE = Decimal("0.25")
 
 
@@ -527,6 +532,10 @@ class LoanCalculationService:
             return "part_payment", "Part Payment"
 
         last_repayment = cls._last_confirmed_repayment(loan)
+        chosen = getattr(last_repayment, "collection_status", "") if last_repayment else ""
+        if loan.status == LoanStatus.CLOSED and chosen in _CLOSING_LABELS:
+            # Accounts closed this loan explicitly (possibly on a short payment).
+            return chosen, _CLOSING_LABELS[chosen]
         if as_of is None and last_repayment is not None:
             as_of = cls.to_date(last_repayment.payment_date)
 

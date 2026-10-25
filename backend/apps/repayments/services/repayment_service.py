@@ -28,6 +28,25 @@ COLLECTION_STATUS_OVERRIDE_LABELS = {
     "payday_pre_close": "Payday Pre-Close",
     "settlement": "Settlement",
 }
+CLOSING_COLLECTION_STATUSES = frozenset({"close", "payday_pre_close", "settlement"})
+
+
+def standing_close_status(loan: Loan, *, exclude_id=None) -> str | None:
+    """Closing status accounts chose on a remaining confirmed collection, if any.
+
+    When accounts close a loan on a short payment (e.g. 11,050 against 11,100
+    after the repay date), that decision must survive later edits or deletes of
+    other collections instead of being recalculated back to Part Payment.
+    """
+    rows = LoanRepayment.objects.filter(
+        loan=loan,
+        status=RepaymentStatus.CONFIRMED,
+        collection_status__in=CLOSING_COLLECTION_STATUSES,
+    )
+    if exclude_id is not None:
+        rows = rows.exclude(id=exclude_id)
+    row = rows.order_by("-payment_date", "-created_at").only("collection_status").first()
+    return row.collection_status if row else None
 
 
 def _as_aware_datetime(value):
@@ -112,11 +131,14 @@ class RepaymentService:
             # original close time when an already-closed loan is edited again.
             if loan.status != LoanStatus.CLOSED or loan.closed_at is None:
                 loan.closed_at = _as_aware_datetime(closing_time)
+            short_by = (amount_due - collected_total).quantize(Decimal("0.01"))
             close_remarks = (
                 "Loan pre-closed on disbursal date"
                 if status_code == "payday_pre_close"
                 else "Loan settled"
                 if status_code == "settlement"
+                else f"Loan closed by accounts on a short payment ({short_by} less than amount due)"
+                if short_by > 0
                 else "Loan fully collected against till date amount"
             )
             if loan.status != LoanStatus.CLOSED:
@@ -292,6 +314,7 @@ class RepaymentService:
             status=RepaymentStatus.CONFIRMED,
             collected_by=user,
             remarks=remarks,
+            collection_status=collection_status or "",
             created_by=user,
             updated_by=user,
         )
@@ -395,6 +418,10 @@ class RepaymentService:
             gateway_reference if gateway_reference is not None else repayment.gateway_reference
         )
         new_remarks = remarks if remarks is not None else repayment.remarks
+        if collection_status is None:
+            collection_status = repayment.collection_status or standing_close_status(
+                loan, exclude_id=repayment.id
+            )
 
         normalized_utr = str(new_utr).strip()
         if not normalized_utr:
@@ -471,6 +498,7 @@ class RepaymentService:
         repayment.payment_date = new_payment_date
         repayment.gateway_reference = new_gateway_reference
         repayment.remarks = new_remarks
+        repayment.collection_status = collection_status or ""
         repayment.updated_by = user
         repayment.save(
             update_fields=[
@@ -480,6 +508,7 @@ class RepaymentService:
                 "payment_date",
                 "gateway_reference",
                 "remarks",
+                "collection_status",
                 "updated_by",
                 "updated_at",
             ]
@@ -586,6 +615,12 @@ class RepaymentService:
             repay_date=LoanCalculationService.resolve_repayment_date(
                 application=application, loan=loan
             ),
+        )
+
+        status_code, status_display = cls._resolve_sync_status(
+            computed_code=status_code,
+            computed_display=status_display,
+            collection_status=standing_close_status(loan),
         )
 
         outcome = cls._sync_collection_outcome(

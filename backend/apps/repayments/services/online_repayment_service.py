@@ -15,7 +15,11 @@ from apps.loans.models import Loan, LoanStatus
 from apps.loans.services.loan_calculation_service import LoanCalculationService
 from apps.loans.services.loan_service import LoanService
 from apps.repayments.models import LoanRepayment, PaymentMode, RepaymentStatus
-from apps.repayments.services.repayment_service import RepaymentService, RepaymentServiceError
+from apps.repayments.services.repayment_service import (
+    RepaymentService,
+    RepaymentServiceError,
+    standing_close_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +330,11 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
         repay_date=LoanCalculationService.resolve_repayment_date(
             application=application, loan=loan
         ),
+    )
+    status_code, status_display = RepaymentService._resolve_sync_status(
+        computed_code=status_code,
+        computed_display=status_display,
+        collection_status=standing_close_status(loan),
     )
     outcome = RepaymentService._sync_collection_outcome(
         user=user,

@@ -52,6 +52,10 @@ class LoanRepayment(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel):
         related_name="collected_repayments",
     )
     remarks = models.TextField(blank=True)
+    # Status chosen by accounts on the collection form (part_payment, close,
+    # payday_pre_close, settlement). A closing choice is a business decision and
+    # wins over the amount-based status, e.g. closing a loan on a short payment.
+    collection_status = models.CharField(max_length=30, blank=True, default="")
 
     class Meta:
         indexes = [

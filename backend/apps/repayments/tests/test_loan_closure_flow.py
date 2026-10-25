@@ -244,3 +244,81 @@ def test_payment_link_credits_order_amount_and_closes_only_on_approval(setup):
     assert pending.amount == order_amount
     assert loan.status == LoanStatus.CLOSED
     assert loan.closed_at is not None
+
+
+def test_accounts_can_close_after_repay_date_on_short_payment(setup):
+    """Business example: due 11,100 on 15 Oct, customer pays 11,050, accounts close."""
+    officer, lead, loan = setup
+    paid_on = timezone.now() - timedelta(days=4)  # after the repay date
+    loan.refresh_from_db()
+    due_then = LoanCalculationService.compute_for_application(
+        loan.application, loan=loan, as_of=timezone.localtime(paid_on).date()
+    ).amount_due
+    short = due_then - Decimal("50")
+    result = RepaymentService.record_repayment(
+        user=officer,
+        loan=loan,
+        amount=short,
+        payment_mode="upi",
+        utr="UTR-SHORT",
+        payment_date=paid_on,
+        collection_status="close",
+    )
+    loan.refresh_from_db()
+    lead.refresh_from_db()
+    assert result["collection_status"] == "close"
+    assert loan.status == LoanStatus.CLOSED
+    assert lead.status == LeadStatus.CLOSED
+    assert timezone.localtime(loan.closed_at).date() == timezone.localtime(paid_on).date()
+    # No interest or penalty after the payment day.
+    assert _due_today(loan) == due_then
+    # The collection row and pipeline keep showing Closed, not Part Payment.
+    from apps.repayments.services.collection_status_service import (
+        collection_status_for_repayment,
+    )
+
+    assert collection_status_for_repayment(result["repayment"]) == ("close", "Closed")
+    assert LoanCalculationService.pipeline_status_label(loan) == "Closed"
+    history = loan.status_history.filter(to_status=LoanStatus.CLOSED).first()
+    assert "short payment (50.00" in history.remarks
+
+
+def test_short_close_survives_deleting_an_unrelated_collection(setup):
+    officer, lead, loan = setup
+    extra = _collect(officer, loan, "100", "UTR-EXTRA", when=timezone.now() - timedelta(days=6))
+    RepaymentService.record_repayment(
+        user=officer,
+        loan=loan,
+        amount=Decimal("5000"),
+        payment_mode="upi",
+        utr="UTR-SHORT-2",
+        payment_date=timezone.now() - timedelta(days=4),
+        collection_status="close",
+    )
+    loan.refresh_from_db()
+    closed_at = loan.closed_at
+    RepaymentService.delete_repayment(user=officer, loan=loan, repayment_id=extra["repayment"].id)
+    loan.refresh_from_db()
+    assert loan.status == LoanStatus.CLOSED
+    assert loan.closed_at == closed_at
+
+
+def test_deleting_the_short_close_collection_reopens_the_loan(setup):
+    officer, lead, loan = setup
+    _collect(officer, loan, "3000", "UTR-PART", when=timezone.now() - timedelta(days=6))
+    close = RepaymentService.record_repayment(
+        user=officer,
+        loan=loan,
+        amount=Decimal("5000"),
+        payment_mode="upi",
+        utr="UTR-SHORT-3",
+        payment_date=timezone.now() - timedelta(days=4),
+        collection_status="close",
+    )
+    loan.refresh_from_db()
+    RepaymentService.delete_repayment(user=officer, loan=loan, repayment_id=close["repayment"].id)
+    loan.refresh_from_db()
+    lead.refresh_from_db()
+    assert loan.status == LoanStatus.ACTIVE
+    assert loan.closed_at is None
+    assert lead.status == LeadStatus.PART_PAYMENT
