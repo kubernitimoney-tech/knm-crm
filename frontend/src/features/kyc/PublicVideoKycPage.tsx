@@ -125,6 +125,8 @@ export function PublicVideoKycPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [awaitingComplete, setAwaitingComplete] = useState(false);
+  // Step 1 (OTP + DigiLocker) done, video not recorded yet.
+  const [videoPending, setVideoPending] = useState(false);
   const launchGeneration = useRef(0);
 
   const load = useCallback(
@@ -151,6 +153,9 @@ export function PublicVideoKycPage() {
 
   useEffect(() => {
     load()
+      .then((row) => {
+        if (row?.status === 'video_pending') setVideoPending(true);
+      })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Could not load the KYC request.');
       })
@@ -161,9 +166,11 @@ export function PublicVideoKycPage() {
     if (!awaitingComplete || session?.completed) return;
     let cancelled = false;
     void (async () => {
+      let last: PublicVideoKycSession | null = null;
       for (let attempt = 0; attempt < 30; attempt += 1) {
         if (cancelled) return;
-        const row = await load(true, true).catch(() => null);
+        const row = await load(true).catch(() => null);
+        last = row ?? last;
         if (row?.completed) {
           setAwaitingComplete(false);
           return;
@@ -171,6 +178,11 @@ export function PublicVideoKycPage() {
         await sleep(2000);
       }
       if (!cancelled) {
+        if (last?.status === 'video_pending') {
+          setVideoPending(true);
+          setAwaitingComplete(false);
+          return;
+        }
         setAwaitingComplete(false);
         setError('Verification is still processing. Refresh this page in a moment.');
       }
@@ -181,7 +193,7 @@ export function PublicVideoKycPage() {
   }, [awaitingComplete, session?.completed, load]);
 
   useEffect(() => {
-    if (!session || session.completed || awaitingComplete) return;
+    if (!session || session.completed || awaitingComplete || videoPending) return;
     if (!session.document_id || !session.identifier || !session.sdk_url) {
       setError('This KYC request is missing Digio details. Ask the team to send a new link.');
       return;
@@ -224,7 +236,7 @@ export function PublicVideoKycPage() {
     return () => {
       window.clearInterval(iframeWatcher);
     };
-  }, [session, load, awaitingComplete]);
+  }, [session, load, awaitingComplete, videoPending]);
 
   return (
     <div className="public-guest-page min-h-screen bg-[#f4f6f9] text-[#1f2130] flex items-center justify-center px-4 py-10">
@@ -244,6 +256,20 @@ export function PublicVideoKycPage() {
               <p className="text-sm text-slate-500">
                 A confirmation email has been sent to your registered address.
               </p>
+            </div>
+          ) : videoPending ? (
+            <div className="text-center space-y-3">
+              <h1 className="text-lg font-bold text-slate-900">One step left</h1>
+              <p className="text-sm text-slate-500">
+                Your documents are verified. Record your 1-minute video to complete Video KYC.
+              </p>
+              <button
+                type="button"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-[#2A2D4F] px-5 text-sm font-semibold text-white hover:bg-[#2A2D4F]/90"
+                onClick={() => setVideoPending(false)}
+              >
+                Continue to video
+              </button>
             </div>
           ) : awaitingComplete ? (
             <p className="text-sm text-slate-500 text-center">Saving your verification…</p>

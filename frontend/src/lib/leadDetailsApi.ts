@@ -107,7 +107,7 @@ export interface ApiLeadEsignRequest {
 
 export interface ApiLeadVideoKycRequest {
   id: string;
-  status: 'pending' | 'sent' | 'completed' | 'expired';
+  status: 'pending' | 'sent' | 'video_pending' | 'completed' | 'expired';
   status_display: string;
   requested_by_name: string;
   video: string;
