@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from apps.core.responses import error_response, success_response
+from apps.core.throttling import PublicLookupThrottle
 from apps.integrations.cashfree.orders import (
     CashfreeOrderError,
     create_order,
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 class PublicLoanRepaymentLookupAPIView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [PublicLookupThrottle]
 
     def post(self, request):
         mobile = str(request.data.get("mobile") or "")
@@ -41,6 +43,7 @@ class PublicLoanRepaymentLookupAPIView(APIView):
 class PublicLoanRepaymentCheckoutAPIView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [PublicLookupThrottle]
 
     def post(self, request):
         mobile = str(request.data.get("mobile") or "")

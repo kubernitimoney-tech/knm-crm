@@ -110,14 +110,14 @@ def test_verified_retry_corrects_pending_fee_amount_without_duplicate():
 
 
 @pytest.mark.django_db
-def test_oversized_pending_payment_approval_keeps_ledger_and_status_unchanged():
+def test_pending_payment_above_ledger_outstanding_is_approved():
+    """Business rule: no upper limit. Approval no longer fails on ledger outstanding."""
     from django.utils import timezone
     from tests.factories import UserFactory
 
     from apps.ledger.services.ledger_posting_service import LedgerPostingService
     from apps.repayments.models import LoanRepayment, RepaymentStatus
     from apps.repayments.services.online_repayment_service import approve_online_payment
-    from apps.repayments.services.repayment_service import RepaymentServiceError
     from apps.repayments.tests.test_repayment_delete import _create_disbursed_loan, _create_lead
 
     user = UserFactory()
@@ -131,9 +131,8 @@ def test_oversized_pending_payment_approval_keeps_ledger_and_status_unchanged():
         payment_date=timezone.now(),
         status=RepaymentStatus.PENDING,
     )
-    with pytest.raises(RepaymentServiceError, match="Check convenience fees"):
-        approve_online_payment(user=user, loan=loan, repayment_id=repayment.id)
+    approve_online_payment(user=user, loan=loan, repayment_id=repayment.id)
     repayment.refresh_from_db()
-    assert repayment.status == RepaymentStatus.PENDING
-    assert repayment.ledger_entry_id is None
-    assert LedgerPostingService.get_balance(loan.id) == balance
+    assert repayment.status == RepaymentStatus.CONFIRMED
+    assert repayment.ledger_entry_id is not None
+    assert LedgerPostingService.get_balance(loan.id) == Decimal("-23.60")

@@ -5,9 +5,11 @@ from apps.loans.models import (
     LoanDisbursement,
     LoanPenalty,
     LoanSettlement,
+    LoanStatus,
     LoanStatusHistory,
     LoanWriteOff,
 )
+from apps.loans.services.loan_status_service import change_loan_status
 
 
 @admin.register(Loan)
@@ -27,6 +29,32 @@ class LoanAdmin(admin.ModelAdmin):
         "customer__customer_code",
         "application__application_number",
     )
+
+    def save_model(self, request, obj, form, change):
+        """Route status changes through the closure service.
+
+        Closing here stops interest and penalty on ``closed_at`` and closes the
+        application and lead. Reopening clears ``closed_at`` so accrual resumes.
+        """
+        if not change or "status" not in form.changed_data:
+            super().save_model(request, obj, form, change)
+            return
+        from apps.loans.services.loan_closure_service import (
+            close_loan_manually,
+            reopen_loan_manually,
+        )
+
+        new_status = obj.status
+        obj.status = Loan.objects.filter(pk=obj.pk).values_list("status", flat=True).first()
+        super().save_model(request, obj, form, change)
+        if new_status == LoanStatus.CLOSED:
+            close_loan_manually(loan=obj, user=request.user)
+        elif obj.status == LoanStatus.CLOSED:
+            reopen_loan_manually(loan=obj, user=request.user, new_status=new_status)
+        else:
+            change_loan_status(
+                loan=obj, new_status=new_status, user=request.user, remarks="Changed in admin"
+            )
 
 
 @admin.register(LoanDisbursement)
