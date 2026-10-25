@@ -14,7 +14,18 @@ def _confirmed_repayments(loan):
     )
 
 
+CHOSEN_STATUS_LABELS = {
+    "part_payment": "Part Payment",
+    "close": "Closed",
+    "payday_pre_close": "Payday Pre-Close",
+    "settlement": "Settlement",
+}
+
+
 def collection_status_for_repayment(repayment) -> tuple[str, str]:
+    chosen = getattr(repayment, "collection_status", "") or ""
+    if chosen in CHOSEN_STATUS_LABELS:
+        return chosen, CHOSEN_STATUS_LABELS[chosen]
     loan = repayment.loan
     application = getattr(loan, "application", None)
     if application is None:

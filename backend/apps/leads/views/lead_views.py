@@ -518,6 +518,12 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
                 "application_status_display": status_display,
                 "company_account_profile": company_account_profile,
                 "disbursal_defaults": disbursal_defaults,
+                "loan_status": loan.status if loan else None,
+                "loan_closed_at": (
+                    timezone.localtime(loan.closed_at).isoformat()
+                    if loan and loan.closed_at
+                    else None
+                ),
             }
         )
 
