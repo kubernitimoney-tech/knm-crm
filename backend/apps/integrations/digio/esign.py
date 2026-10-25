@@ -1,5 +1,6 @@
 import base64
 import binascii
+import hmac
 import logging
 import secrets
 from uuid import uuid4
@@ -143,6 +144,26 @@ def _aadhaar_or_vid(value: str) -> str:
 EMAIL_OTP_KEY = "esign-email-otp:{}"
 EMAIL_OK_KEY = "esign-email-ok:{}"
 AADHAAR_OTP_KEY = "esign-aadhaar-otp:{}"
+EMAIL_OTP_ATTEMPTS_KEY = "esign-email-otp-attempts:{}"
+AADHAAR_OTP_ATTEMPTS_KEY = "esign-aadhaar-otp-attempts:{}"
+OTP_MAX_ATTEMPTS = 5
+OTP_LOCKED_MESSAGE = "Too many incorrect attempts. Request a new code and try again."
+
+
+def _record_failed_otp(*, attempts_key: str, otp_key: str) -> None:
+    """Count a wrong OTP; after OTP_MAX_ATTEMPTS the code is destroyed."""
+    from django.core.cache import cache
+
+    cache.add(attempts_key, 0, timeout=10 * 60)
+    try:
+        attempts = cache.incr(attempts_key)
+    except ValueError:
+        cache.set(attempts_key, 1, timeout=10 * 60)
+        attempts = 1
+    if attempts >= OTP_MAX_ATTEMPTS:
+        cache.delete(otp_key)
+        cache.delete(attempts_key)
+        raise DigioValidationError(OTP_LOCKED_MESSAGE)
 
 
 def _recipient_email(row: LeadEsignRequest) -> str:
@@ -208,6 +229,7 @@ def send_esign_email_otp(*, row: LeadEsignRequest) -> dict:
         raise DigioValidationError("This signing request has no email address.")
     otp_code = f"{secrets.randbelow(1_000_000):06d}"
     cache.set(EMAIL_OTP_KEY.format(row.id), otp_code, timeout=10 * 60)
+    cache.delete(EMAIL_OTP_ATTEMPTS_KEY.format(row.id))
     _send_esign_otp_mail(
         row=row,
         email=email,
@@ -227,10 +249,15 @@ def verify_esign_email_otp(*, row: LeadEsignRequest, otp: str) -> None:
     cached = str(cache.get(EMAIL_OTP_KEY.format(row.id)) or "")
     if not cached:
         raise DigioValidationError("Request a new verification code, then enter it here.")
-    if cached != otp_code:
+    if not hmac.compare_digest(cached.encode(), otp_code.encode()):
+        _record_failed_otp(
+            attempts_key=EMAIL_OTP_ATTEMPTS_KEY.format(row.id),
+            otp_key=EMAIL_OTP_KEY.format(row.id),
+        )
         raise DigioValidationError("That verification code is incorrect.")
     cache.set(EMAIL_OK_KEY.format(row.id), True, timeout=45 * 60)
     cache.delete(EMAIL_OTP_KEY.format(row.id))
+    cache.delete(EMAIL_OTP_ATTEMPTS_KEY.format(row.id))
 
 
 def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
@@ -264,6 +291,7 @@ def send_esign_aadhaar_otp(*, row: LeadEsignRequest, aadhaar_id: str) -> dict:
         },
         timeout=10 * 60,
     )
+    cache.delete(AADHAAR_OTP_ATTEMPTS_KEY.format(row.id))
     return {"otp_sent": True, "otp_channel": "aadhaar_mobile"}
 
 
@@ -290,13 +318,20 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     if cached.get("via_digio"):
         client = DigioClient.from_settings()
         pdf_bytes = _esign_source_bytes(row)
-        payload = client.complete_aadhaar_esign(
-            unique_request_id=unique_request_id,
-            otp=otp_code,
-            file_name=row.document_label or "Agreement.pdf",
-            file_bytes=pdf_bytes,
-            document_id=row.provider_request_id or "",
-        )
+        try:
+            payload = client.complete_aadhaar_esign(
+                unique_request_id=unique_request_id,
+                otp=otp_code,
+                file_name=row.document_label or "Agreement.pdf",
+                file_bytes=pdf_bytes,
+                document_id=row.provider_request_id or "",
+            )
+        except DigioAPIError:
+            _record_failed_otp(
+                attempts_key=AADHAAR_OTP_ATTEMPTS_KEY.format(row.id),
+                otp_key=AADHAAR_OTP_KEY.format(row.id),
+            )
+            raise
         if isinstance(payload, dict):
             encoded = payload.get("file_data") or payload.get("document")
             if encoded:
@@ -324,7 +359,11 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
             signed_at=timezone.now(),
         )
     else:
-        if str(cached.get("otp") or "") != otp_code:
+        if not hmac.compare_digest(str(cached.get("otp") or "").encode(), otp_code.encode()):
+            _record_failed_otp(
+                attempts_key=AADHAAR_OTP_ATTEMPTS_KEY.format(row.id),
+                otp_key=AADHAAR_OTP_KEY.format(row.id),
+            )
             raise DigioValidationError("That OTP is incorrect. Request a new one if it expired.")
         signed_bytes = _esign_source_bytes(row)
 
@@ -338,6 +377,7 @@ def complete_esign_aadhaar_otp(*, row: LeadEsignRequest, otp: str) -> LeadEsignR
     row.save()
     cache.delete(AADHAAR_OTP_KEY.format(row.id))
     cache.delete(EMAIL_OK_KEY.format(row.id))
+    cache.delete(AADHAAR_OTP_ATTEMPTS_KEY.format(row.id))
     notify_esign_signed_copy(row, pdf_bytes=signed_bytes)
     return row
 

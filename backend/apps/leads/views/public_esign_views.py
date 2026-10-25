@@ -7,6 +7,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from apps.core.responses import error_response, success_response
+from apps.core.throttling import OtpThrottle
 from apps.integrations.digio.esign import (
     complete_esign_aadhaar_otp,
     send_esign_aadhaar_otp,
@@ -135,6 +136,7 @@ class PublicEsignAPIView(APIView):
 class PublicEsignEmailOtpAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [OtpThrottle]
 
     def post(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
@@ -160,6 +162,7 @@ class PublicEsignEmailOtpAPIView(APIView):
 class PublicEsignVerifyEmailOtpAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [OtpThrottle]
 
     def post(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
@@ -176,6 +179,7 @@ class PublicEsignVerifyEmailOtpAPIView(APIView):
 class PublicEsignOtpAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [OtpThrottle]
 
     def post(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)
@@ -203,6 +207,7 @@ class PublicEsignOtpAPIView(APIView):
 class PublicEsignVerifyOtpAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [OtpThrottle]
 
     def post(self, request, pk):
         row = get_object_or_404(LeadEsignRequest.objects.select_related("lead__customer"), pk=pk)

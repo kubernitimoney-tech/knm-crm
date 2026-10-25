@@ -9,10 +9,20 @@
 #
 # Only Caddy is exposed to the internet (ports 80/443). Everything else talks
 # over the internal Docker network.
+#
+# Several environments can share one server (test + staging). Each one is its
+# own Compose project with its own database, Redis and media volume:
+#   STACK=test    docker compose -p knm-crm     -f docker-compose.prod.yml --profile edge up -d
+#   STACK=staging docker compose -p knm-staging -f docker-compose.prod.yml up -d
+# Exactly one stack per server runs Caddy (--profile edge). Web containers join
+# the shared external network "knm-edge" as <STACK>-django / -frontend /
+# -marketing, which the Caddyfile routes to. Create it once per server:
+#   docker network create knm-edge
 
 services:
   caddy:
     image: caddy:2-alpine
+    profiles: ["edge"]
     restart: unless-stopped
     ports:
       - "80:80"
@@ -21,7 +31,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-      - media_data:/srv/media:ro
+    networks:
+      - edge
     depends_on:
       - django
       - frontend
@@ -31,7 +42,7 @@ services:
     build:
       context: ./backend
       dockerfile: docker/Dockerfile
-    image: lms-backend:latest
+    image: lms-backend:${STACK:-prod}
     restart: unless-stopped
     command: >
       sh -c "mkdir -p /app/media/documents &&
@@ -52,6 +63,11 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       TZ: Asia/Kolkata
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - ${STACK:-prod}-django
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,8 +80,13 @@ services:
       dockerfile: Dockerfile.prod
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api-test.kubernitimoney.com/api/v1}
-    image: lms-frontend:latest
+    image: lms-frontend:${STACK:-prod}
     restart: unless-stopped
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - ${STACK:-prod}-frontend
     depends_on:
       - django
 
@@ -80,8 +101,13 @@ services:
         VITE_SUPPORT_PHONE: "+91-1800-XXX-XXXX"
         VITE_WHATSAPP_NUMBER: "919999999999"
         VITE_SITE_URL: ${VITE_SITE_URL:-https://dev.kubernitimoney.com}
-    image: lms-marketing:latest
+    image: lms-marketing:${STACK:-prod}
     restart: unless-stopped
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - ${STACK:-prod}-marketing
     depends_on:
       - django
 
@@ -110,7 +136,7 @@ services:
       retries: 5
 
   celery:
-    image: lms-backend:latest
+    image: lms-backend:${STACK:-prod}
     restart: unless-stopped
     command: celery -A config worker -l info -Q default,notifications,reports
     volumes:
@@ -129,7 +155,7 @@ services:
       - redis
 
   celery-beat:
-    image: lms-backend:latest
+    image: lms-backend:${STACK:-prod}
     restart: unless-stopped
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file:
@@ -144,6 +170,12 @@ services:
     depends_on:
       - django
       - redis
+
+networks:
+  default: {}
+  edge:
+    name: ${EDGE_NETWORK:-knm-edge}
+    external: true
 
 volumes:
   postgres_data:

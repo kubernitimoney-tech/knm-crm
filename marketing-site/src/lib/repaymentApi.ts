@@ -1,7 +1,7 @@
 const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
+/** Personal details arrive masked from the public API. */
 export interface ActiveLoan {
-  loanId: string;
   loanNo: string;
   name: string;
   mobile: string;
@@ -10,7 +10,6 @@ export interface ActiveLoan {
 }
 
 interface LookupPayload {
-  loan_id: string;
   loan_no: string;
   customer_name: string;
   mobile: string;
@@ -41,7 +40,6 @@ async function postRepayment(path: string, mobile: string): Promise<LookupPayloa
 
 function toLoan(data: LookupPayload): ActiveLoan {
   return {
-    loanId: data.loan_id,
     loanNo: data.loan_no,
     name: data.customer_name,
     mobile: data.mobile,

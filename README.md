@@ -692,6 +692,7 @@ User.objects.create_superuser(
 
 
 > Passwords are only set when the account has no usable password yet. Existing passwords are left unchanged.
+> These demo passwords are for **local development only**. On test, staging and production (`ALLOW_DEMO_PASSWORDS=False`) the command generates a random password for each new account and prints it once.
 
 
 
@@ -924,7 +925,7 @@ Each app has a `README.md` with schema, APIs, permission matrix, and flows where
 - [apps/audit_logs](backend/apps/audit_logs/README.md) · [apps/notifications](backend/apps/notifications/README.md)
 - [apps/dashboard](backend/apps/dashboard/README.md) · [apps/reports](backend/apps/reports/README.md)
 
-Domain apps (CRM/LMS split): `organization`, `products`, `applications`, `underwriting`, `ledger`, `repayments`, `collections` — see [TABLE.md](TABLE.md) for full schema.
+Domain apps (CRM/LMS split): `organization`, `products`, `applications`, `underwriting`, `ledger`, `repayments`, `collections` — generate the full schema reference with `python backend/scripts/generate_table_md.py`.
 
 ## Linting & code quality
 
@@ -1018,20 +1019,33 @@ On push/PR to `development`, `testing`, `staging`, `production`, `main`, or `mas
 - **Backend** — Ruff check + format check; pytest
 - **Frontend** — ESLint; production build
 - **Marketing site** — ESLint; production build
-- **PR into `testing`, or push to `testing`** — SSH deploy to the test VPS after all checks pass
+- **Push to `testing` / `staging` / `production`** (merging a promotion PR) — SSH deploy after all checks pass. Pull requests only run checks; they never deploy.
 
 **Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
 
-**Deploy on VPS** (also run manually over SSH):
+**Environments are separate Compose projects.** Test and staging share one VPS but each has its own checkout, database, Redis, media volume and images:
+
+| Environment | Folder on VPS      | Compose project | `STACK`   | Runs Caddy |
+| ----------- | ------------------ | --------------- | --------- | ---------- |
+| Test        | `/knm-crm`         | `knm-crm`       | `test`    | yes (`--profile edge`) |
+| Staging     | `/knm-crm-staging` | `knm-staging`   | `staging` | no         |
+| Production  | `/knm-crm` (prod VPS) | `knm-crm`    | `prod`    | yes (`--profile edge`) |
+
+Web containers join the shared external network `knm-edge` as `<STACK>-django`, `<STACK>-frontend` and `<STACK>-marketing`; the Caddyfile routes each hostname to the right stack.
+
+**Deploy on VPS manually** (same as CI; always set `STACK` and `-p`):
 
 ```bash
-export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-cd ~/lms && git fetch origin testing && git checkout testing && git reset --hard origin/testing
-docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 STACK=test
+docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
+cd /knm-crm && git fetch origin testing && git checkout testing && git reset --hard origin/testing
+docker compose -p knm-crm -f docker-compose.prod.yml --profile edge build --parallel django frontend marketing
+docker compose -p knm-crm -f docker-compose.prod.yml --profile edge up -d --remove-orphans
 ```
 
-`celery` and `celery-beat` reuse the same `lms-backend:latest` image as `django` (one backend build, not three).
+**First staging deploy (one time):** create `/knm-crm-staging/backend/.env` with its own secrets (it gets a fresh, empty database), then merge into `staging`. Until then, staging hostnames return 502. Staging no longer shares the test database.
+
+`celery` and `celery-beat` reuse the same `lms-backend:<STACK>` image as `django` (one backend build, not three).
 
 ---
 
@@ -1056,6 +1070,25 @@ pytest --cov=apps
 5. Use managed PostgreSQL + Redis; set `DATABASE_URL`, `REDIS_URL` via secrets.
 6. Mount object storage for `media/` (swap `LocalStorageBackend` for S3).
 7. Enable `DOCUMENT_VIRUS_SCAN_ENABLED` with ClamAV sidecar.
+
+### Security settings (required on test, staging and production)
+
+**Field encryption key.** Deployed settings refuse to start without `FIELD_ENCRYPTION_KEY`. If it was never set, existing PAN/Aadhaar/account data is encrypted with a key derived from `SECRET_KEY`. Keep that data readable by setting `FIELD_ENCRYPTION_KEY` to exactly that derived key — run this on the server with the current `SECRET_KEY` and paste the output into `backend/.env`:
+
+```bash
+docker compose -p knm-crm -f docker-compose.prod.yml run --rm --no-deps django \
+  python -c "import base64,hashlib,os;print(base64.urlsafe_b64encode(hashlib.sha256(os.environ['SECRET_KEY'].encode()).digest()).decode())"
+```
+
+If `FIELD_ENCRYPTION_KEY` is already set, change nothing. Never change it without re-encrypting data.
+
+**Uploaded files.** `/media/*` is no longer served from disk by Caddy. Django serves files only through signed links that expire after `MEDIA_URL_TTL_SECONDS` (default 1 hour). API responses always contain fresh links; do not store or email `/media/` URLs.
+
+**Cashfree.** Webhooks are processed only when `CASHFREE_CLIENT_SECRET` (or `CASHFREE_WEBHOOK_SECRET`) is set and the signature matches. Each payment is then re-checked against the Cashfree API before a pending collection is recorded.
+
+**Rate limits.** Unauthenticated requests are throttled (`THROTTLE_ANON_RATE`, default `120/min`). The public repayment lookup/checkout (`THROTTLE_PUBLIC_LOOKUP_RATE`, `30/hour`) and e-sign OTP endpoints (`THROTTLE_OTP_RATE`, `10/hour`) are stricter, and an OTP is destroyed after 5 wrong attempts. Behind Caddy, `NUM_PROXIES=1` (the default in deployed settings) makes rate limits and audit logs use the real client IP.
+
+**Seed users.** `seed_sample_data` uses the demo passwords below only in local development. On test, staging and production it generates a random password per new account and prints it once.
 
 
 
