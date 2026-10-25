@@ -52,6 +52,8 @@ class IntegrationProvider(models.TextChoices):
 class VideoKycRequestStatus(models.TextChoices):
     PENDING = "pending", "Pending"
     SENT = "sent", "Sent"
+    # Step 1 (OTP + DigiLocker documents) done in Digio, video recording not yet.
+    VIDEO_PENDING = "video_pending", "Video Pending"
     COMPLETED = "completed", "Completed"
     EXPIRED = "expired", "Expired"
 
