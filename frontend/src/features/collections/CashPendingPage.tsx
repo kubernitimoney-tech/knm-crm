@@ -7,7 +7,8 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subMonths } from 'date-fns';
+import { matchesPeriodFilter } from '@/lib/periodFilter';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
@@ -127,24 +128,8 @@ export const CashPendingPage = () => {
         lead.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.loanNo?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      let matchesDate = true;
-      const leadDate = new Date(lead.date);
-
-      if (dateFilter === 'Today') {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(new Date()),
-          end: endOfDay(new Date())
-        });
-      } else if (dateFilter === 'Last 7 Days') {
-        matchesDate = leadDate >= subDays(new Date(), 7);
-      } else if (dateFilter === 'Current Month') {
-        matchesDate = leadDate >= startOfMonth(new Date());
-      } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(dateRange.from),
-          end: endOfDay(dateRange.to)
-        });
-      }
+      // Period filter applies to the repay date.
+      const matchesDate = matchesPeriodFilter(lead.repayDate, dateFilter, dateRange);
 
       return matchesSearch && matchesDate;
     });
@@ -239,6 +224,7 @@ export const CashPendingPage = () => {
           <div className="hidden h-5 w-px shrink-0 bg-slate-200 sm:block" />
 
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Repay date</span>
             <Select value={dateFilter} onValueChange={(val) => { setDateFilter(val); setCurrentPage(1); }}>
               <SelectTrigger className={cn('w-[128px]', dataTableFilterControlClass)}>
                 <SelectValue placeholder={selectPlaceholder('Period')} />
@@ -256,7 +242,7 @@ export const CashPendingPage = () => {
               <DateRangePicker
                 from={dateRange.from}
                 to={dateRange.to}
-                onChange={setDateRange}
+                onChange={(range) => { setDateRange({ from: range.from, to: range.to }); setCurrentPage(1); }}
                 defaultMonth={subMonths(new Date(), 1)}
                 triggerClassName={dataTableDateRangeTriggerClass}
               />

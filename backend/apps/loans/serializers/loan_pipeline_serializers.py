@@ -45,6 +45,8 @@ class LoanPipelineRowSerializer(serializers.Serializer):
     payment_amount = serializers.SerializerMethodField()
     payment_mode = serializers.SerializerMethodField()
     payment_date = serializers.SerializerMethodField()
+    closed_date = serializers.SerializerMethodField()
+    settlement_date = serializers.SerializerMethodField()
     ref_no = serializers.SerializerMethodField()
     discount_amt = serializers.SerializerMethodField()
     settled_amount = serializers.SerializerMethodField()
@@ -202,6 +204,22 @@ class LoanPipelineRowSerializer(serializers.Serializer):
         if obj.closed_at:
             return obj.closed_at.isoformat()
         return ""
+
+    def get_closed_date(self, obj):
+        """Date the loan closed (interest stop date); filter field for Closed."""
+        if obj.status != LoanStatus.CLOSED:
+            return None
+        if obj.closed_at:
+            return obj.closed_at.isoformat()
+        end = LoanCalculationService.accrual_end_date(obj)
+        return end.isoformat() if end else None
+
+    def get_settlement_date(self, obj):
+        """Date the settlement was recorded; filter field for Settlement."""
+        settlement = self._settlement(obj)
+        if settlement and settlement.settled_at:
+            return settlement.settled_at.isoformat()
+        return self.get_closed_date(obj)
 
     def get_ref_no(self, obj):
         repayment = self._last_repayment(obj)

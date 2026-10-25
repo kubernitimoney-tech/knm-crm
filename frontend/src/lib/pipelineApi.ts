@@ -76,6 +76,8 @@ interface ApiApplicationPipelineRow {
   payment_amount?: string | number;
   payment_mode?: string;
   payment_date?: string;
+  closed_date?: string | null;
+  settlement_date?: string | null;
   ref_no?: string;
   discount_amt?: string | number;
   settled_amount?: string | number;
@@ -113,6 +115,8 @@ function mapApiPipelineRow(row: ApiApplicationPipelineRow): PipelineRow {
     paymentAmount: Number(row.payment_amount ?? 0),
     paymentMode: row.payment_mode ?? '',
     paymentDate: row.payment_date ?? '',
+    closedDate: row.closed_date ?? '',
+    settlementDate: row.settlement_date ?? '',
     refNo: row.ref_no ?? '',
     discountAmt: Number(row.discount_amt ?? 0),
     settledAmount: Number(row.settled_amount ?? 0),
