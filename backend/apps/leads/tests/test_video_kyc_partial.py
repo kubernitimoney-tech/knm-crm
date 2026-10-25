@@ -122,3 +122,29 @@ def test_step_level_webhook_event_does_not_complete(row):
         process_webhook_payload({"event": "kyc.action.completed", "id": "KIDPARTIAL1234567"})
     row.refresh_from_db()
     assert row.status == VideoKycRequestStatus.VIDEO_PENDING
+
+
+def test_video_kyc_cannot_start_until_location_captured(row):
+    url = reverse("public-video-kyc", kwargs={"pk": row.id})
+    data = APIClient().get(url).data["data"]
+    assert data["location_required"] is True
+    assert data["document_id"] == ""
+    assert data["identifier"] == ""
+
+    location_url = reverse("public-video-kyc-location", kwargs={"pk": row.id})
+    bad = APIClient().post(location_url, {"latitude": "abc", "longitude": 72.8}, format="json")
+    assert bad.status_code == status.HTTP_400_BAD_REQUEST
+    ok = APIClient().post(
+        location_url,
+        {"latitude": 19.0760, "longitude": 72.8777, "accuracy": 25},
+        format="json",
+    )
+    assert ok.status_code == status.HTTP_200_OK
+
+    data = APIClient().get(url).data["data"]
+    assert data["location_required"] is False
+    assert data["document_id"] == "KIDPARTIAL1234567"
+    row.refresh_from_db()
+    location = row.session_details["customer_location"]
+    assert location["latitude"] == 19.076 and location["longitude"] == 72.8777
+    assert location["accuracy_m"] == 25.0
