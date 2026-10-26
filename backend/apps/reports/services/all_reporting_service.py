@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery, Sum
+from django.utils import timezone
 
 from apps.accounts.services.role_helpers import (
     is_account_finance,
@@ -49,6 +50,22 @@ def _money(value) -> str:
         return f"{Decimal(str(value)):.2f}"
     except Exception:
         return "0"
+
+
+def _money_or_blank(value) -> str:
+    """Money for amounts that may not exist (e.g. no settlement): blank when absent."""
+    if value is None:
+        return ""
+    return _money(value)
+
+
+def _disbursed_amount(loan, disbursement, sheet: dict, net: dict) -> str:
+    if disbursement is not None and disbursement.disbursed_amount is not None:
+        return _money(disbursement.disbursed_amount)
+    amount = _detail_string(sheet, "amount_to_be_disbursed") or (net or {}).get(
+        "amount_to_be_disbursed"
+    )
+    return _money(amount) if amount not in (None, "") else ""
 
 
 def _approved_decision(application):
@@ -96,6 +113,41 @@ def _customer_lead_count_subquery():
     )
 
 
+def _prior_disbursed_count_subquery():
+    """Same customer's loans disbursed before this one (Reloan number)."""
+    return Subquery(
+        Loan.objects.filter(
+            customer_id=OuterRef("customer_id"),
+            is_deleted=False,
+            disbursed_at__isnull=False,
+            disbursed_at__lt=OuterRef("disbursed_at"),
+        )
+        .exclude(pk=OuterRef("pk"))
+        .values("customer_id")
+        .annotate(_cnt=Count("id"))
+        .values("_cnt")[:1],
+        output_field=IntegerField(),
+    )
+
+
+def _prior_disbursed_count(loan) -> int:
+    annotated = getattr(loan, "_prior_disbursed_count", None)
+    if annotated is not None:
+        return int(annotated or 0)
+    if not loan.disbursed_at:
+        return 0
+    return (
+        Loan.objects.filter(
+            customer_id=loan.customer_id,
+            is_deleted=False,
+            disbursed_at__isnull=False,
+            disbursed_at__lt=loan.disbursed_at,
+        )
+        .exclude(pk=loan.pk)
+        .count()
+    )
+
+
 def _customer_lead_count(loan) -> int:
     annotated = getattr(loan, "_customer_lead_count", None)
     if annotated is not None:
@@ -105,7 +157,65 @@ def _customer_lead_count(loan) -> int:
     return loan.customer.leads.filter(is_deleted=False).count()
 
 
-def _visible_loans_queryset(user):
+def parse_report_filters(params) -> dict:
+    """Date range / branch / search from query params (dates as YYYY-MM-DD)."""
+    from datetime import date
+
+    def _date(key):
+        raw = (params.get(key) or "").strip()
+        try:
+            return date.fromisoformat(raw) if raw else None
+        except ValueError:
+            return None
+
+    return {
+        "date_from": _date("date_from"),
+        "date_to": _date("date_to"),
+        "branch": (params.get("branch") or "").strip(),
+        "search": (params.get("search") or "").strip(),
+    }
+
+
+def _branch_q(prefix: str, branch: str) -> Q:
+    return Q(**{f"{prefix}branch__branch_name": branch}) | Q(
+        **{
+            f"{prefix}branch__isnull": True,
+            f"{prefix}application__branch__branch_name": branch,
+        }
+    )
+
+
+def _search_q(prefix: str, search: str) -> Q:
+    q = Q()
+    for field in (
+        "customer__first_name",
+        "customer__last_name",
+        "customer__email",
+        "customer__mobile_number",
+        "loan_account_number",
+        "application__lead__lead_id",
+        "application__application_number",
+    ):
+        q |= Q(**{f"{prefix}{field}__icontains": search})
+    return q
+
+
+def _apply_report_filters(qs, filters: dict | None, *, date_field: str, prefix: str = ""):
+    """Server-side filters so the count, pages and export all follow the selection."""
+    if not filters:
+        return qs
+    if filters.get("date_from"):
+        qs = qs.filter(**{f"{date_field}__date__gte": filters["date_from"]})
+    if filters.get("date_to"):
+        qs = qs.filter(**{f"{date_field}__date__lte": filters["date_to"]})
+    if filters.get("branch") and filters["branch"] != "All":
+        qs = qs.filter(_branch_q(prefix, filters["branch"]))
+    if filters.get("search"):
+        qs = qs.filter(_search_q(prefix, filters["search"]))
+    return qs
+
+
+def _visible_loans_queryset(user, filters: dict | None = None):
     qs = (
         Loan.objects.filter(is_deleted=False, disbursed_at__isnull=False)
         .select_related(
@@ -145,15 +255,18 @@ def _visible_loans_queryset(user):
                 filter=Q(repayments__status=RepaymentStatus.CONFIRMED),
             ),
             _customer_lead_count=_customer_lead_count_subquery(),
+            _prior_disbursed_count=_prior_disbursed_count_subquery(),
         )
         .order_by("-disbursed_at")
     )
+    # Disbursal tab: every filter and the export follow the disbursal date.
+    qs = _apply_report_filters(qs, filters, date_field="disbursed_at")
     if _can_view_all_reporting_records(user):
         return qs
     return [loan for loan in qs if loan.check_user_access(user)]
 
 
-def _visible_repayments_queryset(user):
+def _visible_repayments_queryset(user, filters: dict | None = None):
     qs = (
         LoanRepayment.objects.filter(status=RepaymentStatus.CONFIRMED)
         .select_related(
@@ -173,6 +286,8 @@ def _visible_repayments_queryset(user):
         )
         .order_by("-payment_date")
     )
+    # Collection tab: every filter and the export follow the collection date.
+    qs = _apply_report_filters(qs, filters, date_field="payment_date", prefix="loan__")
     if _can_view_all_reporting_records(user):
         return qs
     return [repayment for repayment in qs if repayment.loan.check_user_access(user)]
@@ -331,7 +446,20 @@ def _build_disbursed_row(loan: Loan) -> dict:
         "companyAccount": company_account_number or "",
         "processingFee": _money(processing_fee),
         "tax": _money(tax),
-        "cibil": _str(int(cibil)) if cibil else "0",
+        "cibil": _str(int(cibil)) if cibil else "",
+        "pdType": _detail_string(sheet, "fi_type"),
+        "disbursedAmount": _disbursed_amount(loan, disbursement, sheet, net),
+        # CKYC number is not captured anywhere in the CRM yet.
+        "ckycNo": "",
+        # Fresh on the customer's first disbursed loan; Reloan when an earlier
+        # loan of the same customer was disbursed. reloanCount is the reloan number.
+        "loanType": "Reloan" if _prior_disbursed_count(loan) > 0 else "Fresh",
+        "reloanCount": _prior_disbursed_count(loan),
+        "productName": (
+            loan.product.name
+            if loan.product_id
+            else (application.product.name if application and application.product_id else "")
+        ),
         "utm": lead.source.name if lead and lead.source_id else "—",
         "state": address.state if address else "—",
         "redFlag": red_flag,
@@ -351,37 +479,64 @@ def _build_collection_row(repayment: LoanRepayment) -> dict:
     application = loan.application
     address = resolve_customer_address(loan.customer)
     settlement = getattr(loan, "settlement", None)
-    penal_total = loan.penalties.filter(waived=False).aggregate(total=Sum("penalty_amount"))[
-        "total"
-    ] or Decimal("0")
 
     _code, row_status = collection_status_for_repayment(repayment)
 
+    # Interest / penalty / amount due as of this collection's date.
+    paid_on = timezone.localtime(repayment.payment_date) if repayment.payment_date else None
+    metrics = None
+    if application is not None:
+        metrics = LoanCalculationService.compute_for_application(
+            application, loan=loan, as_of=paid_on.date() if paid_on else None
+        )
+    collected_upto = Decimal("0")
+    for item in loan.repayments.filter(status=RepaymentStatus.CONFIRMED).order_by(
+        "payment_date", "created_at"
+    ):
+        collected_upto += item.amount
+        if item.id == repayment.id:
+            break
+    excess = Decimal("0")
+    if metrics is not None and metrics.amount_due > 0:
+        excess = min(repayment.amount, max(collected_upto - metrics.amount_due, Decimal("0")))
+
     return {
         "id": _lead_row_id(application),
+        "repaymentId": str(repayment.id),
         "customerId": str(loan.customer_id),
         "leadId": _lead_display_id(application, loan),
         "loanNo": loan.loan_account_number,
         "branch": _branch_name(loan, application, _approved_decision(application)),
         "name": loan.customer.full_name,
-        "email": loan.customer.email or "—",
-        "mob": loan.customer.mobile_number or "—",
-        "pan": CustomerService.get_primary_pan(loan.customer) or "—",
-        "state": address.state if address else "—",
+        "email": loan.customer.email or "",
+        "mob": loan.customer.mobile_number or "",
+        "pan": CustomerService.get_primary_pan(loan.customer) or "",
+        "state": address.state if address else "",
         "repayDate": loan.due_date.isoformat() if loan.due_date else "",
         "collectedAmount": _money(repayment.amount),
+        "loanAmount": _money(loan.principal_amount),
         "principalAmt": _money(loan.principal_amount),
-        "interestAmt": _money(loan.interest_amount),
-        "penalInterest": _money(penal_total),
+        "repayAmount": _money(metrics.repay_amount) if metrics else "",
+        "interestAmt": _money(metrics.real_interest) if metrics else "",
+        "penalInterest": _money(metrics.penalty_interest) if metrics else "",
+        "excessAmount": _money(excess) if excess > 0 else "",
         "collectedMode": repayment.get_payment_mode_display(),
-        "referenceNo": repayment.utr or repayment.gateway_reference or "—",
-        "waveOff": _money(settlement.waiver_amount if settlement else 0),
-        "settelmentAmt": _money(settlement.settlement_amount if settlement else 0),
-        "collectionSource": repayment.gateway_reference or repayment.remarks or "—",
-        "collectionTeam": _user_label(repayment.collected_by),
+        "referenceNo": repayment.utr or repayment.gateway_reference or "",
+        "waveOff": _money_or_blank(settlement.waiver_amount if settlement else None),
+        "settelmentAmt": _money_or_blank(settlement.settlement_amount if settlement else None),
+        # Manual entries store the chosen source in gateway_reference; payment-link
+        # collections store the Cashfree order id (rp-...).
+        "collectionSource": (
+            "Cashfree"
+            if (repayment.gateway_reference or "").startswith("rp-")
+            else (repayment.gateway_reference or "")
+        ),
+        "collectionTeam": _user_label(repayment.collected_by) or "",
         "status": row_status,
-        "remarks": repayment.remarks or "—",
+        "remarks": repayment.remarks or "",
         "collectionDateTime": repayment.payment_date.isoformat() if repayment.payment_date else "",
+        "collectionDate": paid_on.strftime("%d-%m-%Y") if paid_on else "",
+        "collectionTime": paid_on.strftime("%H:%M:%S") if paid_on else "",
     }
 
 
@@ -477,8 +632,10 @@ class AllReportingService:
         }
 
     @staticmethod
-    def get_disbursed_rows(*, user, page: int = 1, page_size: int = 50) -> dict:
-        qs = _visible_loans_queryset(user)
+    def get_disbursed_rows(
+        *, user, page: int = 1, page_size: int = 50, filters: dict | None = None
+    ) -> dict:
+        qs = _visible_loans_queryset(user, filters)
         total, page_items = AllReportingService._paginate_queryset(
             qs, page=page, page_size=page_size
         )
@@ -488,8 +645,10 @@ class AllReportingService:
         }
 
     @staticmethod
-    def get_collection_rows(*, user, page: int = 1, page_size: int = 50) -> dict:
-        qs = _visible_repayments_queryset(user)
+    def get_collection_rows(
+        *, user, page: int = 1, page_size: int = 50, filters: dict | None = None
+    ) -> dict:
+        qs = _visible_repayments_queryset(user, filters)
         total, page_items = AllReportingService._paginate_queryset(
             qs, page=page, page_size=page_size
         )

@@ -253,6 +253,10 @@ export function videoKycRequestStatusDisplay(status: string): { label: string; c
   if (status === 'completed') {
     return { label: 'Completed', className: esignStatusBadgeClass(status) };
   }
+  if (status === 'video_pending') {
+    // Step 1 (OTP + DigiLocker) done in Digio; video recording still pending.
+    return { label: 'Video Pending', className: badgeClass('warning') };
+  }
   return { label: 'Requested', className: esignStatusBadgeClass(status) };
 }
 

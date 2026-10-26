@@ -16,7 +16,10 @@ from apps.leads.views.public_esign_views import (
     PublicEsignVerifyEmailOtpAPIView,
     PublicEsignVerifyOtpAPIView,
 )
-from apps.leads.views.public_video_kyc_views import PublicVideoKycAPIView
+from apps.leads.views.public_video_kyc_views import (
+    PublicVideoKycAPIView,
+    PublicVideoKycLocationAPIView,
+)
 from apps.repayments.views.public_repayment_views import (
     PublicLoanRepaymentCheckoutAPIView,
     PublicLoanRepaymentConfirmAPIView,
@@ -50,6 +53,11 @@ urlpatterns = [
         name="public-esign-verify-otp",
     ),
     path("video-kyc/<uuid:pk>/", PublicVideoKycAPIView.as_view(), name="public-video-kyc"),
+    path(
+        "video-kyc/<uuid:pk>/location/",
+        PublicVideoKycLocationAPIView.as_view(),
+        name="public-video-kyc-location",
+    ),
     path(
         "esign/<uuid:pk>/document/",
         PublicEsignDocumentAPIView.as_view(),

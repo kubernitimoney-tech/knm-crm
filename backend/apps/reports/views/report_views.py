@@ -6,7 +6,7 @@ from apps.reports.services.activity_reporting_service import (
     ActivityLogDeleteError,
     ActivityReportingService,
 )
-from apps.reports.services.all_reporting_service import AllReportingService
+from apps.reports.services.all_reporting_service import AllReportingService, parse_report_filters
 from apps.reports.services.report_service import ReportService
 
 
@@ -116,6 +116,7 @@ class DisbursedReportingAPIView(ReportingAccessMixin, APIView):
             user=request.user,
             page=page,
             page_size=page_size,
+            filters=parse_report_filters(request.query_params),
         )
         return success_response(data=data)
 
@@ -130,6 +131,7 @@ class CollectionReportingAPIView(ReportingAccessMixin, APIView):
             user=request.user,
             page=page,
             page_size=page_size,
+            filters=parse_report_filters(request.query_params),
         )
         return success_response(data=data)
 

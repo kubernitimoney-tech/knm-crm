@@ -245,8 +245,11 @@ class LoanCalculationService:
     def _positive_penalty_rate(cls, raw) -> Decimal | None:
         if raw in (None, ""):
             return None
-        rate = Decimal(str(raw))
-        return rate if rate > 0 else None
+        try:
+            rate = Decimal(str(raw).strip().rstrip("%"))
+        except (ArithmeticError, ValueError):
+            return None
+        return rate if rate.is_finite() and rate > 0 else None
 
     @classmethod
     def _resolve_product_for_penalty(cls, *, loan=None, application=None):

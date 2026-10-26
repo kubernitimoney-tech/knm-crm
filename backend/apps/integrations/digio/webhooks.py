@@ -241,6 +241,7 @@ def _handle_vkyc(request_id: str, *, event: str, payload: dict) -> bool:
     try:
         response = client.get_kyc_response(request_id)
     except DigioError:
+        # Use the webhook body only; an event name alone never completes KYC.
         response = payload
     return _apply_kyc_response(row, response=response, client=client, event=event)
 
@@ -254,21 +255,16 @@ def refresh_video_kyc_from_provider(
     if not _vkyc_needs_refresh(row) and row.status == VideoKycRequestStatus.COMPLETED:
         notify_video_kyc_completed(row)
         return row
+    # ``force`` is accepted for older clients but no longer marks KYC complete:
+    # the Digio SDK also calls back when a customer quits after step 1, so the
+    # status must come from Digio's record of each step.
     try:
         client = DigioClient.from_settings()
         response = client.get_kyc_response(provider_id)
     except DigioError:
         logger.exception("Could not refresh Video KYC %s from Digio", provider_id)
-        if force and row.status != VideoKycRequestStatus.COMPLETED:
-            row.status = VideoKycRequestStatus.COMPLETED
-            if not row.completed_at:
-                row.completed_at = timezone.now()
-            row.save(update_fields=["status", "completed_at", "updated_at"])
-            notify_video_kyc_completed(row)
-            row.refresh_from_db()
         return row
-    event = "kyc.completed" if force or row.status == VideoKycRequestStatus.COMPLETED else ""
-    _apply_kyc_response(row, response=response, client=client, event=event)
+    _apply_kyc_response(row, response=response, client=client)
     row.refresh_from_db()
     if row.recording_file:
         details = dict(row.session_details or {})
@@ -294,33 +290,89 @@ def _vkyc_needs_refresh(row: LeadVideoKycRequest) -> bool:
     return False
 
 
-def _kyc_is_completed(response: dict, *, event: str = "") -> bool:
-    if _is_success_event(event) or "approval_pending" in (event or "").lower():
-        return True
-    blobs = [
-        str(response.get("status") or ""),
-        str(response.get("kyc_status") or ""),
-        str(response.get("request_status") or ""),
-    ]
+KYC_PROGRESS_NONE = "none"
+KYC_PROGRESS_PARTIAL = "partial"
+KYC_PROGRESS_COMPLETED = "completed"
+_STEP_DONE_TOKENS = ("success", "approved", "approval_pending", "completed", "complete")
+
+
+def _step_is_done(status: str) -> bool:
+    text = (status or "").strip().lower()
+    if not text or "partial" in text:
+        return False
+    return any(token in text for token in _STEP_DONE_TOKENS)
+
+
+def _kyc_steps(response: dict) -> list[dict]:
+    steps = []
     for action in response.get("actions") or []:
-        if isinstance(action, dict):
-            blobs.append(str(action.get("status") or ""))
-    text = " ".join(blobs).lower()
-    return _is_success_event(text) or "approval_pending" in text
+        if not isinstance(action, dict):
+            continue
+        steps.append(
+            {
+                "type": str(action.get("type") or action.get("action_type") or "").lower(),
+                "status": str(action.get("status") or "").lower(),
+            }
+        )
+    return steps
+
+
+def _kyc_progress(response: dict, *, event: str = "") -> str:
+    """How far the customer got, from Digio's own record of each step.
+
+    COMPLETED only when Digio reports the whole request done (approved /
+    approval pending) with no step still open, or every reported step is done.
+    PARTIAL when some steps are done (e.g. OTP + DigiLocker) but another, such
+    as the video recording, is still pending.
+    """
+    request_status = " ".join(
+        str(response.get(key) or "") for key in ("status", "kyc_status", "request_status")
+    ).lower()
+    states = [step["status"] for step in _kyc_steps(response) if step["status"]]
+    open_steps = [state for state in states if not _step_is_done(state)]
+    done_steps = [state for state in states if _step_is_done(state)]
+    if _step_is_done(request_status) and not open_steps:
+        return KYC_PROGRESS_COMPLETED
+    if states and not open_steps:
+        return KYC_PROGRESS_COMPLETED
+    if done_steps or "partial" in request_status:
+        return KYC_PROGRESS_PARTIAL
+    # Webhook body unavailable: trust only a request-level event, never a step event.
+    if not request_status.strip() and not states:
+        name = (event or "").lower()
+        if "action" not in name and _step_is_done(name):
+            return KYC_PROGRESS_COMPLETED
+    return KYC_PROGRESS_NONE
+
+
+def _kyc_is_completed(response: dict, *, event: str = "") -> bool:
+    return _kyc_progress(response, event=event) == KYC_PROGRESS_COMPLETED
 
 
 def _apply_kyc_response(row, *, response, client, event: str = "") -> bool:
     response = _unwrap_kyc_response(response if isinstance(response, dict) else {})
     kyc_status = str(response.get("status") or response.get("kyc_status") or event).lower()
-    should_complete = row.status == VideoKycRequestStatus.COMPLETED or _kyc_is_completed(
-        response, event=event
+    progress = _kyc_progress(response, event=event)
+    should_complete = (
+        row.status == VideoKycRequestStatus.COMPLETED or progress == KYC_PROGRESS_COMPLETED
     )
     if not should_complete:
         details = dict(row.session_details or {})
         details["last_event"] = event
         details["provider_status"] = kyc_status
+        details["steps"] = _kyc_steps(response)
+        update_fields = ["session_details", "updated_at"]
+        if progress == KYC_PROGRESS_PARTIAL:
+            # Keep what step 1 verified (Aadhaar/PAN, location) for the CRM.
+            mapped = _map_kyc_session(response)
+            for key in ("aadhaar_details", "pan_details", "geolocation", "workflow_name"):
+                if mapped.get(key):
+                    details[key] = mapped[key]
+            if row.status in (VideoKycRequestStatus.SENT, VideoKycRequestStatus.PENDING):
+                row.status = VideoKycRequestStatus.VIDEO_PENDING
+                update_fields.append("status")
         row.session_details = details
-        row.save(update_fields=["session_details", "updated_at"])
+        row.save(update_fields=update_fields)
         return True
 
     previous = dict(row.session_details or {})
