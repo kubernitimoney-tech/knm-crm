@@ -381,15 +381,9 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
                 return company_account.account_number
             return ""
 
-        def _latest_sanction_decision(app):
-            return app.decisions.order_by("-decided_at").first()
-
         def _repay_date_for_application(app) -> str:
-            decision = _latest_sanction_decision(app)
-            if decision and decision.sanction_details:
-                raw = str(decision.sanction_details.get("repayment_date") or "").strip()
-                return raw[:10] if raw else ""
-            return ""
+            repay_date = LoanCalculationService.resolve_repayment_date(application=app, loan=loan)
+            return repay_date.isoformat() if repay_date else ""
 
         def _disbursal_row(
             sheet_details: dict,

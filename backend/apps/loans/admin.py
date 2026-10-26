@@ -36,6 +36,8 @@ class LoanAdmin(admin.ModelAdmin):
         Closing here stops interest and penalty on ``closed_at`` and closes the
         application and lead. Reopening clears ``closed_at`` so accrual resumes.
         """
+        if change and "due_date" in form.changed_data:
+            self._sync_due_date_to_sanction(request, obj)
         if not change or "status" not in form.changed_data:
             super().save_model(request, obj, form, change)
             return
@@ -55,6 +57,27 @@ class LoanAdmin(admin.ModelAdmin):
             change_loan_status(
                 loan=obj, new_status=new_status, user=request.user, remarks="Changed in admin"
             )
+
+    @staticmethod
+    def _sync_due_date_to_sanction(request, loan):
+        """Keep the sanction's repayment date (shown on Lead Details) in step with the
+        loan's due date, and refresh tenure/interest for the new date."""
+        application = loan.application
+        decision = (
+            application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            if application
+            else None
+        )
+        if decision is None:
+            return
+        details = dict(decision.sanction_details or {})
+        details["repayment_date"] = loan.due_date.isoformat()
+        decision.sanction_details = details
+        decision.updated_by = request.user
+        decision.save(update_fields=["sanction_details", "updated_by", "updated_at"])
+        from apps.loans.services.loan_service import LoanService
+
+        LoanService.sync_with_sanction(user=request.user, loan=loan, decision=decision)
 
 
 @admin.register(LoanDisbursement)
