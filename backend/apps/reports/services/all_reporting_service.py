@@ -113,6 +113,41 @@ def _customer_lead_count_subquery():
     )
 
 
+def _prior_disbursed_count_subquery():
+    """Same customer's loans disbursed before this one (Reloan number)."""
+    return Subquery(
+        Loan.objects.filter(
+            customer_id=OuterRef("customer_id"),
+            is_deleted=False,
+            disbursed_at__isnull=False,
+            disbursed_at__lt=OuterRef("disbursed_at"),
+        )
+        .exclude(pk=OuterRef("pk"))
+        .values("customer_id")
+        .annotate(_cnt=Count("id"))
+        .values("_cnt")[:1],
+        output_field=IntegerField(),
+    )
+
+
+def _prior_disbursed_count(loan) -> int:
+    annotated = getattr(loan, "_prior_disbursed_count", None)
+    if annotated is not None:
+        return int(annotated or 0)
+    if not loan.disbursed_at:
+        return 0
+    return (
+        Loan.objects.filter(
+            customer_id=loan.customer_id,
+            is_deleted=False,
+            disbursed_at__isnull=False,
+            disbursed_at__lt=loan.disbursed_at,
+        )
+        .exclude(pk=loan.pk)
+        .count()
+    )
+
+
 def _customer_lead_count(loan) -> int:
     annotated = getattr(loan, "_customer_lead_count", None)
     if annotated is not None:
@@ -220,6 +255,7 @@ def _visible_loans_queryset(user, filters: dict | None = None):
                 filter=Q(repayments__status=RepaymentStatus.CONFIRMED),
             ),
             _customer_lead_count=_customer_lead_count_subquery(),
+            _prior_disbursed_count=_prior_disbursed_count_subquery(),
         )
         .order_by("-disbursed_at")
     )
@@ -415,7 +451,11 @@ def _build_disbursed_row(loan: Loan) -> dict:
         "disbursedAmount": _disbursed_amount(loan, disbursement, sheet, net),
         # CKYC number is not captured anywhere in the CRM yet.
         "ckycNo": "",
-        "loanType": (
+        # Fresh on the customer's first disbursed loan; Reloan when an earlier
+        # loan of the same customer was disbursed. reloanCount is the reloan number.
+        "loanType": "Reloan" if _prior_disbursed_count(loan) > 0 else "Fresh",
+        "reloanCount": _prior_disbursed_count(loan),
+        "productName": (
             loan.product.name
             if loan.product_id
             else (application.product.name if application and application.product_id else "")

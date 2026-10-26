@@ -80,6 +80,8 @@ import {
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 import { periodToDateRange } from '@/lib/periodFilter';
+import { LeadCategoryBadge } from '@/components/leads/LeadCategoryBadge';
+import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 
 const REPORTING_TAB_ITEMS = [
   { value: 'disbursed', label: 'Disbursal' },
@@ -648,7 +650,19 @@ const DISBURSED_COLUMNS: ReportColumn<DisbursedReportRow>[] = [
   { label: 'Company Account', cell: (item) => dash(item.companyAccount), exportValue: (item) => dash(item.companyAccount) },
   { label: 'UTM Source', cell: (item) => dash(item.utm), exportValue: (item) => dash(item.utm) },
   { label: 'Red Flagged', align: 'center', cell: (item) => dash(item.redFlag), exportValue: (item) => dash(item.redFlag) },
-  { label: 'Loan Type', cell: (item) => dash(item.loanType), exportValue: (item) => dash(item.loanType) },
+  {
+    label: 'Loan Type',
+    align: 'center',
+    // Fresh / Reloan; the small badge is the reloan number (2nd loan = 1, 3rd = 2, ...).
+    cell: (item) =>
+      dash(item.loanType) === '-' ? '-' : (
+        <LeadCategoryBadge category={item.loanType} customerLeadCount={item.reloanCount} />
+      ),
+    exportValue: (item) =>
+      item.loanType === 'Reloan' && item.reloanCount > 0
+        ? `Reloan (${item.reloanCount})`
+        : dash(item.loanType),
+  },
   {
     label: 'Lead Coming Date',
     cell: (item) => formatAppDateTimeOrFallback(item.leadComingDate, '-'),
@@ -707,8 +721,8 @@ const COLLECTION_COLUMNS: ReportColumn<CollectionReportRow>[] = [
     exportValue: (item) => dash(item.status),
   },
   { label: 'Remarks', cell: (item) => dash(item.remarks), exportValue: (item) => dash(item.remarks), cellClassName: 'max-w-[150px] truncate' },
-  { label: 'Collection Date(DD-MM-YYYY)', cell: (item) => dash(item.collectionDate), exportValue: (item) => dash(item.collectionDate) },
-  { label: 'Time(HH:MM:SS)', cell: (item) => dash(item.collectionTime), exportValue: (item) => dash(item.collectionTime) },
+  { label: 'Collection Date', cell: (item) => dash(item.collectionDate), exportValue: (item) => dash(item.collectionDate) },
+  { label: 'Time', cell: (item) => dash(item.collectionTime), exportValue: (item) => dash(item.collectionTime) },
 ];
 
 const DISBURSED_EXPORT_COLUMNS = DISBURSED_COLUMNS.map((column) => ({
@@ -811,7 +825,7 @@ function CollectionTable({ paginatedData, handleSort, getSortIcon }: any) {
           columns={COLLECTION_COLUMNS}
           handleSort={handleSort}
           getSortIcon={getSortIcon}
-          showAction={false}
+          showAction
         />
       </TableHeader>
       <TableBody>
@@ -826,10 +840,19 @@ function CollectionTable({ paginatedData, handleSort, getSortIcon }: any) {
                   {column.cell(item)}
                 </TableCell>
               ))}
+              <TableCell className={dataTableActionCellClass}>
+                <div className="flex items-center justify-center">
+                  <RowViewButton
+                    to={leadDetailsPath(item.id)}
+                    title="View lead"
+                    aria-label={`View lead ${item.leadId}`}
+                  />
+                </div>
+              </TableCell>
             </TableRow>
           ))
         ) : (
-          <EmptyState colSpan={COLLECTION_COLUMNS.length} />
+          <EmptyState colSpan={COLLECTION_COLUMNS.length + 1} />
         )}
       </TableBody>
     </Table>

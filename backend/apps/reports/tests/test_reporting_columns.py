@@ -17,7 +17,45 @@ def test_disbursed_row_has_new_columns(setup):  # noqa: F811
     for key in ("pdType", "disbursedAmount", "ckycNo", "loanType"):
         assert key in row
     assert row["ckycNo"] == ""  # not captured: shown as "-"
-    assert row["loanType"] == loan.product.name
+    assert row["loanType"] == "Fresh"
+    assert row["reloanCount"] == 0
+    assert row["productName"] == loan.product.name
+
+
+def test_loan_type_reloan_counts_prior_disbursed_loans(setup):  # noqa: F811
+    from apps.loans.models import Loan
+
+    _officer, _lead, first = setup
+
+    from apps.applications.services.application_service import ApplicationService
+
+    def _copy(number, days_after):
+        application = ApplicationService.create_application(
+            user=_officer,
+            customer=first.customer,
+            product=first.product,
+            data={"requested_amount": first.principal_amount, "tenure_value": 10},
+        )
+        return Loan.objects.create(
+            loan_account_number=f"LN-RELOAN-{number}",
+            application=application,
+            customer=first.customer,
+            product=first.product,
+            principal_amount=first.principal_amount,
+            interest_amount=Decimal("0"),
+            total_repayable=first.principal_amount,
+            due_date=first.due_date,
+            status=first.status,
+            disbursed_at=first.disbursed_at + timedelta(days=days_after),
+        )
+
+    second = _copy(2, 5)
+    third = _copy(3, 9)
+    assert _build_disbursed_row(first)["loanType"] == "Fresh"
+    row = _build_disbursed_row(second)
+    assert (row["loanType"], row["reloanCount"]) == ("Reloan", 1)
+    row = _build_disbursed_row(third)
+    assert (row["loanType"], row["reloanCount"]) == ("Reloan", 2)
 
 
 def test_collection_row_amounts_and_split_date_time(setup):  # noqa: F811

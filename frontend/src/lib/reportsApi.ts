@@ -49,6 +49,8 @@ export interface DisbursedReportRow {
   disbursedAmount: string;
   ckycNo: string;
   loanType: string;
+  reloanCount: number;
+  productName: string;
   leadCategory: string;
   customerLeadCount: number;
   status: string;
