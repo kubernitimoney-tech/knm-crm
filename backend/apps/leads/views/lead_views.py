@@ -411,9 +411,11 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
             beneficiary_branch = str(sheet_details.get("branch") or "")
             if not beneficiary_branch:
                 beneficiary_branch = disbursal_defaults.get("branch") or ""
-            reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
-            if not reference_no and disbursement_utr:
-                reference_no = str(disbursement_utr).strip()
+            # The disbursement record is the source of truth for the UTR; the sheet copy
+            # goes stale when the UTR is edited directly (e.g. via Django admin).
+            reference_no = str(disbursement_utr or "").strip()
+            if not reference_no:
+                reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
             loan_no = ""
             if loan:
                 loan_no = loan.loan_account_number

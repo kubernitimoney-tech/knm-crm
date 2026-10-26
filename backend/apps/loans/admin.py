@@ -101,6 +101,19 @@ class LoanDisbursementAdmin(admin.ModelAdmin):
     readonly_fields = ("id", "created_at", "updated_at")
     ordering = ("-disbursed_at",)
 
+    def save_model(self, request, obj, form, change):
+        """Mirror UTR edits onto the application's disbursal sheet copy."""
+        super().save_model(request, obj, form, change)
+        if not change or "utr_reference" not in form.changed_data:
+            return
+        application = obj.loan.application
+        if not application:
+            return
+        details = dict(application.disbursal_sheet_details or {})
+        details["disbursal_reference_no"] = str(obj.utr_reference).strip()
+        application.disbursal_sheet_details = details
+        application.save(update_fields=["disbursal_sheet_details", "updated_at"])
+
 
 @admin.register(LoanPenalty)
 class LoanPenaltyAdmin(admin.ModelAdmin):
