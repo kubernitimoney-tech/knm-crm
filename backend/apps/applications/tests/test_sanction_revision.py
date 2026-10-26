@@ -44,6 +44,97 @@ class TestSanctionRevision:
         assert application.status == ApplicationStatus.APPROVED
         assert application.approved_amount == Decimal("25000")
 
+    def test_revising_sanction_updates_existing_loan_terms(self):
+        from datetime import date, timedelta
+
+        from apps.ledger.services.ledger_posting_service import LedgerPostingService
+
+        user = UserFactory()
+        _assign_role(user, "admin")
+        application = application_factory(customer=customer_factory())
+        first_repay = date.today() + timedelta(days=20)
+        revised_repay = date.today() + timedelta(days=30)
+
+        def _sanction(amount, repay, rate):
+            ApplicationService.decide(
+                user=user,
+                application=application,
+                decision="approved",
+                approved_amount=Decimal(amount),
+                approved_tenure_value=30,
+                interest_rate=Decimal(rate),
+                processing_fee=Decimal("500"),
+                sanction_details={
+                    "branch": "Delhi",
+                    "cibil_score": "750",
+                    "repayment_date": repay.isoformat(),
+                    "salary_banks": salary_bank_entries(),
+                },
+            )
+            application.refresh_from_db()
+
+        _sanction("30000", first_repay, "1.00")
+        loan = application.loan
+        assert loan.due_date == first_repay
+
+        _sanction("25000", revised_repay, "0.75")
+        loan.refresh_from_db()
+        assert loan.due_date == revised_repay
+        assert loan.principal_amount == Decimal("25000")
+        assert loan.interest_rate == Decimal("0.75")
+        assert loan.product_snapshot["tenure_days"] == 30
+        assert LedgerPostingService.get_balance(loan.id) == loan.total_repayable
+
+    def test_admin_repayment_date_edit_updates_loan_due_date(self):
+        from datetime import date, timedelta
+
+        from django.contrib.admin.sites import site
+        from django.test import RequestFactory
+
+        from apps.applications.admin import ApplicationDecisionAdmin
+        from apps.applications.models import ApplicationDecision
+
+        user = UserFactory()
+        _assign_role(user, "admin")
+        application = application_factory(customer=customer_factory())
+        ApplicationService.decide(
+            user=user,
+            application=application,
+            decision="approved",
+            approved_amount=Decimal("25000"),
+            approved_tenure_value=30,
+            interest_rate=Decimal("1.00"),
+            processing_fee=Decimal("500"),
+            sanction_details={
+                "branch": "Delhi",
+                "cibil_score": "750",
+                "repayment_date": (date.today() + timedelta(days=20)).isoformat(),
+                "salary_banks": salary_bank_entries(),
+            },
+        )
+        decision = ApplicationDecision.objects.get(application=application)
+        new_repay = date.today() + timedelta(days=25)
+
+        model_admin = ApplicationDecisionAdmin(ApplicationDecision, site)
+        request = RequestFactory().post("/")
+        request.user = user
+        form_class = model_admin.get_form(request, decision, change=True)
+        data = {
+            field: getattr(decision, f"{field}_id", None) or getattr(decision, field, "")
+            for field in form_class.base_fields
+            if field != "repayment_date"
+        }
+        data = {key: ("" if value is None else value) for key, value in data.items()}
+        data["repayment_date"] = new_repay.isoformat()
+        form = form_class(data=data, instance=decision)
+        assert form.is_valid(), form.errors
+        model_admin.save_model(request, form.save(commit=False), form, change=True)
+
+        decision.refresh_from_db()
+        application.loan.refresh_from_db()
+        assert decision.sanction_details["repayment_date"] == new_repay.isoformat()
+        assert application.loan.due_date == new_repay
+
     def test_sanction_email_uses_latest_decision_amount(self):
         user = UserFactory()
         _assign_role(user, "admin")

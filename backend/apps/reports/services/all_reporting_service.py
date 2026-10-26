@@ -441,8 +441,8 @@ def _build_disbursed_row(loan: Loan) -> dict:
         "beneficiaryBranch": beneficiary_branch,
         "checkNo": _detail_string(sheet, "cheque_no"),
         "enachDetails": _detail_string(sheet, "enach_id"),
-        "disbursalRefNo": _detail_string(sheet, "disbursal_reference_no")
-        or (disbursement.utr_reference if disbursement else ""),
+        "disbursalRefNo": (disbursement.utr_reference if disbursement else "")
+        or _detail_string(sheet, "disbursal_reference_no"),
         "companyAccount": company_account_number or "",
         "processingFee": _money(processing_fee),
         "tax": _money(tax),

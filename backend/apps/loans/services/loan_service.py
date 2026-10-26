@@ -8,6 +8,7 @@ from apps.applications.models import ApplicationDecision, ApplicationStatus, Loa
 from apps.applications.services.application_status_service import change_application_status
 from apps.applications.services.sanction_fee_service import SanctionFeeService
 from apps.applications.services.snapshot_service import build_loan_product_snapshot
+from apps.ledger.models import TransactionType
 from apps.ledger.services.ledger_posting_service import LedgerPostingService
 from apps.loans.models import DisbursementStatus, Loan, LoanDisbursement, LoanStatus
 from apps.loans.services.loan_calculation_service import LoanCalculationService
@@ -179,6 +180,114 @@ class LoanService:
         )
         record_loan_status_created(loan=loan, user=user)
         return loan
+
+    @classmethod
+    @transaction.atomic
+    def sync_with_sanction(
+        cls,
+        *,
+        user,
+        loan: Loan,
+        decision: ApplicationDecision | None = None,
+    ) -> Loan:
+        """Re-apply the latest approved sanction terms to an existing loan.
+
+        A sanction revision records a new decision; without this the loan keeps the
+        repayment date, amounts and ROI/PF snapshot frozen at creation. Principal and
+        processing fee are left alone once the money has gone out.
+        """
+        application = loan.application
+        if decision is None:
+            decision = (
+                application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            )
+        if decision is None:
+            return loan
+
+        disbursal_date = LoanCalculationService.to_date(loan.disbursed_at)
+        anchor = disbursal_date or timezone.localdate()
+        due_date = cls._repayment_date_from_decision(decision) or loan.due_date
+        tenure_days = LoanCalculationService.tenure_days(disbursal_date=anchor, due_date=due_date)
+
+        if disbursal_date:
+            principal = loan.principal_amount
+        else:
+            principal = application.approved_amount or application.requested_amount
+        processing_fee, interest, _total = cls._calculate_payday_amounts(
+            product=application.product,
+            principal=principal,
+            tenure_days=tenure_days,
+            decision=decision,
+        )
+        old_fee = loan.total_repayable - loan.principal_amount - loan.interest_amount
+        if disbursal_date:
+            processing_fee = old_fee
+        interest_rate = (
+            decision.interest_rate
+            if decision.interest_rate is not None
+            else application.product.interest_rate
+        )
+
+        cls._post_sanction_adjustments(
+            loan=loan,
+            user=user,
+            deltas=[
+                (TransactionType.DISBURSEMENT, principal - loan.principal_amount, "Principal"),
+                (TransactionType.FEE, processing_fee - old_fee, "Processing fee"),
+                (TransactionType.INTEREST, interest - loan.interest_amount, "Interest"),
+            ],
+        )
+
+        loan.principal_amount = principal
+        loan.interest_amount = interest
+        loan.total_repayable = principal + processing_fee + interest
+        loan.due_date = due_date
+        loan.product_snapshot = build_loan_product_snapshot(
+            application=application,
+            processing_fee=processing_fee,
+            interest_rate=interest_rate,
+            tenure_days=tenure_days,
+            approved_amount=principal,
+        )
+        loan.updated_by = user
+        loan.save(
+            update_fields=[
+                "principal_amount",
+                "interest_amount",
+                "total_repayable",
+                "due_date",
+                "product_snapshot",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+        return loan
+
+    @staticmethod
+    def _post_sanction_adjustments(*, loan: Loan, user, deltas) -> None:
+        """Ledger is append-only: post the difference instead of editing creation entries."""
+        for transaction_type, delta, label in deltas:
+            if delta > 0:
+                LedgerPostingService.post(
+                    loan=loan,
+                    transaction_type=transaction_type,
+                    debit_amount=delta,
+                    reference_type="loan",
+                    reference_id=loan.id,
+                    narration=f"{label} revised on sanction update",
+                    user=user,
+                )
+            elif delta < 0:
+                LedgerPostingService.post(
+                    loan=loan,
+                    transaction_type=TransactionType.REVERSAL,
+                    credit_amount=-delta,
+                    reference_type="loan",
+                    reference_id=loan.id,
+                    narration=f"{label} revised on sanction update",
+                    user=user,
+                    allow_negative=True,
+                )
 
     @classmethod
     @transaction.atomic
