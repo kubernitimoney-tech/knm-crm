@@ -7,7 +7,6 @@ from django.utils import timezone
 from apps.accounts.models import UserRole
 from apps.accounts.services.role_helpers import (
     CREDIT_MANAGER_SLUGS,
-    FIELD_INVESTIGATOR_SLUGS,
     RELATIONSHIP_MANAGER_SLUGS,
     is_super_admin,
 )
@@ -84,31 +83,20 @@ class LeadService:
 
     @staticmethod
     def get_field_investigators():
-        user_ids = UserRole.objects.filter(
-            role__slug__in=FIELD_INVESTIGATOR_SLUGS,
-            role__is_active=True,
-        ).values_list("user_id", flat=True)
-        from apps.accounts.models import User
+        from apps.organization.models import FieldInvestigator
 
-        return User.objects.filter(id__in=list(user_ids), is_active=True).order_by(
-            "first_name",
-            "last_name",
-            "email",
-        )
+        return FieldInvestigator.objects.filter(is_active=True).order_by("name")
 
     @classmethod
     def field_investigator_roster(cls) -> list[dict]:
-        roster = []
-        for investigator in cls.get_field_investigators():
-            label = investigator.get_full_name().strip() or investigator.email
-            roster.append(
-                {
-                    "id": str(investigator.id),
-                    "email": investigator.email,
-                    "name": label,
-                }
-            )
-        return roster
+        return [
+            {
+                "id": str(investigator.id),
+                "email": investigator.email,
+                "name": investigator.name,
+            }
+            for investigator in cls.get_field_investigators()
+        ]
 
     @classmethod
     def auto_assign_cm(cls):

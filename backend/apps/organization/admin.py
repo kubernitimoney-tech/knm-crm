@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from apps.organization.models import Bank, BankHoliday, Branch, CompanyAccount, LenderBankAccount
+from apps.organization.models import (
+    Bank,
+    BankHoliday,
+    Branch,
+    CompanyAccount,
+    FieldInvestigator,
+    LenderBankAccount,
+)
 
 
 @admin.register(Bank)
@@ -23,6 +30,13 @@ class BranchAdmin(admin.ModelAdmin):
     list_display = ("branch_code", "branch_name", "city", "state", "status")
     search_fields = ("branch_code", "branch_name", "city")
     list_filter = ("status", "state")
+
+
+@admin.register(FieldInvestigator)
+class FieldInvestigatorAdmin(admin.ModelAdmin):
+    list_display = ("name", "phone", "email", "is_active", "created_at")
+    search_fields = ("name", "phone", "email")
+    list_filter = ("is_active",)
 
 
 @admin.register(LenderBankAccount)
