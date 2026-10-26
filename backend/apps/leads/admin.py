@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.core.admin_mixins import LeadFirstSearchMixin
 from apps.leads.models import (
     CallLog,
     DeletedLead,
@@ -20,14 +21,14 @@ class LeadSourceAdmin(admin.ModelAdmin):
 
 
 @admin.register(Lead)
-class LeadAdmin(admin.ModelAdmin):
+class LeadAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead_id", "customer", "status", "category", "assigned_rm", "created_at")
     list_filter = ("status", "category")
     search_fields = ("lead_id", "customer__customer_code")
 
 
 @admin.register(DeletedLead)
-class DeletedLeadAdmin(admin.ModelAdmin):
+class DeletedLeadAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = (
         "lead_id",
         "customer",
@@ -85,27 +86,27 @@ class DeletedLeadAdmin(admin.ModelAdmin):
 
 
 @admin.register(LeadAssignmentHistory)
-class LeadAssignmentHistoryAdmin(admin.ModelAdmin):
+class LeadAssignmentHistoryAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "old_rm", "new_rm", "old_cm", "new_cm", "assigned_by", "created_at")
     search_fields = ("lead__lead_id", "remarks")
 
 
 @admin.register(CallLog)
-class CallLogAdmin(admin.ModelAdmin):
+class CallLogAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "disposition", "created_by", "created_at")
     list_filter = ("disposition",)
     search_fields = ("lead__lead_id", "remarks")
 
 
 @admin.register(LeadActivity)
-class LeadActivityAdmin(admin.ModelAdmin):
+class LeadActivityAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "activity_type", "description", "created_by", "created_at")
     list_filter = ("activity_type",)
     search_fields = ("lead__lead_id", "description")
 
 
 @admin.register(LeadFollowUpRemark)
-class LeadFollowUpRemarkAdmin(admin.ModelAdmin):
+class LeadFollowUpRemarkAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = (
         "lead",
         "remark_category",
@@ -119,14 +120,14 @@ class LeadFollowUpRemarkAdmin(admin.ModelAdmin):
 
 
 @admin.register(LeadStatusHistory)
-class LeadStatusHistoryAdmin(admin.ModelAdmin):
+class LeadStatusHistoryAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "from_status", "to_status", "changed_by", "changed_at")
     list_filter = ("to_status",)
     search_fields = ("lead__lead_id", "remarks")
 
 
 @admin.register(LeadEsignRequest)
-class LeadEsignRequestAdmin(admin.ModelAdmin):
+class LeadEsignRequestAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = (
         "lead",
         "status",
@@ -141,7 +142,7 @@ class LeadEsignRequestAdmin(admin.ModelAdmin):
 
 
 @admin.register(LeadVideoKycRequest)
-class LeadVideoKycRequestAdmin(admin.ModelAdmin):
+class LeadVideoKycRequestAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = (
         "lead",
         "status",
