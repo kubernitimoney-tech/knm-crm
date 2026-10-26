@@ -7,7 +7,7 @@ import {
   ArrowDown,
   MoreHorizontal
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import {
   formatAppDateField,
   formatAppDateOrFallback,
@@ -45,7 +45,6 @@ import {
   dataTableHeaderClass,
   dataTableHeaderRowClass,
   dataTableSortableHeadClass,
-  indexCellClass,
   nameCellClass,
   dataTableCardClass,
   dataTableFilterToolbarClass,
@@ -80,64 +79,27 @@ import {
   useLeadListingActionColumn,
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
+import { periodToDateRange } from '@/lib/periodFilter';
+import { LeadCategoryBadge } from '@/components/leads/LeadCategoryBadge';
+import { RowViewButton } from '@/components/ui/data-table-row-action-buttons';
 
 const REPORTING_TAB_ITEMS = [
   { value: 'disbursed', label: 'Disbursal' },
   { value: 'collection', label: 'Collection' },
 ] as const;
 
-function filterReportingRows<T extends { name: string; email: string; mob: string; leadId: string; loanNo: string; branch: string }>(
+/** Rows arrive already filtered by the server; only sort the current page here. */
+function sortReportingRows<T>(
   rows: T[],
-  {
-    searchQuery,
-    branchFilter,
-    dateFilter,
-    dateRange,
-    sortConfig,
-    dateValue,
-  }: {
-    searchQuery: string;
-    branchFilter: string;
-    dateFilter: string;
-    dateRange: { from: Date | undefined; to: Date | undefined };
-    sortConfig: { key: string; direction: 'asc' | 'desc' | null };
-    dateValue: (item: T) => string;
-  },
+  sortConfig: { key: string; direction: 'asc' | 'desc' | null },
 ): T[] {
-  const result = rows.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.mob.includes(searchQuery) ||
-      item.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.loanNo.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesBranch = branchFilter === 'All' || item.branch === branchFilter;
-    let matchesDate = true;
-    const targetDate = new Date(dateValue(item));
-    if (dateFilter === 'Today') {
-      matchesDate = isWithinInterval(targetDate, {
-        start: startOfDay(new Date()),
-        end: endOfDay(new Date()),
-      });
-    } else if (dateFilter === 'Last 7 Days') {
-      matchesDate = targetDate >= subDays(new Date(), 7);
-    } else if (dateFilter === 'Current Month') {
-      matchesDate = targetDate >= startOfMonth(new Date());
-    } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-      matchesDate = isWithinInterval(targetDate, {
-        start: startOfDay(dateRange.from),
-        end: endOfDay(dateRange.to),
-      });
-    }
-    return matchesSearch && matchesBranch && matchesDate;
-  });
-
+  const result = [...rows];
   if (sortConfig.key && sortConfig.direction) {
     result.sort((a, b) => {
-      const aVal = a[sortConfig.key as keyof T] ?? '';
-      const bVal = b[sortConfig.key as keyof T] ?? '';
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      const aVal = (a as Record<string, unknown>)[sortConfig.key] ?? '';
+      const bVal = (b as Record<string, unknown>)[sortConfig.key] ?? '';
+      if (String(aVal) < String(bVal)) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (String(aVal) > String(bVal)) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }
@@ -167,6 +129,22 @@ export function AllReportingPage() {
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Search is sent to the server after a short pause in typing.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
+
+  // Disbursal tab filters on disbursal date, Collection tab on collection date (server side).
+  const serverFilters = useMemo(
+    () => ({
+      ...periodToDateRange(dateFilter, dateRange),
+      branch: branchFilter,
+      search: debouncedSearch,
+    }),
+    [dateFilter, dateRange, branchFilter, debouncedSearch],
+  );
 
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
@@ -176,6 +154,7 @@ export function AllReportingPage() {
       // Load only the active tab and page — avoids fetching the full portfolio at once.
       if (activeTab === 'disbursed') {
         const page = await fetchDisbursedReportRows({
+          ...serverFilters,
           page: currentPage,
           page_size: itemsPerPage,
         });
@@ -183,6 +162,7 @@ export function AllReportingPage() {
         setDisbursedTotal(page.count);
       } else {
         const page = await fetchCollectionReportRows({
+          ...serverFilters,
           page: currentPage,
           page_size: itemsPerPage,
         });
@@ -202,7 +182,7 @@ export function AllReportingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, currentPage, itemsPerPage]);
+  }, [activeTab, currentPage, itemsPerPage, serverFilters]);
 
   useEffect(() => {
     loadReportData();
@@ -258,30 +238,22 @@ export function AllReportingPage() {
     setActiveTab(val);
     setCurrentPage(1);
     setSortConfig({
-      key: val === 'disbursed' ? 'disbursalDate' : 'repayDate',
+      key: val === 'disbursed' ? 'disbursalDate' : 'collectionDateTime',
       direction: 'desc',
     });
     handleClearFilters();
   };
 
-  const currentData = activeTab === 'disbursed' ? disbursedData : collectionData;
-  const reportFilters = { searchQuery, branchFilter, dateFilter, dateRange, sortConfig };
+  const filteredAndSortedData = useMemo(
+    () =>
+      activeTab === 'disbursed'
+        ? sortReportingRows(disbursedData, sortConfig)
+        : sortReportingRows(collectionData, sortConfig),
+    [activeTab, disbursedData, collectionData, sortConfig],
+  );
 
-  const filteredAndSortedData = useMemo(() => {
-    if (activeTab === 'disbursed') {
-      return filterReportingRows(disbursedData, {
-        ...reportFilters,
-        dateValue: (item) => item.disbursalDate,
-      });
-    }
-    return filterReportingRows(collectionData, {
-      ...reportFilters,
-      dateValue: (item) => item.repayDate,
-    });
-  }, [searchQuery, branchFilter, dateFilter, dateRange, sortConfig, activeTab, disbursedData, collectionData]);
-
-  const serverTotal = activeTab === 'disbursed' ? disbursedTotal : collectionTotal;
-  const footerTotal = hasActiveFilters ? filteredAndSortedData.length : serverTotal;
+  // The server already applied the filters, so its count is the filtered total.
+  const footerTotal = activeTab === 'disbursed' ? disbursedTotal : collectionTotal;
 
   const paginatedData = filteredAndSortedData;
 
@@ -289,15 +261,9 @@ export function AllReportingPage() {
     let exportRows: DisbursedReportRow[] | CollectionReportRow[] = [];
     try {
       if (activeTab === 'disbursed') {
-        exportRows = filterReportingRows(await fetchAllDisbursedReportRows(), {
-          ...reportFilters,
-          dateValue: (item) => item.disbursalDate,
-        });
+        exportRows = sortReportingRows(await fetchAllDisbursedReportRows(serverFilters), sortConfig);
       } else {
-        exportRows = filterReportingRows(await fetchAllCollectionReportRows(), {
-          ...reportFilters,
-          dateValue: (item) => item.repayDate,
-        });
+        exportRows = sortReportingRows(await fetchAllCollectionReportRows(serverFilters), sortConfig);
       }
     } catch {
       toast({ title: 'Export failed', description: 'Could not load all matching rows.', variant: 'error' });
@@ -312,73 +278,19 @@ export function AllReportingPage() {
       return;
     }
     if (activeTab === 'disbursed') {
-      const headers = [
-        { label: 'Lead ID', key: 'leadId' },
-        { label: 'Lead Coming Date', key: 'leadComingDate' },
-        { label: 'Loan No.', key: 'loanNo' },
-        { label: 'Name', key: 'name' },
-        { label: 'DOB', key: 'dob' },
-        { label: 'Gender', key: 'gender' },
-        { label: 'PAN No.', key: 'pan' },
-        { label: 'Aadhaar No.', key: 'adharCard' },
-        { label: 'Mobile No.', key: 'mob' },
-        { label: 'Email', key: 'email' },
-        { label: 'Branch', key: 'branch' },
-        { label: 'Credited By', key: 'credBy' },
-        { label: 'PD By', key: 'pdBy' },
-        { label: 'Employment Status', key: 'employed' },
-        { label: 'Monthly Income', key: (item: any) => Number(item.monthlyIncome) },
-        { label: 'Monthly Obligation', key: (item: any) => Number(item.monthlyObligation) },
-        { label: 'Loan Amount', key: (item: any) => Number(item.loanAmt) },
-        { label: 'Tenure', key: 'tenure' },
-        { label: 'ROI', key: 'roi' },
-        { label: 'Status', key: 'status' },
-        { label: 'Disbursal Date', key: 'disbursalDate' },
-        { label: 'Repay Date', key: 'repayDate' },
-        { label: 'Residence Type', key: 'recidanceType' },
-        { label: 'Account No.', key: 'accountNo' },
-        { label: 'Bank IFSC', key: 'bankIfsc' },
-        { label: 'Bank Name', key: 'bankName' },
-        { label: 'Account Type', key: 'accountType' },
-        { label: 'Beneficiary Branch', key: 'beneficiaryBranch' },
-        { label: 'Check No.', key: 'checkNo' },
-        { label: 'E-Nach Details', key: 'enachDetails' },
-        { label: 'Disbursal Ref No.', key: 'disbursalRefNo' },
-        { label: 'Company Account', key: 'companyAccount' },
-        { label: 'Processing Fee', key: (item: any) => Number(item.processingFee) },
-        { label: 'Tax', key: (item: any) => Number(item.tax) },
-        { label: 'CIBIL Score', key: 'cibil' },
-        { label: 'UTM Search', key: 'utm' },
-        { label: 'State', key: 'state' },
-        { label: 'Red Flagged', key: 'redFlag' },
-      ];
-      exportToExcel(exportRows, headers as any, `Disbursed_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Disbursal');
+      exportToExcel(
+        exportRows as DisbursedReportRow[],
+        DISBURSED_EXPORT_COLUMNS,
+        `Disbursed_Reports_${format(new Date(), 'yyyy-MM-dd')}`,
+        'Disbursal',
+      );
     } else {
-      const headers = [
-        { label: 'Lead ID', key: 'leadId' },
-        { label: 'Loan No.', key: 'loanNo' },
-        { label: 'Branch', key: 'branch' },
-        { label: 'Name', key: 'name' },
-        { label: 'Email', key: 'email' },
-        { label: 'Mobile No.', key: 'mob' },
-        { label: 'PAN No.', key: 'pan' },
-        { label: 'State', key: 'state' },
-        { label: 'Repay Date', key: 'repayDate' },
-        { label: 'Collected Amount', key: (item: any) => Number(item.collectedAmount) },
-        { label: 'Principal Amount', key: (item: any) => Number(item.principalAmt) },
-        { label: 'Interest Amount', key: (item: any) => Number(item.interestAmt) },
-        { label: 'Penal Interest', key: (item: any) => Number(item.penalInterest) },
-        { label: 'Collected Mode', key: 'collectedMode' },
-        { label: 'Reference No.', key: 'referenceNo' },
-        { label: 'Wave-Off', key: (item: any) => Number(item.waveOff) },
-        { label: 'Settlement Amount', key: (item: any) => Number(item.settelmentAmt) },
-        { label: 'Collection Source', key: 'collectionSource' },
-        { label: 'Collection Team', key: 'collectionTeam' },
-        { label: 'Status', key: 'status' },
-        { label: 'Remarks', key: 'remarks' },
-        { label: 'Collection Date Time', key: 'collectionDateTime' },
-      ];
-      exportToExcel(exportRows, headers as any, `Collection_Reports_${format(new Date(), 'yyyy-MM-dd')}`, 'Collection');
+      exportToExcel(
+        exportRows as CollectionReportRow[],
+        COLLECTION_EXPORT_COLUMNS,
+        `Collection_Reports_${format(new Date(), 'yyyy-MM-dd')}`,
+        'Collection',
+      );
     }
   };
 
@@ -407,6 +319,7 @@ export function AllReportingPage() {
             isLoading={isLoading}
             filterToolbar={(
               <ReportingFilterToolbar
+                dateLabel="Disbursal date"
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 setCurrentPage={setCurrentPage}
@@ -463,6 +376,7 @@ export function AllReportingPage() {
             isLoading={isLoading}
             filterToolbar={(
               <ReportingFilterToolbar
+                dateLabel="Collection date"
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 setCurrentPage={setCurrentPage}
@@ -557,6 +471,7 @@ function ReportingFilterToolbar({
   setDateRange,
   hasActiveFilters,
   onClearFilters,
+  dateLabel,
 }: {
   searchQuery: string;
   setSearchQuery: (value: string) => void;
@@ -570,6 +485,7 @@ function ReportingFilterToolbar({
   setDateRange: (range: { from: Date | undefined; to: Date | undefined }) => void;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
+  dateLabel: string;
 }) {
   return (
     <div className={dataTableFilterToolbarClass}>
@@ -597,6 +513,7 @@ function ReportingFilterToolbar({
           </SelectContent>
         </Select>
 
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{dateLabel}</span>
         <Select value={dateFilter} onValueChange={(val) => { setDateFilter(val); setCurrentPage(1); }}>
           <SelectTrigger className={cn('w-[128px]', dataTableFilterControlClass)}>
             <SelectValue placeholder={selectPlaceholder('Period')} />
@@ -614,7 +531,10 @@ function ReportingFilterToolbar({
           <DateRangePicker
             from={dateRange.from}
             to={dateRange.to}
-            onChange={setDateRange}
+            onChange={(range) => {
+              setDateRange({ from: range.from, to: range.to });
+              setCurrentPage(1);
+            }}
             defaultMonth={subMonths(new Date(), 1)}
             triggerClassName={dataTableDateRangeTriggerClass}
           />
@@ -628,130 +548,264 @@ function ReportingFilterToolbar({
   );
 }
 
-function DisbursedTable({ paginatedData, currentPage, itemsPerPage, handleSort, getSortIcon, openEditByLeadUuid, setDeleteTarget, actionCol }: any) {
-  const tableColSpan = actionCol.showColumn ? 40 : 39;
+/** Blank, null and placeholder values show as "-" (column has no data). */
+function dash(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  const text = String(value).trim();
+  return text === '' || text === '—' ? '-' : text;
+}
+
+function amount(value: unknown): string {
+  const text = dash(value);
+  if (text === '-') return text;
+  const number = Number(text);
+  return Number.isFinite(number) ? String(number) : text;
+}
+
+function exportAmount(value: unknown): string | number {
+  const text = dash(value);
+  if (text === '-') return text;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : text;
+}
+
+interface ReportColumn<T> {
+  label: string;
+  cell: (item: T) => React.ReactNode;
+  exportValue: (item: T) => string | number;
+  align?: 'right' | 'center';
+  sortKey?: string;
+  cellClassName?: string;
+}
+
+const DISBURSED_COLUMNS: ReportColumn<DisbursedReportRow>[] = [
+  {
+    label: 'Lead ID',
+    sortKey: 'leadId',
+    cell: (item) => <DataTablePrimaryCell label={item.leadId} to={`/leads/all/${item.id}`} />,
+    exportValue: (item) => dash(item.leadId),
+    cellClassName: nameCellClass,
+  },
+  { label: 'Loan No.', cell: (item) => dash(item.loanNo), exportValue: (item) => dash(item.loanNo) },
+  { label: 'Branch', cell: (item) => dash(item.branch), exportValue: (item) => dash(item.branch) },
+  {
+    label: 'Name',
+    sortKey: 'name',
+    cell: (item) => (
+      <DataTableCustomerNameCell label={formatPersonName(item.name)} to={leadDetailsPath(item.id)} />
+    ),
+    exportValue: (item) => dash(item.name),
+    cellClassName: nameCellClass,
+  },
+  { label: 'DOB', cell: (item) => formatAppDateOrFallback(item.dob, '-'), exportValue: (item) => formatAppDateOrFallback(item.dob, '-') },
+  { label: 'Gender', cell: (item) => dash(item.gender), exportValue: (item) => dash(item.gender) },
+  { label: 'PAN No.', cell: (item) => dash(item.pan), exportValue: (item) => dash(item.pan), cellClassName: 'uppercase' },
+  { label: 'Mobile No.', cell: (item) => dash(item.mob), exportValue: (item) => dash(item.mob) },
+  { label: 'Email', cell: (item) => dash(item.email), exportValue: (item) => dash(item.email) },
+  { label: 'Employment Type', cell: (item) => dash(item.employed), exportValue: (item) => dash(item.employed) },
+  { label: 'Monthly Income', align: 'right', cell: (item) => amount(item.monthlyIncome), exportValue: (item) => exportAmount(item.monthlyIncome) },
+  { label: 'Monthly Obligation', align: 'right', cell: (item) => amount(item.monthlyObligation), exportValue: (item) => exportAmount(item.monthlyObligation) },
+  { label: 'Residence Type', cell: (item) => dash(item.recidanceType), exportValue: (item) => dash(item.recidanceType) },
+  { label: 'Account No.', cell: (item) => dash(item.accountNo), exportValue: (item) => dash(item.accountNo) },
+  { label: 'Bank IFSC', cell: (item) => dash(item.bankIfsc), exportValue: (item) => dash(item.bankIfsc) },
+  { label: 'Bank Name', cell: (item) => dash(item.bankName), exportValue: (item) => dash(item.bankName) },
+  { label: 'Account Type', cell: (item) => dash(item.accountType), exportValue: (item) => dash(item.accountType) },
+  { label: 'Beneficiary Branch', cell: (item) => dash(item.beneficiaryBranch), exportValue: (item) => dash(item.beneficiaryBranch) },
+  { label: 'Check No.', cell: (item) => dash(item.checkNo), exportValue: (item) => dash(item.checkNo) },
+  { label: 'Credited By', cell: (item) => dash(formatPersonName(item.credBy)), exportValue: (item) => dash(item.credBy) },
+  { label: 'PD By', cell: (item) => dash(formatPersonName(item.pdBy)), exportValue: (item) => dash(item.pdBy) },
+  { label: 'PD Type', cell: (item) => dash(item.pdType), exportValue: (item) => dash(item.pdType) },
+  { label: 'Loan Amount', align: 'right', cell: (item) => amount(item.loanAmt), exportValue: (item) => exportAmount(item.loanAmt) },
+  { label: 'Processing Fee', align: 'right', cell: (item) => amount(item.processingFee), exportValue: (item) => exportAmount(item.processingFee) },
+  { label: 'Tax', align: 'right', cell: (item) => amount(item.tax), exportValue: (item) => exportAmount(item.tax) },
+  { label: 'Disbursed Amount', align: 'right', cell: (item) => amount(item.disbursedAmount), exportValue: (item) => exportAmount(item.disbursedAmount) },
+  {
+    label: 'CIBIL Score',
+    align: 'center',
+    cell: (item) => (dash(item.cibil) === '-' ? '-' : <CibilScoreBadge score={item.cibil} />),
+    exportValue: (item) => dash(item.cibil),
+  },
+  { label: 'Tenure', cell: (item) => dash(item.tenure), exportValue: (item) => dash(item.tenure) },
+  {
+    label: 'ROI',
+    cell: (item) => (dash(item.roi) === '-' ? '-' : formatRatePercent(item.roi)),
+    exportValue: (item) => dash(item.roi),
+  },
+  {
+    label: 'Status',
+    align: 'center',
+    cell: (item) => (dash(item.status) === '-' ? '-' : <Badge className={leadPipelineStatusBadgeClass(item.status)}>{item.status}</Badge>),
+    exportValue: (item) => dash(item.status),
+  },
+  {
+    label: 'Disbursal Date',
+    sortKey: 'disbursalDate',
+    cell: (item) => formatAppDateField(item.disbursalDate, '-'),
+    exportValue: (item) => formatAppDateField(item.disbursalDate, '-'),
+  },
+  { label: 'Repay Date', cell: (item) => formatAppDateOrFallback(item.repayDate, '-'), exportValue: (item) => formatAppDateOrFallback(item.repayDate, '-') },
+  { label: 'E-Nach Details', cell: (item) => dash(item.enachDetails), exportValue: (item) => dash(item.enachDetails) },
+  { label: 'Disbursal Ref No.', cell: (item) => dash(item.disbursalRefNo), exportValue: (item) => dash(item.disbursalRefNo) },
+  { label: 'CKYC No.', cell: (item) => dash(item.ckycNo), exportValue: (item) => dash(item.ckycNo) },
+  { label: 'Company Account', cell: (item) => dash(item.companyAccount), exportValue: (item) => dash(item.companyAccount) },
+  { label: 'UTM Source', cell: (item) => dash(item.utm), exportValue: (item) => dash(item.utm) },
+  { label: 'Red Flagged', align: 'center', cell: (item) => dash(item.redFlag), exportValue: (item) => dash(item.redFlag) },
+  {
+    label: 'Loan Type',
+    align: 'center',
+    // Fresh / Reloan; the small badge is the reloan number (2nd loan = 1, 3rd = 2, ...).
+    cell: (item) =>
+      dash(item.loanType) === '-' ? '-' : (
+        <LeadCategoryBadge category={item.loanType} customerLeadCount={item.reloanCount} />
+      ),
+    exportValue: (item) =>
+      item.loanType === 'Reloan' && item.reloanCount > 0
+        ? `Reloan (${item.reloanCount})`
+        : dash(item.loanType),
+  },
+  {
+    label: 'Lead Coming Date',
+    cell: (item) => formatAppDateTimeOrFallback(item.leadComingDate, '-'),
+    exportValue: (item) => formatAppDateTimeOrFallback(item.leadComingDate, '-'),
+  },
+];
+
+const COLLECTION_COLUMNS: ReportColumn<CollectionReportRow>[] = [
+  {
+    label: 'Lead ID',
+    sortKey: 'leadId',
+    cell: (item) => <DataTablePrimaryCell label={item.leadId} to={`/leads/all/${item.id}`} />,
+    exportValue: (item) => dash(item.leadId),
+    cellClassName: nameCellClass,
+  },
+  { label: 'Loan No.', cell: (item) => dash(item.loanNo), exportValue: (item) => dash(item.loanNo) },
+  { label: 'Branch', cell: (item) => dash(item.branch), exportValue: (item) => dash(item.branch) },
+  {
+    label: 'Name',
+    sortKey: 'name',
+    cell: (item) => (
+      <DataTableCustomerNameCell label={formatPersonName(item.name)} to={leadDetailsPath(item.id)} />
+    ),
+    exportValue: (item) => dash(item.name),
+    cellClassName: nameCellClass,
+  },
+  { label: 'Email', cell: (item) => dash(item.email), exportValue: (item) => dash(item.email) },
+  { label: 'Mobile No.', cell: (item) => dash(item.mob), exportValue: (item) => dash(item.mob) },
+  { label: 'PAN No.', cell: (item) => dash(item.pan), exportValue: (item) => dash(item.pan), cellClassName: 'uppercase' },
+  {
+    label: 'Repay Date',
+    sortKey: 'repayDate',
+    cell: (item) => formatAppDateOrFallback(item.repayDate, '-'),
+    exportValue: (item) => formatAppDateOrFallback(item.repayDate, '-'),
+  },
+  { label: 'Collected Amount', align: 'right', cell: (item) => amount(item.collectedAmount), exportValue: (item) => exportAmount(item.collectedAmount) },
+  { label: 'Loan Amount', align: 'right', cell: (item) => amount(item.loanAmount), exportValue: (item) => exportAmount(item.loanAmount) },
+  { label: 'Repay Amount', align: 'right', cell: (item) => amount(item.repayAmount), exportValue: (item) => exportAmount(item.repayAmount) },
+  { label: 'Interest Amount', align: 'right', cell: (item) => amount(item.interestAmt), exportValue: (item) => exportAmount(item.interestAmt) },
+  { label: 'Penal Interest', align: 'right', cell: (item) => amount(item.penalInterest), exportValue: (item) => exportAmount(item.penalInterest) },
+  { label: 'Excess Amount', align: 'right', cell: (item) => amount(item.excessAmount), exportValue: (item) => exportAmount(item.excessAmount) },
+  { label: 'Wave-Off', align: 'right', cell: (item) => amount(item.waveOff), exportValue: (item) => exportAmount(item.waveOff) },
+  { label: 'Settlement Amount', align: 'right', cell: (item) => amount(item.settelmentAmt), exportValue: (item) => exportAmount(item.settelmentAmt) },
+  {
+    label: 'Collected Mode',
+    cell: (item) => (dash(item.collectedMode) === '-' ? '-' : <Badge className={badgeClass('neutral')}>{item.collectedMode}</Badge>),
+    exportValue: (item) => dash(item.collectedMode),
+  },
+  { label: 'Reference No.', cell: (item) => dash(item.referenceNo), exportValue: (item) => dash(item.referenceNo) },
+  { label: 'Collection Source', cell: (item) => dash(item.collectionSource), exportValue: (item) => dash(item.collectionSource) },
+  { label: 'Collection Team', cell: (item) => dash(formatPersonName(item.collectionTeam)), exportValue: (item) => dash(item.collectionTeam) },
+  {
+    label: 'Status',
+    align: 'center',
+    cell: (item) => (dash(item.status) === '-' ? '-' : <Badge className={collectionStatusBadgeClass(item.status)}>{item.status}</Badge>),
+    exportValue: (item) => dash(item.status),
+  },
+  { label: 'Remarks', cell: (item) => dash(item.remarks), exportValue: (item) => dash(item.remarks), cellClassName: 'max-w-[150px] truncate' },
+  { label: 'Collection Date', cell: (item) => dash(item.collectionDate), exportValue: (item) => dash(item.collectionDate) },
+  { label: 'Time', cell: (item) => dash(item.collectionTime), exportValue: (item) => dash(item.collectionTime) },
+];
+
+const DISBURSED_EXPORT_COLUMNS = DISBURSED_COLUMNS.map((column) => ({
+  label: column.label,
+  key: column.exportValue,
+}));
+
+const COLLECTION_EXPORT_COLUMNS = COLLECTION_COLUMNS.map((column) => ({
+  label: column.label,
+  key: column.exportValue,
+}));
+
+function alignClass(align?: 'right' | 'center') {
+  return align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : '';
+}
+
+function ReportHeadRow<T>({ columns, handleSort, getSortIcon, showAction }: {
+  columns: ReportColumn<T>[];
+  handleSort: (key: string) => void;
+  getSortIcon: (key: string) => React.ReactNode;
+  showAction: boolean;
+}) {
+  return (
+    <TableRow className={dataTableHeaderRowClass}>
+      {columns.map((column) =>
+        column.sortKey ? (
+          <TableHead
+            key={column.label}
+            className={cn(dataTableSortableHeadClass, alignClass(column.align))}
+            onClick={() => handleSort(column.sortKey as string)}
+          >
+            <div className="flex items-center">
+              {column.label} {getSortIcon(column.sortKey)}
+            </div>
+          </TableHead>
+        ) : (
+          <TableHead key={column.label} className={cn(dataTableHeadClass, alignClass(column.align))}>
+            {column.label}
+          </TableHead>
+        ),
+      )}
+      <DataTableActionHead visible={showAction} />
+    </TableRow>
+  );
+}
+
+function DisbursedTable({ paginatedData, handleSort, getSortIcon, openEditByLeadUuid, setDeleteTarget, actionCol }: any) {
+  const tableColSpan = DISBURSED_COLUMNS.length + (actionCol.showColumn ? 1 : 0);
   return (
     <Table>
       <TableHeader className={dataTableHeaderClass}>
-        <TableRow className={dataTableHeaderRowClass}>
-          <TableHead className={cn(dataTableHeadClass, 'w-[60px] pl-4 text-center')}>S.No</TableHead>
-          <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('leadId')}>
-            <div className="flex items-center">Lead ID {getSortIcon('leadId')}</div>
-          </TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-center')}>Lead Coming Date</TableHead>
-          <TableHead className={dataTableHeadClass}>Loan No.</TableHead>
-          <TableHead className={dataTableHeadClass} onClick={() => handleSort('name')}>
-            <div className="flex items-center">Name {getSortIcon('name')}</div>
-          </TableHead>
-          <TableHead className={dataTableHeadClass}>DOB</TableHead>
-          <TableHead className={dataTableHeadClass}>Gender</TableHead>
-          <TableHead className={dataTableHeadClass}>PAN No.</TableHead>
-          <TableHead className={dataTableHeadClass}>Aadhaar No.</TableHead>
-          <TableHead className={dataTableHeadClass}>Mobile No.</TableHead>
-          <TableHead className={dataTableHeadClass}>Email</TableHead>
-          <TableHead className={dataTableHeadClass}>Branch</TableHead>
-          <TableHead className={dataTableHeadClass}>Cred By</TableHead>
-          <TableHead className={dataTableHeadClass}>PD By</TableHead>
-          <TableHead className={dataTableHeadClass}>Employed</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Income</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Obligation</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Loan Amt.</TableHead>
-          <TableHead className={dataTableHeadClass}>Tenure</TableHead>
-          <TableHead className={dataTableHeadClass}>ROI</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-center')}>Status</TableHead>
-          <TableHead className={dataTableHeadClass} onClick={() => handleSort('disbursalDate')}>
-            <div className="flex items-center">Disbursal Date {getSortIcon('disbursalDate')}</div>
-          </TableHead>
-          <TableHead className={dataTableHeadClass}>Repay Date</TableHead>
-          <TableHead className={dataTableHeadClass}>Residance</TableHead>
-          <TableHead className={dataTableHeadClass}>Account No.</TableHead>
-          <TableHead className={dataTableHeadClass}>IFSC</TableHead>
-          <TableHead className={dataTableHeadClass}>Bank Name</TableHead>
-          <TableHead className={dataTableHeadClass}>Acc Type</TableHead>
-          <TableHead className={dataTableHeadClass}>Beneficiary Branch</TableHead>
-          <TableHead className={dataTableHeadClass}>Check No</TableHead>
-          <TableHead className={dataTableHeadClass}>E-nach</TableHead>
-          <TableHead className={dataTableHeadClass}>Ref No.</TableHead>
-          <TableHead className={dataTableHeadClass}>Company Account</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Fee</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Tax</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-center')}>CIBIL</TableHead>
-          <TableHead className={dataTableHeadClass}>UTM</TableHead>
-          <TableHead className={dataTableHeadClass}>State</TableHead>
-          <TableHead className={dataTableHeadClass}>Red Flag</TableHead>
-          <DataTableActionHead visible={actionCol.showColumn} />
-        </TableRow>
+        <ReportHeadRow
+          columns={DISBURSED_COLUMNS}
+          handleSort={handleSort}
+          getSortIcon={getSortIcon}
+          showAction={actionCol.showColumn}
+        />
       </TableHeader>
       <TableBody>
         {paginatedData.length > 0 ? (
-          paginatedData.map((item: any, idx: number) => (
-            <TableRow key={item.id} className={dataTableBodyRowClass}>
-              <TableCell className={indexCellClass}>{(currentPage - 1) * itemsPerPage + idx + 1}</TableCell>
-              <TableCell className={nameCellClass}>
-                <DataTablePrimaryCell
-                  label={item.leadId}
-                  to={`/leads/all/${item.id}`}
-                />
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateTimeOrFallback(item.leadComingDate)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.loanNo}</TableCell>
-              <TableCell className={nameCellClass}>
-                <DataTableCustomerNameCell
-                  label={formatPersonName(item.name)}
-                  to={leadDetailsPath(item.id)}
-                />
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateOrFallback(item.dob)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.gender}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'uppercase')}>{item.pan}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.adharCard}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.mob}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.email}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.branch}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatPersonName(item.credBy)}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatPersonName(item.pdBy)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.employed}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.monthlyIncome)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.monthlyObligation)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.loanAmt)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.tenure}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatRatePercent(item.roi)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-center')}>
-                <Badge className={leadPipelineStatusBadgeClass(item.status)}>{item.status}</Badge>
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateField(item.disbursalDate)}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateOrFallback(item.repayDate)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.recidanceType}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.accountNo}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.bankIfsc}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.bankName}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.accountType}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.beneficiaryBranch || '—'}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.checkNo}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.enachDetails}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.disbursalRefNo}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.companyAccount || '—'}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.processingFee)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.tax)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-center')}>
-                <CibilScoreBadge score={item.cibil} />
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{item.utm}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.state}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-center')}>{item.redFlag}</TableCell>
+          paginatedData.map((item: DisbursedReportRow) => (
+            <TableRow key={`${item.id}-${item.loanNo}`} className={dataTableBodyRowClass}>
+              {DISBURSED_COLUMNS.map((column) => (
+                <TableCell
+                  key={column.label}
+                  className={cn(column.cellClassName === nameCellClass ? nameCellClass : dataTableCellClass, alignClass(column.align), column.cellClassName !== nameCellClass ? column.cellClassName : '')}
+                >
+                  {column.cell(item)}
+                </TableCell>
+              ))}
               {actionCol.showColumn && (
-              <TableCell className={dataTableActionCellClass}>
-                <DataTableListingActions
-                  visibility={actionCol}
-                  viewTo={leadDetailsPath(item.id)}
-                  onEdit={() => openEditByLeadUuid(item.id)}
-                  onDelete={() =>
-                    setDeleteTarget({ id: item.id, leadId: item.leadId, loanNo: item.loanNo })
-                  }
-                  externalDeleteConfirm
-                  deleteDescription={disbursedLoanDeleteDescription(item.loanNo || item.leadId)}
-                />
-              </TableCell>
+                <TableCell className={dataTableActionCellClass}>
+                  <DataTableListingActions
+                    visibility={actionCol}
+                    viewTo={leadDetailsPath(item.id)}
+                    onEdit={() => openEditByLeadUuid(item.id)}
+                    onDelete={() =>
+                      setDeleteTarget({ id: item.id, leadId: item.leadId, loanNo: item.loanNo })
+                    }
+                    externalDeleteConfirm
+                    deleteDescription={disbursedLoanDeleteDescription(item.loanNo || item.leadId)}
+                  />
+                </TableCell>
               )}
             </TableRow>
           ))
@@ -763,99 +817,42 @@ function DisbursedTable({ paginatedData, currentPage, itemsPerPage, handleSort, 
   );
 }
 
-function CollectionTable({ paginatedData, currentPage, itemsPerPage, handleSort, getSortIcon, openEditByLeadUuid, setDeleteTarget, actionCol }: any) {
-  const tableColSpan = actionCol.showColumn ? 24 : 23;
+function CollectionTable({ paginatedData, handleSort, getSortIcon }: any) {
   return (
     <Table>
       <TableHeader className={dataTableHeaderClass}>
-        <TableRow className={dataTableHeaderRowClass}>
-          <TableHead className={cn(dataTableHeadClass, 'w-[60px] pl-4 text-center')}>S.No</TableHead>
-          <TableHead className={dataTableHeadClass}>Lead ID {getSortIcon('leadId')}</TableHead>
-          <TableHead className={dataTableHeadClass}>Loan No.</TableHead>
-          <TableHead className={dataTableHeadClass}>Branch</TableHead>
-          <TableHead className={dataTableHeadClass} onClick={() => handleSort('name')}>
-            <div className="flex items-center">Name {getSortIcon('name')}</div>
-          </TableHead>
-          <TableHead className={dataTableHeadClass}>Email</TableHead>
-          <TableHead className={dataTableHeadClass}>Mobile No.</TableHead>
-          <TableHead className={dataTableHeadClass}>PAN No.</TableHead>
-          <TableHead className={dataTableHeadClass}>State</TableHead>
-          <TableHead className={dataTableHeadClass} onClick={() => handleSort('repayDate')}>
-            <div className="flex items-center">Repay Date {getSortIcon('repayDate')}</div>
-          </TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Collected Amt.</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Principal</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Interest</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Penal</TableHead>
-          <TableHead className={dataTableHeadClass}>Mode</TableHead>
-          <TableHead className={dataTableHeadClass}>Ref No.</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Wave-off</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-right')}>Settlement</TableHead>
-          <TableHead className={dataTableHeadClass}>Source</TableHead>
-          <TableHead className={dataTableHeadClass}>Team</TableHead>
-          <TableHead className={cn(dataTableHeadClass, 'text-center')}>Status</TableHead>
-          <TableHead className={dataTableHeadClass}>Remarks</TableHead>
-          <TableHead className={dataTableHeadClass}>Collection D&T</TableHead>
-          <DataTableActionHead visible={actionCol.showColumn} />
-        </TableRow>
+        <ReportHeadRow
+          columns={COLLECTION_COLUMNS}
+          handleSort={handleSort}
+          getSortIcon={getSortIcon}
+          showAction
+        />
       </TableHeader>
       <TableBody>
         {paginatedData.length > 0 ? (
-          paginatedData.map((item: any, idx: number) => (
-            <TableRow key={item.id} className={dataTableBodyRowClass}>
-              <TableCell className={indexCellClass}>{(currentPage - 1) * itemsPerPage + idx + 1}</TableCell>
-              <TableCell className={nameCellClass}>
-                <DataTablePrimaryCell
-                  label={item.leadId}
-                  to={`/leads/all/${item.id}`}
-                />
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{item.loanNo}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.branch}</TableCell>
-              <TableCell className={nameCellClass}>
-                <DataTableCustomerNameCell
-                  label={formatPersonName(item.name)}
-                  to={leadDetailsPath(item.id)}
-                />
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{item.email}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.mob}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'uppercase')}>{item.pan}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.state}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateOrFallback(item.repayDate)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.collectedAmount)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.principalAmt)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.interestAmt)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.penalInterest)}</TableCell>
-              <TableCell>
-                <Badge className={badgeClass('neutral')}>{item.collectedMode}</Badge>
-              </TableCell>
-              <TableCell className={dataTableCellClass}>{item.referenceNo}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.waveOff)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-right')}>{parseFloat(item.settelmentAmt)}</TableCell>
-              <TableCell className={dataTableCellClass}>{item.collectionSource}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatPersonName(item.collectionTeam)}</TableCell>
-              <TableCell className={cn(dataTableCellClass, 'text-center')}>
-                <Badge className={collectionStatusBadgeClass(item.status)}>{item.status}</Badge>
-              </TableCell>
-              <TableCell className={cn(dataTableCellClass, 'max-w-[150px] truncate')}>{item.remarks}</TableCell>
-              <TableCell className={dataTableCellClass}>{formatAppDateTimeOrFallback(item.collectionDateTime)}</TableCell>
-              {actionCol.showColumn && (
+          paginatedData.map((item: CollectionReportRow) => (
+            <TableRow key={item.repaymentId || `${item.id}-${item.collectionDateTime}`} className={dataTableBodyRowClass}>
+              {COLLECTION_COLUMNS.map((column) => (
+                <TableCell
+                  key={column.label}
+                  className={cn(column.cellClassName === nameCellClass ? nameCellClass : dataTableCellClass, alignClass(column.align), column.cellClassName !== nameCellClass ? column.cellClassName : '')}
+                >
+                  {column.cell(item)}
+                </TableCell>
+              ))}
               <TableCell className={dataTableActionCellClass}>
-                <DataTableListingActions
-                  visibility={actionCol}
-                  viewTo={leadDetailsPath(item.id)}
-                  onEdit={() => openEditByLeadUuid(item.id)}
-                  onDelete={() => setDeleteTarget({ id: item.id, leadId: item.leadId })}
-                  externalDeleteConfirm
-                  deleteDescription={`${item.leadId} will be permanently removed.`}
-                />
+                <div className="flex items-center justify-center">
+                  <RowViewButton
+                    to={leadDetailsPath(item.id)}
+                    title="View lead"
+                    aria-label={`View lead ${item.leadId}`}
+                  />
+                </div>
               </TableCell>
-              )}
             </TableRow>
           ))
         ) : (
-          <EmptyState colSpan={tableColSpan} />
+          <EmptyState colSpan={COLLECTION_COLUMNS.length + 1} />
         )}
       </TableBody>
     </Table>

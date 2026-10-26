@@ -306,6 +306,15 @@ class TestDigioEsignAndVideoKyc:
         assert f"/verify-kyc/{row.id}" in SmsService.outbox[-1]["message"]
         public = client.get(reverse("public-video-kyc", kwargs={"pk": row.id}))
         assert public.status_code == status.HTTP_200_OK
+        # Digio details are withheld until the customer's location is captured.
+        assert public.data["data"]["location_required"] is True
+        assert public.data["data"]["document_id"] == ""
+        client.post(
+            reverse("public-video-kyc-location", kwargs={"pk": row.id}),
+            {"latitude": 19.07, "longitude": 72.87},
+            format="json",
+        )
+        public = client.get(reverse("public-video-kyc", kwargs={"pk": row.id}))
         assert public.data["data"]["document_id"] == row.provider_request_id
         assert public.data["data"]["identifier"] == lead.customer.mobile_number
         assert "access_token" not in public.data["data"]

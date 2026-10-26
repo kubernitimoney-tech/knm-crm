@@ -87,14 +87,29 @@ class Loan(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel, SoftDeleteModel):
             return None
         return application.decisions.filter(decision="approved").order_by("-decided_at").first()
 
+    @staticmethod
+    def _snapshot_decimal(snapshot: dict, key: str):
+        """Decimal from the product snapshot, or None when missing or not a number."""
+        from decimal import Decimal, InvalidOperation
+
+        raw = snapshot.get(key)
+        if raw in (None, ""):
+            return None
+        try:
+            value = Decimal(str(raw).strip().rstrip("%").replace(",", ""))
+        except (InvalidOperation, ValueError):
+            return None
+        return value if value.is_finite() else None
+
     @property
     def interest_rate(self):
         """Sanctioned ROI captured at loan creation."""
         from decimal import Decimal
 
         snapshot = self.product_snapshot or {}
-        if snapshot.get("interest_rate") not in (None, ""):
-            return Decimal(str(snapshot["interest_rate"]))
+        rate = self._snapshot_decimal(snapshot, "interest_rate")
+        if rate is not None:
+            return rate
 
         decision = self._approved_decision()
         if decision and decision.interest_rate is not None:
@@ -107,14 +122,17 @@ class Loan(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel, SoftDeleteModel):
         from decimal import Decimal
 
         snapshot = self.product_snapshot or {}
-        if snapshot.get("processing_fee") not in (None, ""):
-            return Decimal(str(snapshot["processing_fee"]))
+        fee = self._snapshot_decimal(snapshot, "processing_fee")
+        if fee is not None:
+            return fee
 
         decision = self._approved_decision()
         if decision and decision.processing_fee is not None:
             return decision.processing_fee
 
         product = self.product
+        if product is None:
+            return Decimal("0")
         if product.processing_fee_type == ProcessingFeeType.PERCENTAGE:
             return product.compute_processing_fee(self.principal_amount)
         return product.processing_fee

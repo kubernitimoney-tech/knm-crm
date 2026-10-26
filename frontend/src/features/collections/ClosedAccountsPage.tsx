@@ -7,7 +7,8 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subMonths } from 'date-fns';
+import { matchesPeriodFilter } from '@/lib/periodFilter';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
@@ -54,6 +55,7 @@ import {
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatCurrency, formatPersonName } from '@/lib/utils';
 import { leadDetailsPath } from '@/lib/leadNavigation';
+import { DateRangePicker } from '@/components/ui/date-picker';
 import { usePipelineRows } from '@/hooks/usePipelineRows';
 import { useLeadListingActions } from '@/hooks/useLeadListingActions';
 import {
@@ -61,7 +63,7 @@ import {
   DataTableActionHead,
   useLeadListingActionColumn,
 } from '@/components/ui/data-table-listing-actions';
-import { searchPlaceholder } from '@/lib/placeholders';
+import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 
 export const ClosedAccountsPage = () => {
   useTitle('Closed Accounts');
@@ -117,24 +119,8 @@ export const ClosedAccountsPage = () => {
         lead.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.loanNo?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      let matchesDate = true;
-      const leadDate = new Date(lead.date);
-
-      if (dateFilter === 'Today') {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(new Date()),
-          end: endOfDay(new Date())
-        });
-      } else if (dateFilter === 'Last 7 Days') {
-        matchesDate = leadDate >= subDays(new Date(), 7);
-      } else if (dateFilter === 'Current Month') {
-        matchesDate = leadDate >= startOfMonth(new Date());
-      } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(dateRange.from),
-          end: endOfDay(dateRange.to)
-        });
-      }
+      // Period filter applies to the closed date.
+      const matchesDate = matchesPeriodFilter(lead.closedDate, dateFilter, dateRange);
 
       return matchesSearch && matchesDate;
     });
@@ -225,8 +211,35 @@ export const ClosedAccountsPage = () => {
           <div className="hidden h-5 w-px shrink-0 bg-slate-200 sm:block" />
 
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-            {(searchQuery !== '' ) && (
-              <DataTableClearFiltersButton onClick={() => { setSearchQuery(''); setCurrentPage(1); }} />
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Closed date</span>
+            <Select value={dateFilter} onValueChange={(val) => { setDateFilter(val); setCurrentPage(1); }}>
+              <SelectTrigger className={cn('w-[128px]', dataTableFilterControlClass)}>
+                <SelectValue placeholder={selectPlaceholder('Period')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All Time">All Time</SelectItem>
+                <SelectItem value="Today">Today</SelectItem>
+                <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
+                <SelectItem value="Current Month">Current Month</SelectItem>
+                <SelectItem value="Custom">Custom Range</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {dateFilter === 'Custom' && (
+              <DateRangePicker
+                from={dateRange.from}
+                to={dateRange.to}
+                onChange={(range) => {
+                  setDateRange({ from: range.from, to: range.to });
+                  setCurrentPage(1);
+                }}
+                defaultMonth={subMonths(new Date(), 1)}
+                triggerClassName={dataTableDateRangeTriggerClass}
+              />
+            )}
+
+            {hasActiveFilters && (
+              <DataTableClearFiltersButton onClick={handleClearFilters} />
             )}
           </div>
         </div>

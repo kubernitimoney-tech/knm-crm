@@ -68,6 +68,14 @@ export interface SanctionLead {
   paymentAmount?: number;
   paymentMode?: string;
   paymentDate?: string;
+  closedDate?: string;
+  settlementDate?: string;
+  disbursalDate?: string;
+  repayAmount?: string;
+  collectedAmount?: string;
+  tillDateAmount?: string;
+  creditBy?: string;
+  customerType?: string;
   refNo?: string;
   discountAmt?: number;
   settledAmount?: number;
