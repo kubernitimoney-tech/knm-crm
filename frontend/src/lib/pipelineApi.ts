@@ -77,6 +77,12 @@ interface ApiApplicationPipelineRow {
   payment_mode?: string;
   payment_date?: string;
   closed_date?: string | null;
+  disbursal_date?: string;
+  repay_amount?: string;
+  collected_amount?: string;
+  till_date_amount?: string;
+  credit_by?: string;
+  customer_type?: string;
   settlement_date?: string | null;
   ref_no?: string;
   discount_amt?: string | number;
@@ -116,6 +122,12 @@ function mapApiPipelineRow(row: ApiApplicationPipelineRow): PipelineRow {
     paymentMode: row.payment_mode ?? '',
     paymentDate: row.payment_date ?? '',
     closedDate: row.closed_date ?? '',
+    disbursalDate: row.disbursal_date ?? '',
+    repayAmount: row.repay_amount ?? '',
+    collectedAmount: row.collected_amount ?? '',
+    tillDateAmount: row.till_date_amount ?? '',
+    creditBy: row.credit_by ?? '',
+    customerType: row.customer_type ?? '',
     settlementDate: row.settlement_date ?? '',
     refNo: row.ref_no ?? '',
     discountAmt: Number(row.discount_amt ?? 0),

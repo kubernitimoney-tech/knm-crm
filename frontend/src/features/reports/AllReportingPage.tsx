@@ -7,7 +7,7 @@ import {
   ArrowDown,
   MoreHorizontal
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subMonths } from 'date-fns';
 import {
   formatAppDateField,
   formatAppDateOrFallback,
@@ -79,64 +79,25 @@ import {
   useLeadListingActionColumn,
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
+import { periodToDateRange } from '@/lib/periodFilter';
 
 const REPORTING_TAB_ITEMS = [
   { value: 'disbursed', label: 'Disbursal' },
   { value: 'collection', label: 'Collection' },
 ] as const;
 
-function filterReportingRows<T extends { name: string; email: string; mob: string; leadId: string; loanNo: string; branch: string }>(
+/** Rows arrive already filtered by the server; only sort the current page here. */
+function sortReportingRows<T>(
   rows: T[],
-  {
-    searchQuery,
-    branchFilter,
-    dateFilter,
-    dateRange,
-    sortConfig,
-    dateValue,
-  }: {
-    searchQuery: string;
-    branchFilter: string;
-    dateFilter: string;
-    dateRange: { from: Date | undefined; to: Date | undefined };
-    sortConfig: { key: string; direction: 'asc' | 'desc' | null };
-    dateValue: (item: T) => string;
-  },
+  sortConfig: { key: string; direction: 'asc' | 'desc' | null },
 ): T[] {
-  const result = rows.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.mob.includes(searchQuery) ||
-      item.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.loanNo.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesBranch = branchFilter === 'All' || item.branch === branchFilter;
-    let matchesDate = true;
-    const targetDate = new Date(dateValue(item));
-    if (dateFilter === 'Today') {
-      matchesDate = isWithinInterval(targetDate, {
-        start: startOfDay(new Date()),
-        end: endOfDay(new Date()),
-      });
-    } else if (dateFilter === 'Last 7 Days') {
-      matchesDate = targetDate >= subDays(new Date(), 7);
-    } else if (dateFilter === 'Current Month') {
-      matchesDate = targetDate >= startOfMonth(new Date());
-    } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-      matchesDate = isWithinInterval(targetDate, {
-        start: startOfDay(dateRange.from),
-        end: endOfDay(dateRange.to),
-      });
-    }
-    return matchesSearch && matchesBranch && matchesDate;
-  });
-
+  const result = [...rows];
   if (sortConfig.key && sortConfig.direction) {
     result.sort((a, b) => {
-      const aVal = a[sortConfig.key as keyof T] ?? '';
-      const bVal = b[sortConfig.key as keyof T] ?? '';
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      const aVal = (a as Record<string, unknown>)[sortConfig.key] ?? '';
+      const bVal = (b as Record<string, unknown>)[sortConfig.key] ?? '';
+      if (String(aVal) < String(bVal)) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (String(aVal) > String(bVal)) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
   }
@@ -166,6 +127,22 @@ export function AllReportingPage() {
   const [collectionTotal, setCollectionTotal] = useState(0);
   const [branchOptions, setBranchOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Search is sent to the server after a short pause in typing.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
+
+  // Disbursal tab filters on disbursal date, Collection tab on collection date (server side).
+  const serverFilters = useMemo(
+    () => ({
+      ...periodToDateRange(dateFilter, dateRange),
+      branch: branchFilter,
+      search: debouncedSearch,
+    }),
+    [dateFilter, dateRange, branchFilter, debouncedSearch],
+  );
 
   const loadReportData = useCallback(async () => {
     setIsLoading(true);
@@ -175,6 +152,7 @@ export function AllReportingPage() {
       // Load only the active tab and page — avoids fetching the full portfolio at once.
       if (activeTab === 'disbursed') {
         const page = await fetchDisbursedReportRows({
+          ...serverFilters,
           page: currentPage,
           page_size: itemsPerPage,
         });
@@ -182,6 +160,7 @@ export function AllReportingPage() {
         setDisbursedTotal(page.count);
       } else {
         const page = await fetchCollectionReportRows({
+          ...serverFilters,
           page: currentPage,
           page_size: itemsPerPage,
         });
@@ -201,7 +180,7 @@ export function AllReportingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, currentPage, itemsPerPage]);
+  }, [activeTab, currentPage, itemsPerPage, serverFilters]);
 
   useEffect(() => {
     loadReportData();
@@ -257,30 +236,22 @@ export function AllReportingPage() {
     setActiveTab(val);
     setCurrentPage(1);
     setSortConfig({
-      key: val === 'disbursed' ? 'disbursalDate' : 'repayDate',
+      key: val === 'disbursed' ? 'disbursalDate' : 'collectionDateTime',
       direction: 'desc',
     });
     handleClearFilters();
   };
 
-  const currentData = activeTab === 'disbursed' ? disbursedData : collectionData;
-  const reportFilters = { searchQuery, branchFilter, dateFilter, dateRange, sortConfig };
+  const filteredAndSortedData = useMemo(
+    () =>
+      activeTab === 'disbursed'
+        ? sortReportingRows(disbursedData, sortConfig)
+        : sortReportingRows(collectionData, sortConfig),
+    [activeTab, disbursedData, collectionData, sortConfig],
+  );
 
-  const filteredAndSortedData = useMemo(() => {
-    if (activeTab === 'disbursed') {
-      return filterReportingRows(disbursedData, {
-        ...reportFilters,
-        dateValue: (item) => item.disbursalDate,
-      });
-    }
-    return filterReportingRows(collectionData, {
-      ...reportFilters,
-      dateValue: (item) => item.repayDate,
-    });
-  }, [searchQuery, branchFilter, dateFilter, dateRange, sortConfig, activeTab, disbursedData, collectionData]);
-
-  const serverTotal = activeTab === 'disbursed' ? disbursedTotal : collectionTotal;
-  const footerTotal = hasActiveFilters ? filteredAndSortedData.length : serverTotal;
+  // The server already applied the filters, so its count is the filtered total.
+  const footerTotal = activeTab === 'disbursed' ? disbursedTotal : collectionTotal;
 
   const paginatedData = filteredAndSortedData;
 
@@ -288,15 +259,9 @@ export function AllReportingPage() {
     let exportRows: DisbursedReportRow[] | CollectionReportRow[] = [];
     try {
       if (activeTab === 'disbursed') {
-        exportRows = filterReportingRows(await fetchAllDisbursedReportRows(), {
-          ...reportFilters,
-          dateValue: (item) => item.disbursalDate,
-        });
+        exportRows = sortReportingRows(await fetchAllDisbursedReportRows(serverFilters), sortConfig);
       } else {
-        exportRows = filterReportingRows(await fetchAllCollectionReportRows(), {
-          ...reportFilters,
-          dateValue: (item) => item.repayDate,
-        });
+        exportRows = sortReportingRows(await fetchAllCollectionReportRows(serverFilters), sortConfig);
       }
     } catch {
       toast({ title: 'Export failed', description: 'Could not load all matching rows.', variant: 'error' });
@@ -352,6 +317,7 @@ export function AllReportingPage() {
             isLoading={isLoading}
             filterToolbar={(
               <ReportingFilterToolbar
+                dateLabel="Disbursal date"
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 setCurrentPage={setCurrentPage}
@@ -408,6 +374,7 @@ export function AllReportingPage() {
             isLoading={isLoading}
             filterToolbar={(
               <ReportingFilterToolbar
+                dateLabel="Collection date"
                 searchQuery={searchQuery}
                 setSearchQuery={setSearchQuery}
                 setCurrentPage={setCurrentPage}
@@ -502,6 +469,7 @@ function ReportingFilterToolbar({
   setDateRange,
   hasActiveFilters,
   onClearFilters,
+  dateLabel,
 }: {
   searchQuery: string;
   setSearchQuery: (value: string) => void;
@@ -515,6 +483,7 @@ function ReportingFilterToolbar({
   setDateRange: (range: { from: Date | undefined; to: Date | undefined }) => void;
   hasActiveFilters: boolean;
   onClearFilters: () => void;
+  dateLabel: string;
 }) {
   return (
     <div className={dataTableFilterToolbarClass}>
@@ -542,6 +511,7 @@ function ReportingFilterToolbar({
           </SelectContent>
         </Select>
 
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{dateLabel}</span>
         <Select value={dateFilter} onValueChange={(val) => { setDateFilter(val); setCurrentPage(1); }}>
           <SelectTrigger className={cn('w-[128px]', dataTableFilterControlClass)}>
             <SelectValue placeholder={selectPlaceholder('Period')} />
@@ -559,7 +529,10 @@ function ReportingFilterToolbar({
           <DateRangePicker
             from={dateRange.from}
             to={dateRange.to}
-            onChange={setDateRange}
+            onChange={(range) => {
+              setDateRange({ from: range.from, to: range.to });
+              setCurrentPage(1);
+            }}
             defaultMonth={subMonths(new Date(), 1)}
             triggerClassName={dataTableDateRangeTriggerClass}
           />

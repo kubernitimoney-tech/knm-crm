@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.applications.serializers.application_pipeline_serializers import (
@@ -46,6 +49,12 @@ class LoanPipelineRowSerializer(serializers.Serializer):
     payment_mode = serializers.SerializerMethodField()
     payment_date = serializers.SerializerMethodField()
     closed_date = serializers.SerializerMethodField()
+    disbursal_date = serializers.SerializerMethodField()
+    repay_amount = serializers.SerializerMethodField()
+    collected_amount = serializers.SerializerMethodField()
+    till_date_amount = serializers.SerializerMethodField()
+    credit_by = serializers.SerializerMethodField()
+    customer_type = serializers.SerializerMethodField()
     settlement_date = serializers.SerializerMethodField()
     ref_no = serializers.SerializerMethodField()
     discount_amt = serializers.SerializerMethodField()
@@ -204,6 +213,52 @@ class LoanPipelineRowSerializer(serializers.Serializer):
         if obj.closed_at:
             return obj.closed_at.isoformat()
         return ""
+
+    def _metrics(self, obj):
+        """Loan summary (repay / till-date amounts), computed once per row."""
+        cached = getattr(obj, "_pipeline_metrics", None)
+        if cached is None:
+            application = self._application(obj)
+            cached = (
+                LoanCalculationService.compute_for_application(application, loan=obj)
+                if application
+                else False
+            )
+            obj._pipeline_metrics = cached
+        return cached or None
+
+    def get_disbursal_date(self, obj):
+        if not obj.disbursed_at:
+            return ""
+        return timezone.localtime(obj.disbursed_at).date().isoformat()
+
+    def get_repay_amount(self, obj):
+        metrics = self._metrics(obj)
+        return f"{metrics.repay_amount:.2f}" if metrics else ""
+
+    def get_collected_amount(self, obj):
+        annotated = getattr(obj, "total_collected", None)
+        if annotated is None:
+            annotated = sum((item.amount for item in self._confirmed_repayments(obj)), Decimal("0"))
+        return f"{Decimal(str(annotated)):.2f}"
+
+    def get_till_date_amount(self, obj):
+        metrics = self._metrics(obj)
+        return f"{metrics.till_date_amount:.2f}" if metrics else ""
+
+    def get_credit_by(self, obj):
+        application = self._application(obj)
+        if not application:
+            return ""
+        decision = _latest_decision(application)
+        user = getattr(decision, "decided_by", None) if decision else None
+        return _user_label(user or application.assigned_cm) or ""
+
+    def get_customer_type(self, obj):
+        """Fresh or Reloan (the lead's category)."""
+        application = self._application(obj)
+        lead = application.lead if application and application.lead_id else None
+        return lead.get_category_display() if lead else ""
 
     def get_closed_date(self, obj):
         """Date the loan closed (interest stop date); filter field for Closed."""

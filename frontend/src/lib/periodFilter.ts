@@ -1,4 +1,4 @@
-import { endOfDay, endOfMonth, isWithinInterval, startOfDay, startOfMonth, subDays } from 'date-fns';
+import { endOfDay, endOfMonth, format, isWithinInterval, startOfDay, startOfMonth, subDays } from 'date-fns';
 
 export type PeriodFilter = 'All Time' | 'Today' | 'Last 7 Days' | 'Current Month' | 'Custom' | string;
 
@@ -40,4 +40,22 @@ export function matchesPeriodFilter(
     return isWithinInterval(date, { start: startOfDay(range.from), end: endOfDay(range.to) });
   }
   return true;
+}
+
+/** Period selection as an API date range (YYYY-MM-DD, inclusive); empty for All Time. */
+export function periodToDateRange(
+  period: PeriodFilter,
+  range: { from?: Date; to?: Date },
+): { date_from?: string; date_to?: string } {
+  const now = new Date();
+  const fmt = (date: Date) => format(date, 'yyyy-MM-dd');
+  if (period === 'Today') return { date_from: fmt(now), date_to: fmt(now) };
+  if (period === 'Last 7 Days') return { date_from: fmt(subDays(now, 6)), date_to: fmt(now) };
+  if (period === 'Current Month') {
+    return { date_from: fmt(startOfMonth(now)), date_to: fmt(endOfMonth(now)) };
+  }
+  if (period === 'Custom' && range.from && range.to) {
+    return { date_from: fmt(range.from), date_to: fmt(range.to) };
+  }
+  return {};
 }

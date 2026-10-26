@@ -122,7 +122,65 @@ def _customer_lead_count(loan) -> int:
     return loan.customer.leads.filter(is_deleted=False).count()
 
 
-def _visible_loans_queryset(user):
+def parse_report_filters(params) -> dict:
+    """Date range / branch / search from query params (dates as YYYY-MM-DD)."""
+    from datetime import date
+
+    def _date(key):
+        raw = (params.get(key) or "").strip()
+        try:
+            return date.fromisoformat(raw) if raw else None
+        except ValueError:
+            return None
+
+    return {
+        "date_from": _date("date_from"),
+        "date_to": _date("date_to"),
+        "branch": (params.get("branch") or "").strip(),
+        "search": (params.get("search") or "").strip(),
+    }
+
+
+def _branch_q(prefix: str, branch: str) -> Q:
+    return Q(**{f"{prefix}branch__branch_name": branch}) | Q(
+        **{
+            f"{prefix}branch__isnull": True,
+            f"{prefix}application__branch__branch_name": branch,
+        }
+    )
+
+
+def _search_q(prefix: str, search: str) -> Q:
+    q = Q()
+    for field in (
+        "customer__first_name",
+        "customer__last_name",
+        "customer__email",
+        "customer__mobile_number",
+        "loan_account_number",
+        "application__lead__lead_id",
+        "application__application_number",
+    ):
+        q |= Q(**{f"{prefix}{field}__icontains": search})
+    return q
+
+
+def _apply_report_filters(qs, filters: dict | None, *, date_field: str, prefix: str = ""):
+    """Server-side filters so the count, pages and export all follow the selection."""
+    if not filters:
+        return qs
+    if filters.get("date_from"):
+        qs = qs.filter(**{f"{date_field}__date__gte": filters["date_from"]})
+    if filters.get("date_to"):
+        qs = qs.filter(**{f"{date_field}__date__lte": filters["date_to"]})
+    if filters.get("branch") and filters["branch"] != "All":
+        qs = qs.filter(_branch_q(prefix, filters["branch"]))
+    if filters.get("search"):
+        qs = qs.filter(_search_q(prefix, filters["search"]))
+    return qs
+
+
+def _visible_loans_queryset(user, filters: dict | None = None):
     qs = (
         Loan.objects.filter(is_deleted=False, disbursed_at__isnull=False)
         .select_related(
@@ -165,12 +223,14 @@ def _visible_loans_queryset(user):
         )
         .order_by("-disbursed_at")
     )
+    # Disbursal tab: every filter and the export follow the disbursal date.
+    qs = _apply_report_filters(qs, filters, date_field="disbursed_at")
     if _can_view_all_reporting_records(user):
         return qs
     return [loan for loan in qs if loan.check_user_access(user)]
 
 
-def _visible_repayments_queryset(user):
+def _visible_repayments_queryset(user, filters: dict | None = None):
     qs = (
         LoanRepayment.objects.filter(status=RepaymentStatus.CONFIRMED)
         .select_related(
@@ -190,6 +250,8 @@ def _visible_repayments_queryset(user):
         )
         .order_by("-payment_date")
     )
+    # Collection tab: every filter and the export follow the collection date.
+    qs = _apply_report_filters(qs, filters, date_field="payment_date", prefix="loan__")
     if _can_view_all_reporting_records(user):
         return qs
     return [repayment for repayment in qs if repayment.loan.check_user_access(user)]
@@ -530,8 +592,10 @@ class AllReportingService:
         }
 
     @staticmethod
-    def get_disbursed_rows(*, user, page: int = 1, page_size: int = 50) -> dict:
-        qs = _visible_loans_queryset(user)
+    def get_disbursed_rows(
+        *, user, page: int = 1, page_size: int = 50, filters: dict | None = None
+    ) -> dict:
+        qs = _visible_loans_queryset(user, filters)
         total, page_items = AllReportingService._paginate_queryset(
             qs, page=page, page_size=page_size
         )
@@ -541,8 +605,10 @@ class AllReportingService:
         }
 
     @staticmethod
-    def get_collection_rows(*, user, page: int = 1, page_size: int = 50) -> dict:
-        qs = _visible_repayments_queryset(user)
+    def get_collection_rows(
+        *, user, page: int = 1, page_size: int = 50, filters: dict | None = None
+    ) -> dict:
+        qs = _visible_repayments_queryset(user, filters)
         total, page_items = AllReportingService._paginate_queryset(
             qs, page=page, page_size=page_size
         )

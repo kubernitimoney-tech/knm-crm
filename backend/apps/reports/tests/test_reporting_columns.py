@@ -37,3 +37,47 @@ def test_collection_row_amounts_and_split_date_time(setup):  # noqa: F811
     assert row["excessAmount"] == "500.00"
     assert row["waveOff"] == "" and row["settelmentAmt"] == ""
     assert row["repaymentId"] == str(result["repayment"].id)
+
+
+def test_report_filters_follow_tab_dates(setup):  # noqa: F811
+    from rest_framework.test import APIClient
+
+    officer, _lead, loan = setup
+    officer.is_superuser = True
+    officer.save()
+    paid_on = timezone.now() - timedelta(days=2)
+    _collect(officer, loan, "100", "UTR-FLT-1", when=paid_on)
+    client = APIClient()
+    client.force_authenticate(officer)
+    disbursed_on = timezone.localtime(loan.disbursed_at).date().isoformat()
+    paid_day = timezone.localtime(paid_on).date().isoformat()
+
+    hit = client.get(f"/api/v1/reports/disbursed/?date_from={disbursed_on}&date_to={disbursed_on}")
+    assert hit.json()["data"]["count"] == 1
+    miss = client.get(f"/api/v1/reports/disbursed/?date_from={paid_day}&date_to={paid_day}")
+    assert miss.json()["data"]["count"] == 0
+
+    hit = client.get(f"/api/v1/reports/collection/?date_from={paid_day}&date_to={paid_day}")
+    assert hit.json()["data"]["count"] == 1
+    miss = client.get(
+        f"/api/v1/reports/collection/?date_from={disbursed_on}&date_to={disbursed_on}"
+    )
+    assert miss.json()["data"]["count"] == 0
+    searched = client.get("/api/v1/reports/collection/?search=000001")
+    assert searched.json()["data"]["count"] == 1
+
+
+def test_cash_pending_row_has_new_fields(setup):  # noqa: F811
+    from rest_framework.test import APIClient
+
+    officer, _lead, loan = setup
+    officer.is_superuser = True
+    officer.save()
+    _collect(officer, loan, "100", "UTR-CP-1", when=timezone.now() - timedelta(days=1))
+    client = APIClient()
+    client.force_authenticate(officer)
+    row = client.get("/api/v1/loans/pipeline/?stage=cash-pending").json()["data"][0]
+    assert row["collected_amount"] == "100.00"
+    assert row["repay_amount"] and row["till_date_amount"]
+    assert row["customer_type"] == "Fresh"
+    assert row["disbursal_date"] == timezone.localtime(loan.disbursed_at).date().isoformat()

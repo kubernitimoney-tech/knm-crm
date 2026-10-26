@@ -118,6 +118,26 @@ export interface CibilReportRow {
   cibilScore: string;
 }
 
+/** Server-side filters: date range follows the tab's own date (disbursal / collection). */
+export interface ReportFilterParams {
+  date_from?: string;
+  date_to?: string;
+  branch?: string;
+  search?: string;
+}
+
+export interface ReportQuery extends ReportFilterParams {
+  page?: number;
+  page_size?: number;
+}
+
+function applyReportFilters(query: URLSearchParams, params?: ReportFilterParams) {
+  if (params?.date_from) query.set('date_from', params.date_from);
+  if (params?.date_to) query.set('date_to', params.date_to);
+  if (params?.branch && params.branch !== 'All') query.set('branch', params.branch);
+  if (params?.search?.trim()) query.set('search', params.search.trim());
+}
+
 /** Paginated reporting API envelope ({ count, results }). */
 export interface PaginatedReportRows<T> {
   count: number;
@@ -129,25 +149,21 @@ export async function fetchReportingFilters(): Promise<ReportingFilters> {
 }
 
 /** Disbursed-loan reporting rows for the active page (GET /reports/disbursed/). */
-export async function fetchDisbursedReportRows(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedReportRows<DisbursedReportRow>> {
+export async function fetchDisbursedReportRows(params?: ReportQuery): Promise<PaginatedReportRows<DisbursedReportRow>> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.page_size) query.set('page_size', String(params.page_size));
+  applyReportFilters(query, params);
   const qs = query.toString();
   return apiGet<PaginatedReportRows<DisbursedReportRow>>(`/reports/disbursed/${qs ? `?${qs}` : ''}`);
 }
 
 /** Collection repayment rows for the active page (GET /reports/collection/). */
-export async function fetchCollectionReportRows(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedReportRows<CollectionReportRow>> {
+export async function fetchCollectionReportRows(params?: ReportQuery): Promise<PaginatedReportRows<CollectionReportRow>> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.page_size) query.set('page_size', String(params.page_size));
+  applyReportFilters(query, params);
   const qs = query.toString();
   return apiGet<PaginatedReportRows<CollectionReportRow>>(`/reports/collection/${qs ? `?${qs}` : ''}`);
 }
@@ -191,11 +207,19 @@ export async function fetchAllCibilReportRows(): Promise<CibilReportRow[]> {
 }
 
 /** Load every disbursed reporting row for export (table stays paginated). */
-export async function fetchAllDisbursedReportRows(): Promise<DisbursedReportRow[]> {
-  return fetchAllReportPages((page, page_size) => fetchDisbursedReportRows({ page, page_size }));
+export async function fetchAllDisbursedReportRows(
+  filters?: ReportFilterParams,
+): Promise<DisbursedReportRow[]> {
+  return fetchAllReportPages((page, page_size) =>
+    fetchDisbursedReportRows({ ...filters, page, page_size }),
+  );
 }
 
 /** Load every collection reporting row for export (table stays paginated). */
-export async function fetchAllCollectionReportRows(): Promise<CollectionReportRow[]> {
-  return fetchAllReportPages((page, page_size) => fetchCollectionReportRows({ page, page_size }));
+export async function fetchAllCollectionReportRows(
+  filters?: ReportFilterParams,
+): Promise<CollectionReportRow[]> {
+  return fetchAllReportPages((page, page_size) =>
+    fetchCollectionReportRows({ ...filters, page, page_size }),
+  );
 }
