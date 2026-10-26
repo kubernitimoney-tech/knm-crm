@@ -45,6 +45,10 @@ export interface DisbursedReportRow {
   utm: string;
   state: string;
   redFlag: string;
+  pdType: string;
+  disbursedAmount: string;
+  ckycNo: string;
+  loanType: string;
   leadCategory: string;
   customerLeadCount: number;
   status: string;
@@ -53,6 +57,7 @@ export interface DisbursedReportRow {
 
 export interface CollectionReportRow {
   id: string;
+  repaymentId: string;
   customerId: string;
   leadId: string;
   loanNo: string;
@@ -64,6 +69,9 @@ export interface CollectionReportRow {
   state: string;
   repayDate: string;
   collectedAmount: string;
+  loanAmount: string;
+  repayAmount: string;
+  excessAmount: string;
   principalAmt: string;
   interestAmt: string;
   penalInterest: string;
@@ -76,6 +84,8 @@ export interface CollectionReportRow {
   status: string;
   remarks: string;
   collectionDateTime: string;
+  collectionDate: string;
+  collectionTime: string;
 }
 
 export interface CibilReportRow {
