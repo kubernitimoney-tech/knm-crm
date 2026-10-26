@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 
 import { logExportActivity } from '@/lib/activityLogsApi';
+import { APP_TIMEZONE } from '@/lib/dateUtils';
 
 export type ExportColumn<T> = {
   label: string;
@@ -106,11 +107,44 @@ function numberCell(value: number): CoercedCell {
   return { value, numFmt: EXCEL_FMT.decimal };
 }
 
-function dateCell(date: Date, dateOnly: boolean): CoercedCell {
-  const value = dateOnly
-    ? new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    : date;
-  return { value, numFmt: dateOnly ? EXCEL_FMT.date : EXCEL_FMT.datetime };
+/**
+ * ExcelJS serialises a Date from its UTC instant, so local midnight in IST would land on the
+ * previous day. Build the cell from wall-clock parts as UTC so Excel shows them unchanged.
+ */
+function dateCell(
+  year: number,
+  month: number,
+  day: number,
+  time: { hour: number; minute: number; second: number } | null,
+): CoercedCell {
+  const value = new Date(
+    Date.UTC(year, month - 1, day, time?.hour ?? 0, time?.minute ?? 0, time?.second ?? 0),
+  );
+  return { value, numFmt: time ? EXCEL_FMT.datetime : EXCEL_FMT.date };
+}
+
+/** Date instant → cell showing its wall-clock time in the app timezone. */
+function instantCell(date: Date, allowDateOnly: boolean): CoercedCell {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const time = { hour: pick('hour') % 24, minute: pick('minute'), second: pick('second') };
+  const isMidnight = time.hour === 0 && time.minute === 0 && time.second === 0;
+  return dateCell(pick('year'), pick('month'), pick('day'), allowDateOnly && isMidnight ? null : time);
+}
+
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
 function isIdentifierText(raw: string): boolean {
@@ -137,8 +171,8 @@ function parseLocaleNumber(raw: string): number | null {
 function parseExportDate(raw: string): CoercedCell | null {
   const isoDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoDate) {
-    const date = new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
-    if (!Number.isNaN(date.getTime())) return dateCell(date, true);
+    const [year, month, day] = [Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3])];
+    if (isValidCalendarDate(year, month, day)) return dateCell(year, month, day, null);
   }
 
   const isoDateTime = raw.match(
@@ -146,13 +180,13 @@ function parseExportDate(raw: string): CoercedCell | null {
   );
   if (isoDateTime) {
     const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) return dateCell(parsed, false);
+    if (!Number.isNaN(parsed.getTime())) return instantCell(parsed, false);
   }
 
   const appDate = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (appDate) {
-    const date = new Date(Number(appDate[3]), Number(appDate[2]) - 1, Number(appDate[1]));
-    if (!Number.isNaN(date.getTime())) return dateCell(date, true);
+    const [year, month, day] = [Number(appDate[3]), Number(appDate[2]), Number(appDate[1])];
+    if (isValidCalendarDate(year, month, day)) return dateCell(year, month, day, null);
   }
 
   const appDateTime = raw.match(
@@ -165,15 +199,10 @@ function parseExportDate(raw: string): CoercedCell | null {
     const period = appDateTime[7].toUpperCase();
     if (period === 'PM' && hour < 12) hour += 12;
     if (period === 'AM' && hour === 12) hour = 0;
-    const date = new Date(
-      Number(appDateTime[3]),
-      Number(appDateTime[2]) - 1,
-      Number(appDateTime[1]),
-      hour,
-      minute,
-      second,
-    );
-    if (!Number.isNaN(date.getTime())) return dateCell(date, false);
+    const [year, month, day] = [Number(appDateTime[3]), Number(appDateTime[2]), Number(appDateTime[1])];
+    if (isValidCalendarDate(year, month, day) && hour < 24 && minute < 60 && second < 60) {
+      return dateCell(year, month, day, { hour, minute, second });
+    }
   }
 
   return null;
@@ -184,12 +213,7 @@ export function coerceExportCell(raw: unknown): CoercedCell | null {
   if (raw === null || raw === undefined) return null;
   if (raw instanceof Date) {
     if (Number.isNaN(raw.getTime())) return null;
-    const dateOnly =
-      raw.getHours() === 0 &&
-      raw.getMinutes() === 0 &&
-      raw.getSeconds() === 0 &&
-      raw.getMilliseconds() === 0;
-    return dateCell(raw, dateOnly);
+    return instantCell(raw, true);
   }
   if (typeof raw === 'boolean') return { value: raw ? 'Yes' : 'No', numFmt: EXCEL_FMT.text };
   if (typeof raw === 'number') {
