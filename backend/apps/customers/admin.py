@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.core.admin_mixins import LeadFirstSearchMixin
 from apps.customers.models import (
     Customer,
     CustomerAddress,
@@ -24,7 +25,7 @@ class CustomerIdentityAdmin(admin.ModelAdmin):
 
 
 @admin.register(CustomerAddress)
-class CustomerAddressAdmin(admin.ModelAdmin):
+class CustomerAddressAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "customer", "address_type", "city", "state", "pincode")
     list_filter = ("address_type", "state")
     search_fields = ("lead__lead_id", "customer__customer_code", "city", "pincode", "line1")
@@ -46,7 +47,7 @@ class CustomerBankAccountAdmin(admin.ModelAdmin):
 
 
 @admin.register(CustomerReference)
-class CustomerReferenceAdmin(admin.ModelAdmin):
+class CustomerReferenceAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = ("lead", "customer", "name", "relation", "mobile_number", "is_verified")
     list_filter = ("relation", "is_verified")
     search_fields = ("lead__lead_id", "customer__customer_code", "name", "mobile_number")

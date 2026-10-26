@@ -8,6 +8,7 @@ from apps.applications.models import (
     LoanApplication,
     SanctionSalaryBank,
 )
+from apps.core.admin_mixins import LeadFirstSearchMixin
 from apps.loans.services.loan_calculation_service import LoanCalculationService
 
 
@@ -46,7 +47,7 @@ class ApplicationDecisionAdminForm(forms.ModelForm):
 
 
 @admin.register(LoanApplication)
-class LoanApplicationAdmin(admin.ModelAdmin):
+class LoanApplicationAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
     list_display = (
         "lead",
         "application_number",
