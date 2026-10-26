@@ -12,6 +12,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../store/useUIStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { getShellDisplayName, getShellInitials } from '@/lib/userDisplayName';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useLogout } from '../../hooks/useLogout';
 import {
@@ -34,9 +35,7 @@ export const Navbar = () => {
   const { user } = useAuthStore();
   const { primaryRoleName } = usePermissions();
   const { toggleSidebar, isDarkMode, toggleDarkMode } = useUIStore();
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'U';
+  const initials = getShellInitials(user);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = React.useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = React.useState(0);
@@ -110,7 +109,7 @@ export const Navbar = () => {
                   className="flex items-center gap-3 cursor-pointer group p-1.5 pr-3 rounded-xl hover:bg-white/50 dark:hover:bg-slate-900/50 border border-transparent hover:border-slate-200 dark:hover:border-slate-800 transition-all font-sans"
                 >
                   <div className="text-right hidden sm:block">
-                    <p className="text-[12px] font-black text-primary-deep dark:text-slate-200 leading-none uppercase">{user?.full_name ?? 'User'}</p>
+                    <p className="text-[12px] font-black text-primary-deep dark:text-slate-200 leading-none uppercase">{getShellDisplayName(user)}</p>
                     <p className="text-[10px] text-mid-shade dark:text-slate-400 font-bold mt-1 uppercase tracking-wider">{primaryRoleName}</p>
                   </div>
                   <div className="w-9 h-9 rounded-xl bg-primary-deep shadow-lg shadow-primary-deep/20 flex items-center justify-center text-white font-black text-xs ring-4 ring-white dark:ring-slate-950 transition-all group-hover:scale-105">
@@ -123,7 +122,7 @@ export const Navbar = () => {
               <DropdownMenuGroup>
                 <div className="px-4 py-3 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.04] rounded-t-lg">
                   <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Authenticated Account</p>
-                  <p className="text-sm font-black text-primary-deep dark:text-slate-200 truncate">{user?.full_name ?? 'User'}</p>
+                  <p className="text-sm font-black text-primary-deep dark:text-slate-200 truncate">{getShellDisplayName(user)}</p>
                   <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate">{user?.email ?? ''}</p>
                 </div>
               </DropdownMenuGroup>

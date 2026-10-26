@@ -4,6 +4,8 @@ export interface AuthUser {
   first_name: string;
   last_name: string;
   full_name: string;
+  /** App-shell name only (navbar, sidebar, profile). Not for loan data. */
+  display_name?: string;
   mobile_number: string;
   employee_code?: string;
   is_active?: boolean;
