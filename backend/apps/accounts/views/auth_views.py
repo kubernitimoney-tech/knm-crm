@@ -2,7 +2,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 
-from apps.accounts.serializers import LoginSerializer, RefreshTokenSerializer
+from apps.accounts.serializers import LoginSerializer, MeUpdateSerializer, RefreshTokenSerializer
 from apps.accounts.services.auth_context import build_auth_context
 from apps.accounts.services.auth_service import AuthService
 from apps.accounts.services.token_service import TokenService
@@ -64,3 +64,10 @@ class LogoutAPIView(APIView):
 class MeAPIView(APIView):
     def get(self, request):
         return success_response(data=build_auth_context(request.user), message="Profile loaded")
+
+    def patch(self, request):
+        """Self-service profile edit. Only the display name is user-editable."""
+        serializer = MeUpdateSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return success_response(data=build_auth_context(request.user), message="Profile updated")

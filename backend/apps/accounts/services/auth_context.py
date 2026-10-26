@@ -20,6 +20,7 @@ def build_auth_context(user) -> dict:
             "first_name": user.first_name,
             "last_name": user.last_name,
             "full_name": user.get_full_name() or user.email,
+            "display_name": user.get_display_name(),
             "mobile_number": user.mobile_number or "",
             "employee_code": user.employee_code or "",
             "is_active": user.is_active,

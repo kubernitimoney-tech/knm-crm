@@ -14,6 +14,7 @@ export interface ApiUser {
   first_name: string;
   last_name: string;
   full_name: string;
+  display_name?: string;
   mobile_number: string;
   employee_code: string;
   is_active: boolean;
