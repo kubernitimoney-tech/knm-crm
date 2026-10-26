@@ -1037,35 +1037,6 @@ function computeSanctionNetDisbursal(base: ApiLeadSanction): string {
   return net.toFixed(2);
 }
 
-async function enrichLeadSanctionFromSubmit(
-  base: ApiLeadSanction,
-  application: NonNullable<Awaited<ReturnType<typeof getLeadApplication>>>,
-  options?: {
-    loan?: { total_repayable?: string } | null;
-    approvedTenureDays?: number;
-  },
-): Promise<ApiLeadSanction> {
-  const decision = application.latest_decision;
-  const details = (decision?.sanction_details ?? {}) as Record<string, unknown>;
-  const tenureDays = options?.approvedTenureDays ?? '';
-
-  return {
-    ...base,
-    application_id: application.id,
-    loan_tenure: tenureDays ? String(tenureDays) : '',
-    lead_status: application.status_display ?? '',
-    rejection_reason: '',
-    sanctioned_by: base.sanctioned_by || decision?.decided_by_name || decision?.decided_by_email || '',
-    amount_to_be_disbursed: computeSanctionNetDisbursal(base),
-    repay_amount: options?.loan?.total_repayable ?? base.loan_amount,
-    lead_remarks: '',
-    bank: asSanctionDetailString(details, 'bank_name') || '',
-    approval_status: application.status_display ?? '',
-    matrix_approved_by: '',
-    approval_remarks: base.approval_remarks ?? base.remarks ?? '',
-  };
-}
-
 async function enrichLeadSanction(
   base: ApiLeadSanction,
   leadId: string,
@@ -1205,9 +1176,9 @@ export async function createLeadSanction(
   if (!mapped) {
     throw new Error('Sanction decision was not recorded.');
   }
-  return enrichLeadSanctionFromSubmit(mapped, decided, {
-    approvedTenureDays: approvedTenure,
-  });
+  // Re-read tenure / repay amount from the backend so an edited sanction shows the
+  // loan's recalculated terms rather than client-side estimates.
+  return enrichLeadSanction(mapped, leadId, decided);
 }
 
 export async function fetchLeadRejection(leadId: string): Promise<ApiLeadRejection | null> {

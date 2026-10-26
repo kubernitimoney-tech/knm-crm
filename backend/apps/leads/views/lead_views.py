@@ -381,15 +381,9 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
                 return company_account.account_number
             return ""
 
-        def _latest_sanction_decision(app):
-            return app.decisions.order_by("-decided_at").first()
-
         def _repay_date_for_application(app) -> str:
-            decision = _latest_sanction_decision(app)
-            if decision and decision.sanction_details:
-                raw = str(decision.sanction_details.get("repayment_date") or "").strip()
-                return raw[:10] if raw else ""
-            return ""
+            repay_date = LoanCalculationService.resolve_repayment_date(application=app, loan=loan)
+            return repay_date.isoformat() if repay_date else ""
 
         def _disbursal_row(
             sheet_details: dict,
@@ -411,9 +405,11 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
             beneficiary_branch = str(sheet_details.get("branch") or "")
             if not beneficiary_branch:
                 beneficiary_branch = disbursal_defaults.get("branch") or ""
-            reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
-            if not reference_no and disbursement_utr:
-                reference_no = str(disbursement_utr).strip()
+            # The disbursement record is the source of truth for the UTR; the sheet copy
+            # goes stale when the UTR is edited directly (e.g. via Django admin).
+            reference_no = str(disbursement_utr or "").strip()
+            if not reference_no:
+                reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
             loan_no = ""
             if loan:
                 loan_no = loan.loan_account_number

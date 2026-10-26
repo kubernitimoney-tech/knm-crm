@@ -36,6 +36,8 @@ class LoanAdmin(admin.ModelAdmin):
         Closing here stops interest and penalty on ``closed_at`` and closes the
         application and lead. Reopening clears ``closed_at`` so accrual resumes.
         """
+        if change and "due_date" in form.changed_data:
+            self._sync_due_date_to_sanction(request, obj)
         if not change or "status" not in form.changed_data:
             super().save_model(request, obj, form, change)
             return
@@ -55,6 +57,27 @@ class LoanAdmin(admin.ModelAdmin):
             change_loan_status(
                 loan=obj, new_status=new_status, user=request.user, remarks="Changed in admin"
             )
+
+    @staticmethod
+    def _sync_due_date_to_sanction(request, loan):
+        """Keep the sanction's repayment date (shown on Lead Details) in step with the
+        loan's due date, and refresh tenure/interest for the new date."""
+        application = loan.application
+        decision = (
+            application.decisions.filter(decision="approved").order_by("-decided_at").first()
+            if application
+            else None
+        )
+        if decision is None:
+            return
+        details = dict(decision.sanction_details or {})
+        details["repayment_date"] = loan.due_date.isoformat()
+        decision.sanction_details = details
+        decision.updated_by = request.user
+        decision.save(update_fields=["sanction_details", "updated_by", "updated_at"])
+        from apps.loans.services.loan_service import LoanService
+
+        LoanService.sync_with_sanction(user=request.user, loan=loan, decision=decision)
 
 
 @admin.register(LoanDisbursement)
@@ -100,6 +123,19 @@ class LoanDisbursementAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("id", "created_at", "updated_at")
     ordering = ("-disbursed_at",)
+
+    def save_model(self, request, obj, form, change):
+        """Mirror UTR edits onto the application's disbursal sheet copy."""
+        super().save_model(request, obj, form, change)
+        if not change or "utr_reference" not in form.changed_data:
+            return
+        application = obj.loan.application
+        if not application:
+            return
+        details = dict(application.disbursal_sheet_details or {})
+        details["disbursal_reference_no"] = str(obj.utr_reference).strip()
+        application.disbursal_sheet_details = details
+        application.save(update_fields=["disbursal_sheet_details", "updated_at"])
 
 
 @admin.register(LoanPenalty)
