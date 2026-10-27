@@ -19,6 +19,11 @@ RUN pip install --upgrade pip && pip install -r requirements/production.txt
 
 COPY . .
 
+# Static files are collected at build time so containers start in seconds.
+# No database or real secrets are needed for this step.
+RUN SECRET_KEY=build-only-not-secret DJANGO_SETTINGS_MODULE=config.settings.base \
+    python manage.py collectstatic --noinput
+
 RUN adduser --disabled-password --gecos '' appuser \
     && chown -R appuser:appuser ${APP_HOME}
 
