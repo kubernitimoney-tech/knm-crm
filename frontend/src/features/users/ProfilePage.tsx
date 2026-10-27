@@ -11,11 +11,14 @@ import {
   Key,
   BadgeCheck,
   ExternalLink,
+  Pencil,
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/toast';
 import { LoadingState } from '@/components/ui/loading-state';
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -23,16 +26,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { formatRoleNames } from '@/constants/roles';
 import { badgeClass, userStatusBadgeClass } from '@/lib/badgeStyles';
 import { formatAppDateTime, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
+import { getApiErrorMessage } from '@/lib/api';
+import { getShellDisplayName, getShellInitials } from '@/lib/userDisplayName';
 
-function userInitials(fullName: string): string {
-  return fullName
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-}
+const DISPLAY_NAME_MAX_LENGTH = 150;
 
 function formatPermissionLabel(code: string): string {
   const [module, action] = code.split('.');
@@ -43,7 +40,7 @@ function formatPermissionLabel(code: string): string {
 export const ProfilePage = () => {
   useTitle('My Profile');
   const navigate = useNavigate();
-  const { user, roles, permissions, access, fetchMe } = useAuthStore();
+  const { user, roles, permissions, access, fetchMe, updateDisplayName } = useAuthStore();
   const {
     primaryRoleName,
     isSuperAdmin,
@@ -54,6 +51,27 @@ export const ProfilePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState('');
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+
+  const startEditingDisplayName = () => {
+    setDisplayNameDraft(user?.display_name ?? '');
+    setIsEditingDisplayName(true);
+  };
+
+  const saveDisplayName = async () => {
+    setIsSavingDisplayName(true);
+    try {
+      await updateDisplayName(displayNameDraft.trim());
+      setIsEditingDisplayName(false);
+      toast({ title: 'Display name updated', variant: 'success' });
+    } catch (error) {
+      toast({ title: 'Failed to update display name', description: getApiErrorMessage(error), variant: 'error' });
+    } finally {
+      setIsSavingDisplayName(false);
+    }
+  };
 
   const refreshProfile = useCallback(async () => {
     setIsLoading(true);
@@ -121,7 +139,7 @@ export const ProfilePage = () => {
     return null;
   }
 
-  const initials = userInitials(user.full_name || user.email);
+  const initials = getShellInitials(user);
   const joinedDate = formatAppDateTimeOrFallback(user.created_at, '—');
   const lastLogin = user.last_login
     ? formatAppDateTime(user.last_login)
@@ -148,7 +166,7 @@ export const ProfilePage = () => {
               onClick={() => navigate(`/master/users/${user.id}`)}
             >
               <ExternalLink size={14} />
-              Employee record
+              User record
             </Button>
           ) : null}
           <Button
@@ -179,7 +197,7 @@ export const ProfilePage = () => {
               ) : null}
             </div>
             <h2 className="text-lg font-bold text-secondary-dark dark:text-slate-100">
-              {user.full_name || user.email}
+              {getShellDisplayName(user)}
             </h2>
             <p className="text-xs text-mid-shade dark:text-slate-400 mb-4">
               {primaryRoleName}
@@ -197,10 +215,10 @@ export const ProfilePage = () => {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
-                  Employee code
+                  Username
                 </p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" title={user.employee_code || undefined}>
-                  {user.employee_code || '—'}
+                <p className="text-sm font-mono font-semibold text-slate-700 dark:text-slate-200 truncate" title={user.username || undefined}>
+                  {user.username ? `@${user.username}` : '—'}
                 </p>
               </div>
             </div>
@@ -259,6 +277,63 @@ export const ProfilePage = () => {
                   <User size={14} className="text-mid-shade shrink-0" />
                   {user.full_name || '—'}
                 </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500">
+                  Display name
+                </p>
+                {isEditingDisplayName ? (
+                  <div className="space-y-2">
+                    <Input
+                      value={displayNameDraft}
+                      onChange={(e) => setDisplayNameDraft(e.target.value)}
+                      maxLength={DISPLAY_NAME_MAX_LENGTH}
+                      placeholder={user.full_name || 'Display name'}
+                      className="h-8 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void saveDisplayName();
+                        if (e.key === 'Escape') setIsEditingDisplayName(false);
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs font-bold"
+                        onClick={() => void saveDisplayName()}
+                        disabled={isSavingDisplayName}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs font-bold"
+                        onClick={() => setIsEditingDisplayName(false)}
+                        disabled={isSavingDisplayName}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Shown in the navbar, sidebar and profile only. Leave blank to use your full name.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-secondary-dark dark:text-slate-200 font-medium">
+                    <User size={14} className="text-mid-shade shrink-0" />
+                    <span className="truncate">{user.display_name?.trim() || '—'}</span>
+                    <button
+                      type="button"
+                      onClick={startEditingDisplayName}
+                      className="text-mid-shade hover:text-primary-deep dark:hover:text-slate-100"
+                      title="Edit display name"
+                      aria-label="Edit display name"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500">

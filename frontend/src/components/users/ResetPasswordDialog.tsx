@@ -92,7 +92,7 @@ export function ResetPasswordDialog({
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-primary-deep">
                 <Lock size={18} />
-                Reset Employee Password
+                Reset User Password
               </DialogTitle>
               <DialogDescription>
                 Generate a new login password for <span className="font-semibold text-slate-700">{userName}</span> ({userEmail}).
@@ -103,7 +103,7 @@ export function ResetPasswordDialog({
               <div className="flex items-start gap-2">
                 <AlertTriangle size={16} className="mt-0.5 shrink-0" />
                 <p>
-                  The employee will need this password to sign in. Share it securely and ask them to change it after logging in.
+                  Share this temporary password securely. The user must set their own password at the next sign-in, and the temporary one expires after 72 hours.
                 </p>
               </div>
             </div>
@@ -146,7 +146,7 @@ export function ResetPasswordDialog({
                 Password Reset Complete
               </DialogTitle>
               <DialogDescription>
-                Share this password with the employee once. It will not be shown again.
+                Share this password with the user once. It will not be shown again.
               </DialogDescription>
             </DialogHeader>
 

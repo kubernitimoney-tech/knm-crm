@@ -8,10 +8,15 @@ from .role import (
     UserRole,
 )
 from .user import User
+from .user_approval import UserApproval, UserApprovalStatus
 from .user_permission import PermissionChangeRecord, UserPermission
+from .user_profile import UserProfile
 
 __all__ = [
     "User",
+    "UserProfile",
+    "UserApproval",
+    "UserApprovalStatus",
     "Role",
     "RoleStatus",
     "Permission",

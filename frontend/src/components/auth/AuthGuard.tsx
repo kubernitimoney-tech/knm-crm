@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { toast } from '@/components/ui/toast';
 import { ForbiddenPage } from '@/features/errors/ForbiddenPage';
+import { ForcePasswordChangePage } from '@/features/auth/ForcePasswordChangePage';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -12,6 +13,7 @@ interface AuthGuardProps {
 export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const mustChangePassword = useAuthStore((state) => Boolean(state.user?.must_change_password));
   const { canAccessPath } = usePermissions();
   const deniedToastShown = useRef(false);
 
@@ -25,7 +27,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     isAuthenticated && !hasAccess && (location.pathname === '/' || !canAccessDashboard);
 
   useEffect(() => {
-    if (!isAuthenticated || hasAccess) {
+    if (!isAuthenticated || hasAccess || mustChangePassword) {
       deniedToastShown.current = false;
       return;
     }
@@ -39,10 +41,14 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
         variant: 'error',
       });
     }
-  }, [isAuthenticated, hasAccess, showForbiddenPage, location.pathname]);
+  }, [isAuthenticated, hasAccess, mustChangePassword, showForbiddenPage, location.pathname]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (mustChangePassword) {
+    return <ForcePasswordChangePage />;
   }
 
   if (!hasAccess) {

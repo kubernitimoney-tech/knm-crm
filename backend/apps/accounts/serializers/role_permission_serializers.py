@@ -1,12 +1,15 @@
 from rest_framework import serializers
 
 from apps.accounts.models import RolePermissionChangeRecord
+from apps.core.validators.attachments import validate_approval_attachment
 
 
 class RolePermissionChangeSerializer(serializers.Serializer):
     permission_code = serializers.CharField(max_length=100)
     confirm = serializers.BooleanField(default=False)
-    approval_email = serializers.FileField(required=False, allow_null=True)
+    approval_email = serializers.FileField(
+        required=False, allow_null=True, validators=[validate_approval_attachment]
+    )
 
     def validate(self, attrs):
         if attrs.get("confirm") and not attrs.get("approval_email"):

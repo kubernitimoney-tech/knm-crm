@@ -135,6 +135,7 @@ PERMISSION_MATRIX = {
         PermissionAction.CREATE,
         PermissionAction.UPDATE,
         PermissionAction.DELETE,
+        PermissionAction.APPROVE,
     ],
     PermissionModule.ROLE: [
         PermissionAction.VIEW,
@@ -256,6 +257,7 @@ PRODUCTION_MANAGER_EXCLUDED_CODES = frozenset(
     {
         "user.create",
         "user.update",
+        "user.approve",
         "permission.view",
         "permission.create",
         "permission.update",

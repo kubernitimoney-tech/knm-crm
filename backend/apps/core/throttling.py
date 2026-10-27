@@ -19,3 +19,22 @@ class PublicLookupThrottle(_ScopedAnonThrottle):
 
 class OtpThrottle(_ScopedAnonThrottle):
     scope = "otp"
+
+
+class LoginThrottle(_ScopedAnonThrottle):
+    """Slows down password guessing against the sign-in endpoint."""
+
+    scope = "login"
+
+
+class PasswordChangeThrottle(SimpleRateThrottle):
+    """Throttle password changes per signed-in user."""
+
+    scope = "password_change"
+
+    def get_cache_key(self, request, view):
+        ident = request.user.pk if request.user and request.user.is_authenticated else None
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": ident or self.get_ident(request),
+        }

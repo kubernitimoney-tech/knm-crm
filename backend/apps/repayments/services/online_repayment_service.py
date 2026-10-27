@@ -124,6 +124,22 @@ def loan_payment_amount(*, order: dict, payment: dict) -> Decimal | None:
     return order_amount if order_amount is not None else payment_amount
 
 
+def gateway_payment_time(payment: dict):
+    """When the customer actually paid, per Cashfree (``payment_time``), or None."""
+    from django.utils.dateparse import parse_datetime
+
+    raw = str((payment or {}).get("payment_time") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = parse_datetime(raw)
+    except ValueError:
+        return None
+    if parsed is None:
+        return None
+    return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
+
+
 def payment_success_from_webhook(payload: dict) -> dict | None:
     """Return loan id, order id, amount, and utr when Cashfree reports a success."""
     if not isinstance(payload, dict):
@@ -165,12 +181,14 @@ def payment_success_from_webhook(payload: dict) -> dict | None:
 
 @transaction.atomic
 def record_online_payment(
-    *, loan_id: str, order_id: str, amount: Decimal, utr: str
+    *, loan_id: str, order_id: str, amount: Decimal, utr: str, paid_at=None
 ) -> LoanRepayment | None:
     """Record one pending collection per Cashfree order.
 
     The webhook and the browser return both call this. Lock the loan first so
     the second call updates the same row instead of inserting a duplicate.
+    ``paid_at`` is Cashfree's payment time; it becomes the payment date so a
+    late webhook or a late approval never moves the collection or closing date.
     """
     order_id = (order_id or "").strip()
     utr = (utr or "").strip()
@@ -199,6 +217,13 @@ def record_online_payment(
         if utr and not existing.utr:
             existing.utr = utr
             update_fields.append("utr")
+        if (
+            existing.status == RepaymentStatus.PENDING
+            and paid_at is not None
+            and existing.payment_date != paid_at
+        ):
+            existing.payment_date = paid_at
+            update_fields.append("payment_date")
         if update_fields:
             existing.save(update_fields=[*update_fields, "updated_at"])
         return existing
@@ -207,7 +232,7 @@ def record_online_payment(
         amount=amount,
         payment_mode=PaymentMode.PAYMENT_LINK,
         utr=utr,
-        payment_date=timezone.now(),
+        payment_date=paid_at or timezone.now(),
         gateway_reference=order_id,
         status=RepaymentStatus.PENDING,
         remarks="Cashfree payment link",
@@ -239,6 +264,7 @@ def record_verified_order(order_id: str) -> LoanRepayment | None:
         order_id=order_id,
         amount=amount,
         utr=str(payment.get("cf_payment_id") or ""),
+        paid_at=gateway_payment_time(payment),
     )
 
 
@@ -299,9 +325,12 @@ def approve_online_payment(*, user, loan: Loan, repayment_id) -> dict:
 
     # No upper limit (business rule): a payment above the ledger outstanding is
     # posted and leaves the ledger in credit instead of blocking approval.
+    # The approver is recorded as the collector. payment_date is never touched:
+    # a late approval must not move the payment, ledger or closing date.
     repayment.status = RepaymentStatus.CONFIRMED
+    repayment.collected_by = user
     repayment.updated_by = user
-    repayment.save(update_fields=update_fields)
+    repayment.save(update_fields=[*update_fields, "collected_by"])
 
     try:
         entry = LedgerPostingService.post(

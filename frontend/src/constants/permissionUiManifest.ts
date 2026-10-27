@@ -66,6 +66,7 @@ export const PERMISSION_UI_MANIFEST = {
       create: 'user.create',
       update: 'user.update',
       delete: 'user.delete',
+      approve: 'user.approve',
     },
   },
   activityLogs: {

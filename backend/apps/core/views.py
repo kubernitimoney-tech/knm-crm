@@ -21,7 +21,8 @@ class HealthCheckAPIView(APIView):
 
 class BranchListAPIView(APIView):
     permission_classes = [HasRBACPermission]
-    required_permission = "lead.view"
+    # Lead intake picks a branch; user onboarding assigns one.
+    required_permissions = ["lead.view", "user.create", "user.update"]
 
     def get(self, request):
         branches = Branch.objects.filter(status=BranchStatus.ACTIVE).order_by("branch_name")
