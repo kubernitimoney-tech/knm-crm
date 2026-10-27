@@ -112,10 +112,17 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "apps.accounts.password_validation.CharacterMixValidator"},
 ]
+
+# How long an admin-issued temporary password stays usable before first sign-in.
+TEMPORARY_PASSWORD_TTL_HOURS = env.int("TEMPORARY_PASSWORD_TTL_HOURS", default=72)
 
 LANGUAGE_CODE = "en-in"
 TIME_ZONE = env("TIME_ZONE", default="Asia/Kolkata")
@@ -192,6 +199,8 @@ REST_FRAMEWORK = {
         "anon": env("THROTTLE_ANON_RATE", default="120/min"),
         "public_lookup": env("THROTTLE_PUBLIC_LOOKUP_RATE", default="30/hour"),
         "otp": env("THROTTLE_OTP_RATE", default="10/hour"),
+        "login": env("THROTTLE_LOGIN_RATE", default="10/min"),
+        "password_change": env("THROTTLE_PASSWORD_CHANGE_RATE", default="10/hour"),
     },
     # Number of reverse proxies in front of Django that append to
     # X-Forwarded-For (Caddy in production). 0 = trust REMOTE_ADDR only.

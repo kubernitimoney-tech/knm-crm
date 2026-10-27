@@ -1,7 +1,9 @@
 export interface AuthUser {
   id: string;
   email: string;
+  username?: string;
   first_name: string;
+  middle_name?: string;
   last_name: string;
   full_name: string;
   /** App-shell name only (navbar, sidebar, profile). Not for loan data. */
@@ -11,6 +13,9 @@ export interface AuthUser {
   is_active?: boolean;
   is_staff: boolean;
   is_verified: boolean;
+  /** Temporary password issued by an admin; the app blocks until it is changed. */
+  must_change_password?: boolean;
+  password_expires_at?: string | null;
   last_login?: string | null;
   created_at?: string | null;
 }
@@ -31,6 +36,7 @@ export interface AuthAccess {
   can_grant_delete_permission: boolean;
   can_create_user: boolean;
   can_assign_roles: boolean;
+  can_approve_users?: boolean;
 }
 
 export interface AuthTokens {

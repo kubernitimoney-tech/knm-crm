@@ -27,6 +27,7 @@ interface AuthState {
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   updateDisplayName: (displayName: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   hydrate: () => Promise<void>;
   clearError: () => void;
 }
@@ -139,6 +140,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set,
       await apiPatch<Omit<AuthSession, 'tokens'>>('/auth/me/', { display_name: displayName }),
     );
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    // The server ends every other session and returns fresh tokens for this one.
+    const data = await apiPost<LoginResponse>('/auth/change-password/', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    setStoredTokens(data.tokens);
+    touchSession();
+    applySession(set, data);
   },
 
   hydrate: async () => {
