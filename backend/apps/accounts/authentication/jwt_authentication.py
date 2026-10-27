@@ -15,7 +15,7 @@ ROTATE_REFRESH_TOKENS and BLACKLIST_AFTER_ROTATION in settings.
 
 from django.contrib.auth import get_user_model
 from rest_framework import authentication
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -23,6 +23,10 @@ from apps.accounts.tokens import SESSION_EPOCH_CLAIM
 from apps.audit_logs.middleware import update_audit_user
 
 SESSION_INVALIDATED_MESSAGE = "Session invalidated. Please sign in again."
+PASSWORD_CHANGE_REQUIRED_CODE = "password_change_required"
+PASSWORD_CHANGE_REQUIRED_MESSAGE = "You must change your password before continuing."
+# Endpoints a user with a temporary password may still call.
+PASSWORD_CHANGE_ALLOWED_URL_NAMES = frozenset({"auth-me", "auth-logout", "auth-change-password"})
 
 User = get_user_model()
 
@@ -40,7 +44,17 @@ class JWTAuthentication(authentication.BaseAuthentication):
             return None
 
         raw_token = parts[1]
-        return self.authenticate_credentials(raw_token)
+        user, payload = self.authenticate_credentials(raw_token)
+        if user.must_change_password and not self._password_change_allowed(request):
+            raise PermissionDenied(
+                {"detail": PASSWORD_CHANGE_REQUIRED_MESSAGE, "code": PASSWORD_CHANGE_REQUIRED_CODE}
+            )
+        return user, payload
+
+    @staticmethod
+    def _password_change_allowed(request) -> bool:
+        match = getattr(getattr(request, "_request", request), "resolver_match", None)
+        return bool(match and match.url_name in PASSWORD_CHANGE_ALLOWED_URL_NAMES)
 
     def authenticate_credentials(self, raw_token):
         try:

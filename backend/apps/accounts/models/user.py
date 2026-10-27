@@ -1,9 +1,15 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
 from apps.accounts.managers import UserManager
+from apps.accounts.usernames import (
+    USERNAME_MAX_LENGTH,
+    generate_unique_username,
+    validate_username,
+)
 
 EMPLOYEE_CODE_PREFIX = "KNM"
 
@@ -12,18 +18,24 @@ class User(AbstractBaseUser, PermissionsMixin):
     """
     Custom user — email is the login identifier (USERNAME_FIELD).
 
+    Contact details (mobile, branch, address) live on ``UserProfile``; the
+    onboarding approval lives on ``UserApproval``.
+
     Field rationale:
     - id (UUID): opaque PK, safe in APIs, no user count leakage.
-    - email: unique login + communication channel for FinTech KYC flows.
-    - first_name / last_name: legal identity, used in all loan/business data.
+    - email: unique lowercase login + communication channel.
+    - username: lowercase CRM handle derived from the email (pankaj, pankaj1, ...).
+    - first_name / middle_name / last_name: legal identity; loan and business data
+      use first + last name (``get_full_name``).
     - display_name: optional name for the app shell only (navbar, sidebar, profile).
-    - mobile_number: OTP, SMS alerts, regulatory contact.
-    - is_active: account enabled (distinct from soft-delete on business entities).
+    - is_active: account can log in. New CRM users stay inactive until approved.
     - is_staff: Django admin access; not the same as RBAC roles.
-    - is_verified: email/phone KYC completed before sensitive actions.
+    - is_verified: onboarding approval granted.
+    - must_change_password / password_expires_at: temporary password set by an
+      admin; the user must replace it, and it stops working once expired.
     - last_login: security monitoring, idle session policies.
-    - created_at / updated_at: lifecycle auditing on the identity itself.
-    - employee_code: human-readable staff identifier (e.g. KNM0001) for HR/UI.
+    - created_by / updated_by / created_at / updated_at: lifecycle auditing.
+    - employee_code: internal sequential identifier (e.g. KNM0001).
     """
 
     id = models.UUIDField(
@@ -37,12 +49,24 @@ class User(AbstractBaseUser, PermissionsMixin):
         unique=True,
         db_index=True,
         verbose_name="Email address",
-        help_text="Primary login identifier. Must be unique across the system.",
+        help_text="Primary login identifier. Stored lowercase; unique across the system.",
+    )
+    username = models.CharField(
+        max_length=USERNAME_MAX_LENGTH,
+        unique=True,
+        validators=[validate_username],
+        verbose_name="Username",
+        help_text="Lowercase CRM handle generated from the email (e.g. pankaj, pankaj1).",
     )
     first_name = models.CharField(
         max_length=150,
         verbose_name="First name",
         help_text="Given name as per official records.",
+    )
+    middle_name = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="Middle name",
     )
     last_name = models.CharField(
         max_length=150,
@@ -58,13 +82,6 @@ class User(AbstractBaseUser, PermissionsMixin):
             "Shown only in the app shell (navbar, sidebar, profile). Loan and audit "
             "records always use the official first/last name."
         ),
-    )
-    mobile_number = models.CharField(
-        max_length=20,
-        blank=True,
-        db_index=True,
-        verbose_name="Mobile number",
-        help_text="E.164 or local format mobile for OTP and notifications.",
     )
     employee_code = models.CharField(
         max_length=20,
@@ -87,7 +104,23 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_verified = models.BooleanField(
         default=False,
         verbose_name="Verified",
-        help_text="True after email/phone verification for regulated actions.",
+        help_text="True once the onboarding approval has been granted.",
+    )
+    must_change_password = models.BooleanField(
+        default=False,
+        verbose_name="Must change password",
+        help_text="Set when an admin issues a temporary password; cleared on change.",
+    )
+    password_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Password changed at",
+    )
+    password_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Temporary password expires at",
+        help_text="A temporary password cannot be used to sign in after this time.",
     )
     last_login = models.DateTimeField(
         null=True,
@@ -99,6 +132,22 @@ class User(AbstractBaseUser, PermissionsMixin):
         default=0,
         verbose_name="Session epoch",
         help_text="Incremented on each login to invalidate tokens from prior sessions.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users_created",
+        verbose_name="Created by",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users_updated",
+        verbose_name="Updated by",
     )
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -150,6 +199,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         return f"{EMPLOYEE_CODE_PREFIX}{seq:04d}"
 
     def save(self, *args, **kwargs):
+        self.email = (self.email or "").strip().lower()
+        self.username = (self.username or "").strip().lower()
+        if not self.username:
+            self.username = generate_unique_username(self.email, exclude_pk=self.pk)
         if not self.employee_code:
             self.employee_code = self.generate_employee_code()
         super().save(*args, **kwargs)

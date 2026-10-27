@@ -6,17 +6,17 @@ import { cn } from '@/lib/utils';
 import { dataTableFilterControlClass } from '@/components/ui/data-table';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ResetPasswordDialog } from '@/components/users/ResetPasswordDialog';
+import { EditUserDialog } from '@/components/users/EditUserDialog';
+import { UserApprovalCard } from '@/components/users/UserApprovalCard';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
-  User,
   Mail,
   Phone,
   MapPin,
-  Shield,
-  Clock,
+  Building2,
   ChevronLeft,
   PenLine,
-  BadgeCheck,
+  KeyRound,
   History,
   Lock,
   MessageSquare,
@@ -34,6 +34,7 @@ import {
   fetchAssignableRoles,
   fetchUser,
   fetchUserRoleHistory,
+  userListStatus,
   type ApiUser,
   type AssignableRole,
   type RoleChangeRecord,
@@ -57,12 +58,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// List of organizational roles — loaded from API for assignable roles
+function InfoItem({
+  label,
+  value,
+  hint,
+  mono,
+}: {
+  label: string;
+  value: string | null | undefined;
+  hint?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <p className={cn('text-base font-bold text-slate-700 tracking-tight break-words', mono && 'font-mono text-sm')}>
+        {value?.trim() ? value : '—'}
+      </p>
+      {hint ? <p className="text-[10px] text-slate-400 font-medium mt-0.5">{hint}</p> : null}
+    </div>
+  );
+}
 
 export const UserDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { canAssignRoles, isSuperAdmin, canUi } = usePermissions();
+  const { canAssignRoles, isSuperAdmin, canUi, canApproveUsers, canCreateUser } = usePermissions();
   const canUpdateUser = canUi('users', 'user', 'update');
   const currentUserId = useAuthStore((state) => state.user?.id);
 
@@ -74,14 +95,13 @@ export const UserDetailsPage = () => {
 
   const [primaryRole, setPrimaryRole] = useState('');
   const [approvalFile, setApprovalFile] = useState<File | null>(null);
-  const [department, setDepartment] = useState('Lending Operations');
-  const [manager, setManager] = useState('—');
 
   // Success message feedback trigger
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [tempSuccess, setTempSuccess] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   // Temporary roles state
   const [tempRoles, setTempRoles] = useState([
@@ -141,13 +161,14 @@ export const UserDetailsPage = () => {
       id: apiUser.id,
       name: apiUser.full_name || apiUser.email,
       email: apiUser.email,
-      status: apiUser.is_active ? ('Active' as const) : ('Inactive' as const),
-      joinedDate: formatAppDateTime(apiUser.created_at),
+      status: userListStatus(apiUser),
+      joinedDate: formatAppDateTime(apiUser.joined_at),
       lastLogin: apiUser.last_login
         ? formatAppDateTime(apiUser.last_login)
         : 'Never',
       phone: apiUser.mobile_number || '—',
-      location: '—',
+      branch: apiUser.branch ? `${apiUser.branch.name} (${apiUser.branch.code})` : '—',
+      address: apiUser.address || '—',
       permissions: apiUser.roles.map((r) => r.name),
       modulePermissions: [],
       activities: roleHistory.slice(0, 5).map((record, idx) => ({
@@ -164,7 +185,7 @@ export const UserDetailsPage = () => {
   const breadcrumbLabels = useMemo(() => {
     if (!id || !apiUser) return undefined;
     return {
-      [id]: apiUser.employee_code || apiUser.full_name || 'Employee',
+      [id]: apiUser.username || apiUser.full_name || 'User',
     };
   }, [id, apiUser]);
 
@@ -264,7 +285,7 @@ export const UserDetailsPage = () => {
              >
                 <ChevronLeft size={24} />
              </Button>
-             <h1 className="text-[22px] font-bold text-primary-deep tracking-tight">Employee Profile</h1>
+             <h1 className="text-[22px] font-bold text-primary-deep tracking-tight">User Profile</h1>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -279,13 +300,29 @@ export const UserDetailsPage = () => {
             </Button>
           ) : null}
           {canUpdateUser ? (
-            <Button className={cn('h-12 rounded-xl px-8 font-bold gap-2 transition-all', EDIT_SOLID_ICON_BUTTON_CLASS)}>
+            <Button
+              className={cn('h-12 rounded-xl px-8 font-bold gap-2 transition-all', EDIT_SOLID_ICON_BUTTON_CLASS)}
+              onClick={() => setIsEditOpen(true)}
+            >
                <PenLine size={16} />
                Edit Profile
             </Button>
           ) : null}
         </div>
       </div>
+
+      {apiUser?.approval ? (
+        <UserApprovalCard
+          user={apiUser}
+          currentUserId={currentUserId}
+          canApprove={canApproveUsers}
+          canResubmit={canCreateUser}
+          onChanged={(updated) => {
+            setApiUser(updated);
+            void loadUser();
+          }}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column - Profile Summary */}
@@ -295,11 +332,9 @@ export const UserDetailsPage = () => {
               <div className="w-32 h-32 rounded-full overflow-hidden bg-primary-deep/5 flex items-center justify-center text-primary-deep text-4xl font-bold shadow-inner mx-auto border-4 border-white ring-8 ring-slate-50/50">
                 {userData.name.split(' ').map(n => n[0]).join('')}
               </div>
-              <div className="absolute bottom-1 right-1/2 translate-x-12 w-8 h-8 rounded-full bg-emerald-500 border-4 border-white flex items-center justify-center">
-                 <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              </div>
             </div>
             <h2 className="text-2xl font-bold text-primary-deep tracking-tight">{userData.name}</h2>
+            <p className="text-xs font-mono font-bold text-slate-400 mt-1">@{apiUser?.username}</p>
             <p className="text-xs font-bold text-slate-450 uppercase tracking-[0.2em] mt-2 mb-6">
               {apiUser?.roles[0]?.name || getRoleFullName(primaryRole) || 'Unassigned'}
             </p>
@@ -309,17 +344,17 @@ export const UserDetailsPage = () => {
 
             <div className="mt-10 pt-10 border-t border-slate-100 grid grid-cols-2 gap-8">
               <div className="text-left">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Joined On</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Joined At</p>
                 <p className="text-base font-bold text-slate-700 tracking-tight">{userData.joinedDate}</p>
               </div>
               <div className="text-left">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Employee code</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">User Code</p>
                 <p className="text-base font-bold text-slate-700 tracking-tight">{apiUser?.employee_code || '—'}</p>
               </div>
             </div>
           </Card>
 
-          <Card title="Direct Contact" className="p-8 border-slate-100">
+          <Card title="Contact & Branch" className="p-8 border-slate-100">
             <div className="space-y-6 pt-4">
               <div className="flex items-center gap-4 group">
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -340,12 +375,21 @@ export const UserDetailsPage = () => {
                 </div>
               </div>
               <div className="flex items-center gap-4 group">
+                <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                   <Building2 size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Branch</span>
+                  <span className="text-sm font-semibold text-slate-700">{userData.branch}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 group">
                 <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                    <MapPin size={16} />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">HQ Location</span>
-                  <span className="text-sm font-semibold text-slate-700">{userData.location}</span>
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Address</span>
+                  <span className="text-sm font-semibold text-slate-700 whitespace-pre-line">{userData.address}</span>
                 </div>
               </div>
             </div>
@@ -375,56 +419,23 @@ export const UserDetailsPage = () => {
 
             <TabsContent value="overview" className="mt-8 space-y-8 animate-in slide-in-from-bottom-2 duration-300">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card title="Identity \& Organizational Assignment" className="p-8 border-slate-100">
-                  <div className="space-y-8 pt-4">
-                    <div className="grid grid-cols-2 gap-8">
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">First Name</p>
-                        <p className="text-base font-bold text-slate-700 tracking-tight">{userData.name.split(' ')[0]}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Last Name</p>
-                        <p className="text-base font-bold text-slate-700 tracking-tight">{userData.name.split(' ')[1] || '---'}</p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Official Department</p>
-                      <p className="text-base font-bold text-slate-700 tracking-tight">{department}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Reporting Manager</p>
-                      <div className="flex items-center gap-3 mt-2">
-                         <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[11px] font-semibold text-slate-400 border border-slate-200">SR</div>
-                         <p className="text-base font-bold text-slate-700 tracking-tight">{manager}</p>
-                      </div>
-                    </div>
+                <Card title="Identity" className="p-8 border-slate-100">
+                  <div className="grid grid-cols-2 gap-8 pt-4">
+                    <InfoItem label="First Name" value={apiUser?.first_name} />
+                    <InfoItem label="Middle Name" value={apiUser?.middle_name} />
+                    <InfoItem label="Last Name" value={apiUser?.last_name} />
+                    <InfoItem label="Display Name" value={apiUser?.display_name} hint="Navbar, sidebar and profile only" />
                   </div>
                 </Card>
 
                 <Card title="System Information" className="p-8 border-slate-100">
-                  <div className="space-y-8 pt-4">
-                    <div>
-                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">User Identifier</p>
-                      <p className="text-base font-bold text-primary-deep tracking-tight">{userData.email.split('@')[0]}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Compliance Status</p>
-                      <div className="flex items-center gap-3 mt-2">
-                         <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                            <BadgeCheck size={16} className="text-emerald-500" />
-                         </div>
-                         <p className="text-sm font-bold text-slate-600">eKYC Verified (Mar 2024)</p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Last Portal Access</p>
-                      <div className="flex items-center gap-3 mt-2">
-                         <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
-                            <Clock size={16} />
-                         </div>
-                         <p className="text-sm font-bold text-slate-600 font-mono">{userData.lastLogin}</p>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-2 gap-8 pt-4">
+                    <InfoItem label="Username" value={apiUser ? `@${apiUser.username}` : ''} mono />
+                    <InfoItem label="Joined At" value={userData.joinedDate} />
+                    <InfoItem label="Created By" value={apiUser?.created_by_name} />
+                    <InfoItem label="Last Updated By" value={apiUser?.updated_by_name} />
+                    <InfoItem label="Last Portal Access" value={userData.lastLogin} mono />
+                    <InfoItem label="Verified" value={apiUser?.is_verified ? 'Yes — approval granted' : 'No'} />
                   </div>
                 </Card>
               </div>
@@ -752,41 +763,14 @@ export const UserDetailsPage = () => {
             <TabsContent value="security" className="mt-8 animate-in slide-in-from-bottom-2 duration-300">
                <Card title="Security & Compliance" className="p-8 border-slate-100">
                   <div className="space-y-8 pt-4">
-                    <div className="flex items-center justify-between p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100 shadow-inner">
-                       <div className="flex items-center gap-6">
-                         <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm">
-                            <Shield size={24} />
-                         </div>
-                         <div className="space-y-1">
-                            <p className="text-lg font-bold text-emerald-700">Account Health: Secure</p>
-                            <p className="text-xs text-emerald-600/80 font-medium italic">Device: Mac Pro M2 • IP: 182.xx.xx.91</p>
-                         </div>
-                       </div>
-                       <Badge className={badgeClass('success', 'px-4 py-1.5 rounded-xl normal-case tracking-normal')}>PROTECTED</Badge>
-                    </div>
-
-                    <div className="space-y-2">
-                       <div className="flex items-center justify-between p-5 hover:bg-slate-50 rounded-xl transition-colors">
-                          <div className="space-y-0.5">
-                            <span className="text-sm font-bold text-slate-700">Two-Factor Authentication</span>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mobile OTP + Authenticator App</p>
-                          </div>
-                          <Badge variant="success">ACTIVE</Badge>
-                       </div>
-                       <div className="flex items-center justify-between p-5 hover:bg-slate-50 rounded-xl transition-colors">
-                          <div className="space-y-0.5">
-                            <span className="text-sm font-bold text-slate-700">Location-Based Login</span>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Restricted to Maharashtra, India</p>
-                          </div>
-                          <span className="text-xs font-bold text-slate-400 italic">No restrictions</span>
-                       </div>
-                       <div className="flex items-center justify-between p-5 hover:bg-slate-50 rounded-xl transition-colors">
-                          <div className="space-y-0.5">
-                            <span className="text-sm font-bold text-slate-700">Last Profile Update</span>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Modified by Admin System</p>
-                          </div>
-                          <span className="text-xs font-bold text-slate-500 font-mono">14 April 2024</span>
-                       </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <InfoItem label="Account Status" value={userData.status} />
+                      <InfoItem label="Approval Verified" value={apiUser?.is_verified ? 'Yes' : 'No'} />
+                      <InfoItem
+                        label="Password"
+                        value={apiUser?.must_change_password ? 'Temporary — must be changed at next sign-in' : 'Set by the user'}
+                      />
+                      <InfoItem label="Last Sign-in" value={userData.lastLogin} mono />
                     </div>
 
                     <div className="pt-6 space-y-3">
@@ -796,13 +780,10 @@ export const UserDetailsPage = () => {
                           className="w-full h-12 rounded-xl border-slate-200 text-xs font-black uppercase tracking-widest hover:bg-amber-50 hover:text-amber-700 hover:border-amber-100 transition-all"
                           onClick={() => setIsResetPasswordOpen(true)}
                         >
-                          <Lock size={14} className="mr-2" />
-                          Reset Employee Password
+                          <KeyRound size={14} className="mr-2" />
+                          Reset User Password
                         </Button>
                       ) : null}
-                      <Button variant="outline" className="w-full h-12 rounded-xl border-slate-200 text-xs font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all">
-                        Terminate All Active Sessions
-                      </Button>
                     </div>
                   </div>
                </Card>
@@ -810,6 +791,15 @@ export const UserDetailsPage = () => {
           </Tabs>
         </div>
       </div>
+
+      {apiUser && canUpdateUser ? (
+        <EditUserDialog
+          open={isEditOpen}
+          onOpenChange={setIsEditOpen}
+          user={apiUser}
+          onSaved={setApiUser}
+        />
+      ) : null}
 
       {apiUser && canResetPassword ? (
         <ResetPasswordDialog

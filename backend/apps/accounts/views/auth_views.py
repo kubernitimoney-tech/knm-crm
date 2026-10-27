@@ -2,18 +2,25 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 
-from apps.accounts.serializers import LoginSerializer, MeUpdateSerializer, RefreshTokenSerializer
+from apps.accounts.serializers import (
+    ChangePasswordSerializer,
+    LoginSerializer,
+    MeUpdateSerializer,
+    RefreshTokenSerializer,
+)
 from apps.accounts.services.auth_context import build_auth_context
-from apps.accounts.services.auth_service import AuthService
+from apps.accounts.services.auth_service import AuthService, PasswordChangeError
 from apps.accounts.services.token_service import TokenService
 from apps.audit_logs.models import UserActivityAction
 from apps.audit_logs.services.user_activity_service import UserActivityService
 from apps.core.responses import error_response, success_response
+from apps.core.throttling import LoginThrottle, PasswordChangeThrottle
 
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [LoginThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -71,3 +78,22 @@ class MeAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return success_response(data=build_auth_context(request.user), message="Profile updated")
+
+
+class ChangePasswordAPIView(APIView):
+    """Signed-in password change; also clears a pending forced change."""
+
+    throttle_classes = [PasswordChangeThrottle]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = AuthService.change_password(
+                request.user,
+                current_password=serializer.validated_data["current_password"],
+                new_password=serializer.validated_data["new_password"],
+            )
+        except PasswordChangeError as exc:
+            return error_response(message=str(exc))
+        return success_response(data=result, message="Password changed successfully")

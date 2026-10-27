@@ -31,6 +31,8 @@ REST_FRAMEWORK = {  # noqa: F405
         "anon": "10000/min",
         "public_lookup": "10000/min",
         "otp": "10000/min",
+        "login": "10000/min",
+        "password_change": "10000/min",
     },
 }
 

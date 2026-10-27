@@ -166,7 +166,7 @@ export const ProfilePage = () => {
               onClick={() => navigate(`/master/users/${user.id}`)}
             >
               <ExternalLink size={14} />
-              Employee record
+              User record
             </Button>
           ) : null}
           <Button
@@ -215,10 +215,10 @@ export const ProfilePage = () => {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
-                  Employee code
+                  Username
                 </p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate" title={user.employee_code || undefined}>
-                  {user.employee_code || '—'}
+                <p className="text-sm font-mono font-semibold text-slate-700 dark:text-slate-200 truncate" title={user.username || undefined}>
+                  {user.username ? `@${user.username}` : '—'}
                 </p>
               </div>
             </div>
