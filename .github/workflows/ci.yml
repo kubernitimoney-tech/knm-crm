@@ -3,19 +3,37 @@ name: CI/CD
 # Promotion path (PRs, not auto-merge):
 #   development → testing → production
 #
-# Deploys after CI passes:
-#   push to testing    → test VPS
-#   push to production → production VPS
+#   PR (any branch)      → checks only
+#   push to development  → checks, open development → testing PR
+#   push to testing      → checks, build images once (tag = commit SHA),
+#                          deploy them to the test VPS, open testing → production PR
+#   push to production   → checks only (no deploy)
+#   Run workflow (manual, on production, type DEPLOY)
+#                        → deploy the same tested images to production
+#
+# Servers never build: they pull images, back up the DB, migrate, restart,
+# health-check and roll back automatically on failure (scripts/deploy/deploy.sh).
 
 on:
   push:
     branches: [development, testing, production, main, master]
   pull_request:
     branches: [development, testing, production, main, master]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY to deploy production (run on the production branch)"
+        required: true
+        default: ""
+      image_tag:
+        description: "Optional commit SHA to deploy (e.g. to roll back). Empty = newest tested build in production."
+        required: false
+        default: ""
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # Only superseded PR runs are cancelled; a running deploy is never interrupted.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -28,6 +46,7 @@ jobs:
   backend-lint:
     name: Backend — Ruff
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
         working-directory: backend
@@ -52,6 +71,7 @@ jobs:
   backend-test:
     name: Backend — Pytest
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
         working-directory: backend
@@ -75,6 +95,7 @@ jobs:
   frontend-lint:
     name: Frontend — Lint
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
         working-directory: frontend
@@ -98,6 +119,7 @@ jobs:
   frontend-build:
     name: Frontend — Build
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     needs: frontend-lint
     defaults:
       run:
@@ -122,6 +144,7 @@ jobs:
   marketing-site-lint:
     name: Marketing site — Lint
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
         working-directory: marketing-site
@@ -145,6 +168,7 @@ jobs:
   marketing-site-build:
     name: Marketing site — Build
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch'
     needs: marketing-site-lint
     defaults:
       run:
@@ -167,8 +191,7 @@ jobs:
           VITE_API_URL: http://localhost:8000/api/v1
 
   # ---------------------------------------------------------------------------
-  # Promote: open (or reuse) a PR to the next branch. Branch protection still
-  # requires review — this job does not merge.
+  # Promote: open (or reuse) a PR to the next branch. This job does not merge.
   # ---------------------------------------------------------------------------
   promote-development-to-testing:
     name: Promote — development → testing
@@ -193,11 +216,12 @@ jobs:
             || echo "Promotion PR already open."
 
   # ---------------------------------------------------------------------------
-  # Deploy testing → test VPS
-  # Secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT
+  # Build images ONCE (push to testing). Tagged with the commit SHA and pushed
+  # to GitHub Container Registry. Test and production run these same images;
+  # only the frontend/marketing builds differ (API URL is baked in at build).
   # ---------------------------------------------------------------------------
-  deploy-test:
-    name: Deploy — Test (test.kubernitimoney.com)
+  build-images:
+    name: Build images
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
     needs:
@@ -205,28 +229,135 @@ jobs:
       - backend-test
       - frontend-build
       - marketing-site-build
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+      SOURCE_LABEL: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Backend (django, celery, celery-beat)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/docker/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/knm-crm-backend:${{ github.sha }}
+          labels: ${{ env.SOURCE_LABEL }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Frontend (test)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/knm-crm-frontend-test:${{ github.sha }}
+          labels: ${{ env.SOURCE_LABEL }}
+          build-args: |
+            VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Frontend (prod)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/knm-crm-frontend-prod:${{ github.sha }}
+          labels: ${{ env.SOURCE_LABEL }}
+          build-args: |
+            VITE_API_URL=https://api.kubernitimoney.com/api/v1
+          cache-from: type=gha,scope=frontend
+
+      - name: Marketing site (test)
+        uses: docker/build-push-action@v6
+        with:
+          context: marketing-site
+          file: marketing-site/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/knm-crm-marketing-test:${{ github.sha }}
+          labels: ${{ env.SOURCE_LABEL }}
+          build-args: |
+            VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
+            VITE_SITE_URL=https://dev.kubernitimoney.com
+            VITE_BRAND_NAME=Kuberniti Money
+            VITE_SUPPORT_EMAIL=support@kubernitimoney.com
+            VITE_SUPPORT_PHONE=+91-1800-XXX-XXXX
+            VITE_WHATSAPP_NUMBER=919999999999
+          cache-from: type=gha,scope=marketing
+          cache-to: type=gha,mode=max,scope=marketing
+
+      - name: Marketing site (prod)
+        uses: docker/build-push-action@v6
+        with:
+          context: marketing-site
+          file: marketing-site/Dockerfile.prod
+          push: true
+          tags: ${{ env.REGISTRY }}/knm-crm-marketing-prod:${{ github.sha }}
+          labels: ${{ env.SOURCE_LABEL }}
+          build-args: |
+            VITE_API_URL=https://api.kubernitimoney.com/api/v1
+            VITE_SITE_URL=https://kubernitimoney.com
+            VITE_BRAND_NAME=Kuberniti Money
+            VITE_SUPPORT_EMAIL=support@kubernitimoney.com
+            VITE_SUPPORT_PHONE=+91-1800-XXX-XXXX
+            VITE_WHATSAPP_NUMBER=919999999999
+          cache-from: type=gha,scope=marketing
+
+      - name: Summary
+        run: |
+          echo "### Images built for \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Use this tag to deploy production: \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Deploy testing → test VPS (automatic after images are built).
+  # The server only pulls images and restarts; nothing is built there.
+  # Secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT
+  # ---------------------------------------------------------------------------
+  deploy-test:
+    name: Deploy — Test (test.kubernitimoney.com)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
+    needs: build-images
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
     concurrency:
       group: vps-testing
       cancel-in-progress: false
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          command_timeout: 30m
+          envs: IMAGE_TAG,GHCR_USER,GHCR_TOKEN
+          command_timeout: 20m
           script_stop: true
           script: |
             set -e
-            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            export STACK=test
-            export VITE_API_URL=https://api-test.kubernitimoney.com/api/v1
-            export VITE_SITE_URL=https://dev.kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
             DEPLOY_DIR=/knm-crm
-            COMPOSE="-p knm-crm -f docker-compose.prod.yml --profile edge"
             if [ ! -d "$DEPLOY_DIR/.git" ]; then
               git clone --branch testing "$REPO_URL" "$DEPLOY_DIR"
             fi
@@ -234,19 +365,12 @@ jobs:
             git remote set-url origin "$REPO_URL"
             git fetch origin testing
             git checkout testing
-            git reset --hard origin/testing
-            if [ ! -f backend/.env ]; then
-              echo "Missing /knm-crm/backend/.env — create it (separate database, secrets) before deploying test." >&2
-              exit 1
-            fi
-            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
-            docker compose $COMPOSE build --parallel django frontend marketing
-            docker compose $COMPOSE up -d --remove-orphans
-            docker compose $COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-            docker image prune -f
+            git reset --hard "$IMAGE_TAG"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+            STACK=test IMAGE_TAG="$IMAGE_TAG" bash scripts/deploy/deploy.sh
 
       - name: Open promotion PR
-        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -255,44 +379,96 @@ jobs:
             --base production \
             --head testing \
             --title "Promote testing → production" \
-            --body "Test VPS deploy succeeded. Review and merge to deploy the production VPS." \
+            --body "Test VPS deploy succeeded with images \`${{ github.sha }}\`. Merge, then run **Actions → CI/CD → Run workflow** on \`production\` to deploy." \
             || echo "Promotion PR already open."
 
   # ---------------------------------------------------------------------------
-  # Deploy production → production VPS
+  # Deploy production — MANUAL ONLY.
+  # Actions → CI/CD → Run workflow → branch: production → type DEPLOY.
+  # Deploys the newest tested images already merged into `production`
+  # (or the image_tag you enter, e.g. to roll back). Nothing is built here.
   # Secrets: PROD_VPS_HOST, PROD_VPS_USER, PROD_VPS_SSH_KEY, PROD_VPS_PORT
   # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy — Production (app.kubernitimoney.com)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
-    needs:
-      - backend-lint
-      - backend-test
-      - frontend-build
-      - marketing-site-build
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: vps-production
       cancel-in-progress: false
+    env:
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
     steps:
+      - name: Confirm
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "DEPLOY" ]; then
+            echo "::error::Type DEPLOY in the confirm box to deploy production."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 200
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pick images
+        id: pick
+        env:
+          REQUESTED: ${{ inputs.image_tag }}
+        run: |
+          set -e
+          has_images() {
+            docker manifest inspect "$REGISTRY/knm-crm-backend:$1" >/dev/null 2>&1 &&
+            docker manifest inspect "$REGISTRY/knm-crm-frontend-prod:$1" >/dev/null 2>&1 &&
+            docker manifest inspect "$REGISTRY/knm-crm-marketing-prod:$1" >/dev/null 2>&1
+          }
+          if [ -n "$REQUESTED" ]; then
+            TAG="$(git rev-parse --verify "${REQUESTED}^{commit}")"
+            # Only code that has been merged into production may go live.
+            if ! git merge-base --is-ancestor "$TAG" HEAD; then
+              echo "::error::$REQUESTED is not part of the production branch."
+              exit 1
+            fi
+            has_images "$TAG" || { echo "::error::No images built for $TAG."; exit 1; }
+          else
+            TAG=""
+            for sha in $(git rev-list -n 200 HEAD); do
+              if has_images "$sha"; then TAG="$sha"; break; fi
+            done
+            [ -n "$TAG" ] || { echo "::error::No tested images found in production history."; exit 1; }
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "### Deploying \`$TAG\` to production" >> "$GITHUB_STEP_SUMMARY"
+          git log -1 --format='%h %s (%an, %ad)' "$TAG" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ steps.pick.outputs.tag }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.PROD_VPS_HOST }}
           username: ${{ secrets.PROD_VPS_USER }}
           key: ${{ secrets.PROD_VPS_SSH_KEY }}
           port: ${{ secrets.PROD_VPS_PORT }}
-          command_timeout: 30m
+          envs: IMAGE_TAG,GHCR_USER,GHCR_TOKEN
+          command_timeout: 20m
           script_stop: true
           script: |
             set -e
-            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            export STACK=prod
-            export VITE_API_URL=https://api.kubernitimoney.com/api/v1
-            export VITE_SITE_URL=https://kubernitimoney.com
             REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
             DEPLOY_DIR=/knm-crm
-            COMPOSE="-p knm-crm -f docker-compose.prod.yml --profile edge"
             if [ ! -d "$DEPLOY_DIR/.git" ]; then
               git clone --branch production "$REPO_URL" "$DEPLOY_DIR"
             fi
@@ -300,13 +476,8 @@ jobs:
             git remote set-url origin "$REPO_URL"
             git fetch origin production
             git checkout production
-            git reset --hard origin/production
-            if [ ! -f backend/.env ]; then
-              echo "Missing /knm-crm/backend/.env — create it (separate database, secrets) before deploying prod." >&2
-              exit 1
-            fi
-            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
-            docker compose $COMPOSE build --parallel django frontend marketing
-            docker compose $COMPOSE up -d --remove-orphans
-            docker compose $COMPOSE exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-            docker image prune -f
+            # Config files (compose, Caddyfile, deploy script) from the same commit as the images.
+            git reset --hard "$IMAGE_TAG"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+            STACK=prod IMAGE_TAG="$IMAGE_TAG" bash scripts/deploy/deploy.sh

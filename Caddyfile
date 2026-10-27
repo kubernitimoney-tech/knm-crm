@@ -32,17 +32,32 @@
 
 (marketing) {
 	encode gzip
-	reverse_proxy {args[0]}-marketing:80
+	reverse_proxy {args[0]}-marketing:80 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
+	}
 }
 
 (crm) {
 	encode gzip
-	reverse_proxy {args[0]}-frontend:80
+	reverse_proxy {args[0]}-frontend:80 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
+	}
 }
 
 (api) {
 	encode gzip
-	reverse_proxy {args[0]}-django:8000
+	reverse_proxy {args[0]}-django:8000 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
+	}
 }
 
 # --- Production ---
