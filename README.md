@@ -1014,21 +1014,20 @@ Hooks also run automatically on `git commit` after `python -m pre_commit install
 
 Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
-On push/PR to `development`, `testing`, `staging`, `production`, `main`, or `master`:
+On push/PR to `development`, `testing`, `production`, `main`, or `master`:
 
 - **Backend** — Ruff check + format check; pytest
 - **Frontend** — ESLint; production build
 - **Marketing site** — ESLint; production build
-- **Push to `testing` / `staging` / `production`** (merging a promotion PR) — SSH deploy after all checks pass. Pull requests only run checks; they never deploy.
+- **Push to `testing` / `production`** (merging a promotion PR) — SSH deploy after all checks pass. Pull requests only run checks; they never deploy.
 
 **Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
 
-**Environments are separate Compose projects.** Test and staging share one VPS but each has its own checkout, database, Redis, media volume and images:
+**Environments are separate Compose projects.** Each has its own checkout, database, Redis, media volume and images:
 
 | Environment | Folder on VPS      | Compose project | `STACK`   | Runs Caddy |
 | ----------- | ------------------ | --------------- | --------- | ---------- |
 | Test        | `/knm-crm`         | `knm-crm`       | `test`    | yes (`--profile edge`) |
-| Staging     | `/knm-crm-staging` | `knm-staging`   | `staging` | no         |
 | Production  | `/knm-crm` (prod VPS) | `knm-crm`    | `prod`    | yes (`--profile edge`) |
 
 Web containers join the shared external network `knm-edge` as `<STACK>-django`, `<STACK>-frontend` and `<STACK>-marketing`; the Caddyfile routes each hostname to the right stack.
@@ -1042,8 +1041,6 @@ cd /knm-crm && git fetch origin testing && git checkout testing && git reset --h
 docker compose -p knm-crm -f docker-compose.prod.yml --profile edge build --parallel django frontend marketing
 docker compose -p knm-crm -f docker-compose.prod.yml --profile edge up -d --remove-orphans
 ```
-
-**First staging deploy (one time):** create `/knm-crm-staging/backend/.env` with its own secrets (it gets a fresh, empty database), then merge into `staging`. Until then, staging hostnames return 502. Staging no longer shares the test database.
 
 `celery` and `celery-beat` reuse the same `lms-backend:<STACK>` image as `django` (one backend build, not three).
 

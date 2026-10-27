@@ -59,6 +59,7 @@ class TestRoleMatrix:
         excluded = {
             "user.create",
             "user.update",
+            "user.approve",
             "permission.view",
             "permission.create",
             "permission.update",
@@ -71,6 +72,7 @@ class TestRoleMatrix:
         assert "lead.view" in production_codes
         assert "application.approve" in production_codes
         assert "user.view" in production_codes
+        assert "user.approve" in admin_codes
 
     def test_credit_manager_has_sanction(self):
         from django.core.management import call_command

@@ -36,6 +36,8 @@ export function usePermissions() {
   const canAssignRoles = access?.can_assign_roles ?? false;
   const canCreateUser =
     access?.can_create_user ?? (isSuperAdmin || permissions.includes('user.create'));
+  const canApproveUsers =
+    access?.can_approve_users ?? (isSuperAdmin || permissions.includes('user.approve'));
 
   const hasPermission = useCallback(
     (code: string) => isSuperAdmin || permissions.includes(code),
@@ -161,6 +163,7 @@ export function usePermissions() {
     canGrantPermission,
     canGrantDeletePermission,
     canCreateUser,
+    canApproveUsers,
     canAssignRoles,
     navSections,
     allSections: ALL_NAV_SECTIONS,

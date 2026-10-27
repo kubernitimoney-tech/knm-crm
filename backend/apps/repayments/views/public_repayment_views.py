@@ -15,6 +15,7 @@ from apps.integrations.cashfree.orders import (
 )
 from apps.repayments.services.online_repayment_service import (
     find_cash_pending_loan,
+    gateway_payment_time,
     loan_lookup_payload,
     loan_payment_amount,
     payable_amount,
@@ -109,5 +110,6 @@ class PublicLoanRepaymentConfirmAPIView(APIView):
             order_id=order_id,
             amount=amount,
             utr=str(payment.get("cf_payment_id") or ""),
+            paid_at=gateway_payment_time(payment),
         )
         return success_response(message="Payment received and waiting for approval.")

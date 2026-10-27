@@ -136,3 +136,52 @@ def test_pending_payment_above_ledger_outstanding_is_approved():
     assert repayment.status == RepaymentStatus.CONFIRMED
     assert repayment.ledger_entry_id is not None
     assert LedgerPostingService.get_balance(loan.id) == Decimal("-23.60")
+
+
+def test_gateway_payment_time_parses_cashfree_timestamp():
+    from apps.repayments.services.online_repayment_service import gateway_payment_time
+
+    parsed = gateway_payment_time({"payment_time": "2026-10-25T14:05:09+05:30"})
+    assert parsed is not None
+    assert parsed.isoformat() == "2026-10-25T14:05:09+05:30"
+    assert gateway_payment_time({}) is None
+    assert gateway_payment_time({"payment_time": "not a date"}) is None
+
+
+@pytest.mark.django_db
+def test_online_payment_uses_gateway_payment_time_not_record_time():
+    """A webhook or browser return that arrives late keeps the real payment time."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+    from tests.factories import UserFactory
+
+    from apps.repayments.services.online_repayment_service import record_online_payment
+    from apps.repayments.tests.test_repayment_delete import _create_disbursed_loan, _create_lead
+
+    user = UserFactory()
+    lead = _create_lead(lead_code="LD-PAID-AT", rm=user, cm=user)
+    loan = _create_disbursed_loan(user=user, lead=lead, rm=user, cm=user)
+    paid_at = (timezone.now() - timedelta(days=2)).replace(microsecond=0)
+
+    created = record_online_payment(
+        loan_id=str(loan.id),
+        order_id="rp-paid-at",
+        amount=Decimal("500.00"),
+        utr="cf-1",
+        paid_at=paid_at,
+    )
+    assert created.payment_date == paid_at
+
+    # A pending row recorded with the receive time is corrected on the verified retry.
+    created.payment_date = timezone.now()
+    created.save(update_fields=["payment_date"])
+    record_online_payment(
+        loan_id=str(loan.id),
+        order_id="rp-paid-at",
+        amount=Decimal("500.00"),
+        utr="cf-1",
+        paid_at=paid_at,
+    )
+    created.refresh_from_db()
+    assert created.payment_date == paid_at

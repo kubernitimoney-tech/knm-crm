@@ -208,6 +208,10 @@ export function userStatusBadgeClass(status: string, className?: string): string
       return badgeClass('success', className);
     case 'Inactive':
       return badgeClass('neutral', className);
+    case 'Pending Approval':
+      return badgeClass('warning', className);
+    case 'Rejected':
+      return badgeClass('danger', className);
     case 'Resigned':
       return badgeClass('warning', className);
     case 'Absconding':

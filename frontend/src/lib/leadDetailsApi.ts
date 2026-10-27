@@ -691,6 +691,8 @@ export interface ApiLeadCollection {
   gateway_reference?: string;
   remarks: string;
   recorded_on: string;
+  /** Who collected it; for payment-link rows, the approver. */
+  collected_by?: string;
 }
 
 export interface ApiCollectionCreateResponse {
@@ -1636,6 +1638,7 @@ export function mapCollectionFromApi(entry: ApiLeadCollection) {
     gatewayReference: entry.gateway_reference ?? '',
     remarks: entry.remarks,
     recordedOn: entry.recorded_on,
+    collectedBy: entry.collected_by ?? '',
   };
 }
 
