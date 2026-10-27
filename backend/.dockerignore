@@ -1,0 +1,18 @@
+# Never bake secrets or local data into images.
+.env
+.env_backup
+.env.*
+!.env.example
+!.env.*.example
+media/
+media-test/
+staticfiles/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+htmlcov/
+.coverage
