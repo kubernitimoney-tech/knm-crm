@@ -18,7 +18,8 @@ export interface CustomerLeadStatsLeadRow {
   application_status?: string | null;
 }
 
-const DISBURSED_APPLICATION_STATUSES = new Set(['disbursed', 'disbursal_sheet_sent']);
+// A closed loan was still disbursed: closure moves the application to `closed`.
+const DISBURSED_APPLICATION_STATUSES = new Set(['disbursed', 'disbursal_sheet_sent', 'closed']);
 const REJECTED_APPLICATION_STATUSES = new Set(['rejected', 'cancelled']);
 
 /** Lead statuses grouped under the Others badge (duplicate, closed, post-loan, etc.). */
