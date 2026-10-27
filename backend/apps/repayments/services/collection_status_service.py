@@ -150,4 +150,12 @@ def _collection_row(
         "gateway_reference": repayment.gateway_reference or "",
         "remarks": repayment.remarks,
         "recorded_on": repayment.created_at.isoformat() if repayment.created_at else "",
+        # For payment-link rows this is the approver; blank while pending.
+        "collected_by": _user_label(repayment.collected_by),
     }
+
+
+def _user_label(user) -> str:
+    if user is None:
+        return ""
+    return user.get_full_name().strip() or user.email
