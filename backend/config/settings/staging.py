@@ -9,6 +9,15 @@ CSRF_COOKIE_SECURE = True
 # running behind an HTTPS-terminating proxy. Comma-separated, full scheme+host.
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])  # noqa: F405
 
+# Container health checks call Django directly at 127.0.0.1:8000 (deploy script
+# and docker-compose healthcheck). Public traffic only reaches Django through
+# Caddy, which routes by real hostname, so these never match outside requests.
+for _internal_host in ("localhost", "127.0.0.1"):
+    if _internal_host not in ALLOWED_HOSTS:  # noqa: F405
+        ALLOWED_HOSTS.append(_internal_host)  # noqa: F405
+# The health check is plain HTTP inside the container; don't redirect it to HTTPS.
+SECURE_REDIRECT_EXEMPT = [r"^api/v1/health/$"]
+
 # Caddy is the single proxy in front of Django and rewrites X-Forwarded-For
 # with the real client address, so trust exactly one hop.
 REST_FRAMEWORK = {  # noqa: F405
