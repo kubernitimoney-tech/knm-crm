@@ -86,6 +86,7 @@ export interface LeadCollectionEntry {
   gatewayReference: string;
   remarks: string;
   recordedOn: string;
+  collectedBy?: string;
 }
 
 export interface LeadRemarkEntry {
@@ -191,6 +192,7 @@ function CollectionViewDialog({
               { label: 'Order reference', value: collectionDetailValue(entry.gatewayReference) },
               { label: 'Date & time', value: formatAppDateTimeOrFallback(entry.collectionDateTime) },
               { label: 'Recorded on', value: formatAppDateTimeOrFallback(entry.recordedOn) },
+              { label: 'Collected by', value: collectionDetailValue(entry.collectedBy ?? '') },
               { label: 'Status', value: <CollectionStatusBadge status={entry.status} /> },
               { label: 'Source', value: collectionDetailValue(entry.collectionSource) },
               { label: 'Remarks', value: collectionDetailValue(entry.remarks) },
@@ -234,6 +236,7 @@ function CollectionDetailsTable({
           <TableHead className={sectionHeadClassName()}>Mode</TableHead>
           <TableHead className={sectionHeadClassName()}>UTR</TableHead>
           <TableHead className={sectionHeadClassName()}>Date & Time</TableHead>
+          <TableHead className={sectionHeadClassName()}>Collected By</TableHead>
           <TableHead className={sectionHeadClassName()}>Status</TableHead>
           <TableHead className={sectionHeadClassName()}>Source</TableHead>
           <TableHead className={sectionHeadClassName()}>Remarks</TableHead>
@@ -251,6 +254,7 @@ function CollectionDetailsTable({
             <TableCell className={cn(sectionCellClassName, 'whitespace-nowrap')}>
               {formatAppDateTimeOrFallback(entry.collectionDateTime)}
             </TableCell>
+            <TableCell className={sectionCellClassName}>{entry.collectedBy || '—'}</TableCell>
             <TableCell className={sectionCellClassName}>
               <CollectionStatusBadge status={entry.status} />
             </TableCell>

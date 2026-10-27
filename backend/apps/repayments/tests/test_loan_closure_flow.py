@@ -322,3 +322,40 @@ def test_deleting_the_short_close_collection_reopens_the_loan(setup):
     assert loan.status == LoanStatus.ACTIVE
     assert loan.closed_at is None
     assert lead.status == LeadStatus.PART_PAYMENT
+
+
+def test_late_approval_keeps_payment_date_and_records_approver(setup):
+    """Paid 2 days ago, approved today: payment date and closing date stay on the
+    payment day, and the approver is recorded as the collector."""
+    officer, lead, loan = setup
+    paid_at = timezone.now() - timedelta(days=2)
+    due_then = LoanCalculationService.compute_for_application(
+        loan.application, loan=loan, as_of=timezone.localtime(paid_at).date()
+    ).amount_due
+    pending = LoanRepayment.objects.create(
+        loan=loan,
+        amount=due_then,
+        payment_mode=PaymentMode.PAYMENT_LINK,
+        utr="cf-late",
+        payment_date=paid_at,
+        gateway_reference="rp-late-order",
+        status=RepaymentStatus.PENDING,
+    )
+    assert pending.collected_by is None  # webhook rows have no collector yet
+
+    order = {"order_amount": str(due_then), "order_tags": {"loan_id": str(loan.id)}}
+    payment = {"payment_status": "SUCCESS", "payment_amount": str(due_then)}
+    with (
+        patch("apps.integrations.cashfree.orders.fetch_order", return_value=order),
+        patch("apps.integrations.cashfree.orders.fetch_successful_payment", return_value=payment),
+    ):
+        approve_online_payment(user=officer, loan=loan, repayment_id=pending.id)
+
+    pending.refresh_from_db()
+    loan.refresh_from_db()
+    assert pending.status == RepaymentStatus.CONFIRMED
+    assert pending.payment_date == paid_at
+    assert pending.collected_by == officer
+    assert pending.ledger_entry.transaction_date == paid_at
+    assert loan.status == LoanStatus.CLOSED
+    assert loan.closed_at == paid_at
