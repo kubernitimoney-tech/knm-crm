@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { NavItem } from '../../constants/navigation';
 import { useUIStore } from '../../store/useUIStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { getShellDisplayName, getShellInitials } from '@/lib/userDisplayName';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useLogout } from '../../hooks/useLogout';
 import { cn } from '../../lib/utils';
@@ -117,9 +118,7 @@ export const Sidebar = () => {
     void logout('manual');
   };
 
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'U';
+  const initials = getShellInitials(user);
 
   return (
     <motion.aside
@@ -169,7 +168,7 @@ export const Sidebar = () => {
                 </div>
                 {sidebarOpen && (
                   <div className="overflow-hidden">
-                    <p className="text-sm text-white font-medium truncate uppercase">{user?.full_name ?? 'User'}</p>
+                    <p className="text-sm text-white font-medium truncate uppercase">{getShellDisplayName(user)}</p>
                     <p className="text-[10px] text-lighter-gray truncate">{primaryRoleName}</p>
                   </div>
                 )}
@@ -180,7 +179,7 @@ export const Sidebar = () => {
             <DropdownMenuGroup>
               <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 rounded-t-lg">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">User Account</p>
-                <p className="text-sm font-black text-primary-deep truncate">{user?.full_name ?? 'User'}</p>
+                <p className="text-sm font-black text-primary-deep truncate">{getShellDisplayName(user)}</p>
                 {user?.email ? (
                   <p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{user.email}</p>
                 ) : null}

@@ -15,7 +15,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     Field rationale:
     - id (UUID): opaque PK, safe in APIs, no user count leakage.
     - email: unique login + communication channel for FinTech KYC flows.
-    - first_name / last_name: legal and UI identity.
+    - first_name / last_name: legal identity, used in all loan/business data.
+    - display_name: optional name for the app shell only (navbar, sidebar, profile).
     - mobile_number: OTP, SMS alerts, regulatory contact.
     - is_active: account enabled (distinct from soft-delete on business entities).
     - is_staff: Django admin access; not the same as RBAC roles.
@@ -48,6 +49,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         blank=True,
         verbose_name="Last name",
         help_text="Family name as per official records.",
+    )
+    display_name = models.CharField(
+        max_length=150,
+        blank=True,
+        verbose_name="Display name",
+        help_text=(
+            "Shown only in the app shell (navbar, sidebar, profile). Loan and audit "
+            "records always use the official first/last name."
+        ),
     )
     mobile_number = models.CharField(
         max_length=20,
@@ -124,6 +134,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}".strip().title()
+
+    def get_display_name(self):
+        """Name for the app shell only; use ``get_full_name`` for loan/business data."""
+        return self.display_name.strip() or self.get_full_name() or self.email
 
     @classmethod
     def generate_employee_code(cls) -> str:

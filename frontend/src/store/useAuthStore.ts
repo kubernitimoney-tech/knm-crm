@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import { apiPost, apiGet, getStoredTokens, setStoredTokens } from '@/lib/api';
+import { apiPost, apiGet, apiPatch, getStoredTokens, setStoredTokens } from '@/lib/api';
 import { clearLegacyRbacStorage } from '@/lib/legacyStorage';
 import { clearLastActivity, getLastActivity, isSessionExpired, touchSession } from '@/lib/session';
 import type { AuthAccess, AuthRole, AuthSession, AuthTokens, AuthUser } from '@/types/auth';
@@ -26,6 +26,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
+  updateDisplayName: (displayName: string) => Promise<void>;
   hydrate: () => Promise<void>;
   clearError: () => void;
 }
@@ -51,6 +52,20 @@ function saveSession(session: StoredSession | null): void {
 }
 
 type LoginResponse = Omit<AuthSession, 'tokens'> & { tokens: AuthTokens };
+
+function applySession(
+  set: (partial: Partial<AuthState>) => void,
+  data: Omit<AuthSession, 'tokens'>,
+): void {
+  const session: StoredSession = {
+    user: data.user,
+    roles: data.roles,
+    permissions: data.permissions,
+    access: data.access,
+  };
+  saveSession(session);
+  set({ ...session, isAuthenticated: true });
+}
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -116,21 +131,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   fetchMe: async () => {
-    const data = await apiGet<Omit<AuthSession, 'tokens'>>('/auth/me/');
-    const session: StoredSession = {
-      user: data.user,
-      roles: data.roles,
-      permissions: data.permissions,
-      access: data.access,
-    };
-    saveSession(session);
-    set({
-      user: data.user,
-      roles: data.roles,
-      permissions: data.permissions,
-      access: data.access,
-      isAuthenticated: true,
-    });
+    applySession(set, await apiGet<Omit<AuthSession, 'tokens'>>('/auth/me/'));
+  },
+
+  updateDisplayName: async (displayName) => {
+    applySession(
+      set,
+      await apiPatch<Omit<AuthSession, 'tokens'>>('/auth/me/', { display_name: displayName }),
+    );
   },
 
   hydrate: async () => {

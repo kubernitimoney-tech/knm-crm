@@ -21,17 +21,25 @@ class UserAdmin(BaseUserAdmin):
         "email",
         "first_name",
         "last_name",
+        "display_name",
         "is_active",
         "is_staff",
         "is_verified",
         "last_login",
     )
     list_filter = ("is_active", "is_staff", "is_verified", "is_superuser")
-    search_fields = ("employee_code", "email", "first_name", "last_name", "mobile_number")
+    search_fields = (
+        "employee_code",
+        "email",
+        "first_name",
+        "last_name",
+        "display_name",
+        "mobile_number",
+    )
     ordering = ("email",)
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Personal", {"fields": ("first_name", "last_name", "mobile_number")}),
+        ("Personal", {"fields": ("first_name", "last_name", "display_name", "mobile_number")}),
         ("Status", {"fields": ("is_active", "is_staff", "is_verified", "is_superuser")}),
     )
     add_fieldsets = ((None, {"classes": ("wide",), "fields": ("email", "password1", "password2")}),)

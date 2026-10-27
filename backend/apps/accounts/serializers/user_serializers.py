@@ -26,6 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "full_name",
+            "display_name",
             "mobile_number",
             "employee_code",
             "is_active",
@@ -76,12 +77,24 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "password",
             "first_name",
             "last_name",
+            "display_name",
             "mobile_number",
         ]
 
     def create(self, validated_data):
         password = validated_data.pop("password")
         return User.objects.create_user(**validated_data, password=password)
+
+
+class MeUpdateSerializer(serializers.ModelSerializer):
+    """Fields a user may change on their own profile."""
+
+    class Meta:
+        model = User
+        fields = ["display_name"]
+
+    def validate_display_name(self, value):
+        return value.strip()
 
 
 class ResetPasswordSerializer(serializers.Serializer):
