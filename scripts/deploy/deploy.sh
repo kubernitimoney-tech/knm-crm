@@ -79,7 +79,8 @@ fi
 log "Health check"
 healthy=0
 for _ in $(seq 1 30); do
-  if compose exec -T django curl -fsS http://127.0.0.1:8000/api/v1/health/ >/dev/null 2>&1; then
+  if compose exec -T django curl -fsS -H "X-Forwarded-Proto: https" \
+    http://127.0.0.1:8000/api/v1/health/ >/dev/null 2>&1; then
     healthy=1
     break
   fi
