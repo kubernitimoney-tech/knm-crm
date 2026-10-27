@@ -1,18 +1,17 @@
 name: CI/CD
 
 # Promotion path (PRs, not auto-merge):
-#   development → testing → staging → production
+#   development → testing → production
 #
 # Deploys after CI passes:
 #   push to testing    → test VPS
-#   push to staging    → staging hostnames on the same VPS
 #   push to production → production VPS
 
 on:
   push:
-    branches: [development, testing, staging, production, main, master]
+    branches: [development, testing, production, main, master]
   pull_request:
-    branches: [development, testing, staging, production, main, master]
+    branches: [development, testing, production, main, master]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -207,7 +206,7 @@ jobs:
       - frontend-build
       - marketing-site-build
     concurrency:
-      group: vps-testing-staging
+      group: vps-testing
       cancel-in-progress: false
     steps:
       - name: Deploy over SSH
@@ -253,78 +252,10 @@ jobs:
         run: |
           gh pr create \
             --repo "${{ github.repository }}" \
-            --base staging \
-            --head testing \
-            --title "Promote testing → staging" \
-            --body "Test VPS deploy succeeded. Review and merge to roll this build onto the staging hostnames." \
-            || echo "Promotion PR already open."
-
-  # ---------------------------------------------------------------------------
-  # Deploy staging → same test/staging VPS (xxx.xxx.xxx.xxx), but as its own
-  # Compose project (/knm-crm-staging, project knm-staging) with its own
-  # database, Redis and media. The test stack's Caddy routes staging hostnames.
-  # Secrets: same VPS_* as testing
-  # ---------------------------------------------------------------------------
-  deploy-staging:
-    name: Deploy — Staging (staging.kubernitimoney.com)
-    runs-on: ubuntu-latest
-    # Disabled: there is no staging server yet. To enable, set STAGING_DEPLOY_ENABLED
-    # to "true" under GitHub → Settings → Secrets and variables → Actions → Variables.
-    if: vars.STAGING_DEPLOY_ENABLED == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    needs:
-      - backend-lint
-      - backend-test
-      - frontend-build
-      - marketing-site-build
-    concurrency:
-      group: vps-testing-staging
-      cancel-in-progress: false
-    steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT }}
-          command_timeout: 30m
-          script_stop: true
-          script: |
-            set -e
-            export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-            export STACK=staging
-            export VITE_API_URL=https://api-staging.kubernitimoney.com/api/v1
-            export VITE_SITE_URL=https://dev.kubernitimoney.com
-            REPO_URL=https://github.com/kubernitimoney-tech/knm-crm.git
-            DEPLOY_DIR=/knm-crm-staging
-            COMPOSE="-p knm-staging -f docker-compose.prod.yml"
-            if [ ! -d "$DEPLOY_DIR/.git" ]; then
-              git clone --branch staging "$REPO_URL" "$DEPLOY_DIR"
-            fi
-            cd "$DEPLOY_DIR"
-            git remote set-url origin "$REPO_URL"
-            git fetch origin staging
-            git checkout staging
-            git reset --hard origin/staging
-            if [ ! -f backend/.env ]; then
-              echo "Missing /knm-crm-staging/backend/.env — create it (separate database, secrets) before deploying staging." >&2
-              exit 1
-            fi
-            docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
-            docker compose $COMPOSE build --parallel django frontend marketing
-            docker compose $COMPOSE up -d --remove-orphans
-            docker image prune -f
-
-      - name: Open promotion PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr create \
-            --repo "${{ github.repository }}" \
             --base production \
-            --head staging \
-            --title "Promote staging → production" \
-            --body "Staging deploy succeeded. Review and merge to deploy the production VPS." \
+            --head testing \
+            --title "Promote testing → production" \
+            --body "Test VPS deploy succeeded. Review and merge to deploy the production VPS." \
             || echo "Promotion PR already open."
 
   # ---------------------------------------------------------------------------
