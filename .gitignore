@@ -72,3 +72,7 @@ temp/
 
 github-actions-deploy
 github-actions-deploy.pub
+
+# Server deploy state and database backups (scripts/deploy/deploy.sh)
+/.deploy/
+/backups/

@@ -1,23 +1,24 @@
-# Production / testing / staging deployment stack.
-# Set VITE_API_URL and VITE_SITE_URL per environment (see GitHub Actions).
+# Production / test deployment stack.
 #
-# One-time setup on the server:
-#   cp backend/.env.production.example backend/.env   # then edit secrets
-#   docker compose -f docker-compose.prod.yml build
-#   docker compose -f docker-compose.prod.yml up -d
-#   docker compose -f docker-compose.prod.yml exec django python manage.py createsuperuser
+# Images are built once by GitHub Actions and pushed to GitHub Container
+# Registry (ghcr.io), tagged with the git commit SHA. Servers only pull and
+# restart — nothing is built on the server. See scripts/deploy/deploy.sh.
+#
+#   IMAGE_REGISTRY  ghcr.io/kubernitimoney-tech   (default)
+#   IMAGE_TAG       git commit SHA to run          (set by deploy.sh)
+#   STACK           test | prod                    (picks frontend/marketing build + network aliases)
 #
 # Only Caddy is exposed to the internet (ports 80/443). Everything else talks
-# over the internal Docker network.
-#
-# Several environments can share one server (test + staging). Each one is its
-# own Compose project with its own database, Redis and media volume:
-#   STACK=test    docker compose -p knm-crm     -f docker-compose.prod.yml --profile edge up -d
-#   STACK=staging docker compose -p knm-staging -f docker-compose.prod.yml up -d
-# Exactly one stack per server runs Caddy (--profile edge). Web containers join
-# the shared external network "knm-edge" as <STACK>-django / -frontend /
-# -marketing, which the Caddyfile routes to. Create it once per server:
+# over the internal Docker network. Exactly one stack per server runs Caddy
+# (--profile edge). Web containers join the shared external network
+# "knm-edge" as <STACK>-django / -frontend / -marketing. Create it once:
 #   docker network create knm-edge
+#
+# Emergency fallback (registry unavailable): build on the server with
+#   STACK=prod IMAGE_TAG=local docker compose -p knm-crm -f docker-compose.prod.yml build
+# then run scripts/deploy/deploy.sh with IMAGE_TAG=local SKIP_PULL=1.
+
+x-backend-image: &backend-image ${IMAGE_REGISTRY:-ghcr.io/kubernitimoney-tech}/knm-crm-backend:${IMAGE_TAG:-latest}
 
 services:
   caddy:
@@ -42,14 +43,22 @@ services:
     build:
       context: ./backend
       dockerfile: docker/Dockerfile
-    image: lms-backend:${STACK:-prod}
+    image: *backend-image
     restart: unless-stopped
+    # Migrations run as a separate step in deploy.sh before this restarts, and
+    # static files are baked into the image, so gunicorn starts in seconds.
+    # Only files not yet owned by appuser are fixed (fast on large media).
     command: >
       sh -c "mkdir -p /app/media/documents &&
-             chown -R appuser:appuser /app/media 2>/dev/null || true &&
-             exec gosu appuser sh -c 'python manage.py migrate --noinput &&
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --config docker/gunicorn.conf.py'"
+             find /app/media ! -user appuser -exec chown appuser:appuser {} + 2>/dev/null || true;
+             exec gosu appuser gunicorn config.wsgi:application --config docker/gunicorn.conf.py"
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-H", "X-Forwarded-Proto: https", "http://127.0.0.1:8000/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     volumes:
       - media_data:/app/media
     env_file:
@@ -80,7 +89,7 @@ services:
       dockerfile: Dockerfile.prod
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api-test.kubernitimoney.com/api/v1}
-    image: lms-frontend:${STACK:-prod}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kubernitimoney-tech}/knm-crm-frontend-${STACK:-prod}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     networks:
       default: {}
@@ -101,7 +110,7 @@ services:
         VITE_SUPPORT_PHONE: "+91-1800-XXX-XXXX"
         VITE_WHATSAPP_NUMBER: "919999999999"
         VITE_SITE_URL: ${VITE_SITE_URL:-https://dev.kubernitimoney.com}
-    image: lms-marketing:${STACK:-prod}
+    image: ${IMAGE_REGISTRY:-ghcr.io/kubernitimoney-tech}/knm-crm-marketing-${STACK:-prod}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     networks:
       default: {}
@@ -136,8 +145,10 @@ services:
       retries: 5
 
   celery:
-    image: lms-backend:${STACK:-prod}
+    image: *backend-image
     restart: unless-stopped
+    # Let running tasks (emails, reports) finish before a restart.
+    stop_grace_period: 60s
     command: celery -A config worker -l info -Q default,notifications,reports
     volumes:
       - media_data:/app/media
@@ -155,8 +166,9 @@ services:
       - redis
 
   celery-beat:
-    image: lms-backend:${STACK:-prod}
+    image: *backend-image
     restart: unless-stopped
+    stop_grace_period: 30s
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file:
       - ./backend/.env

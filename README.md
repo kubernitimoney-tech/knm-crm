@@ -1010,39 +1010,57 @@ python -m pre_commit run eslint-marketing-site --all-files
 
 Hooks also run automatically on `git commit` after `python -m pre_commit install`.
 
-### CI (GitHub Actions)
+### CI/CD (GitHub Actions)
 
 Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
-On push/PR to `development`, `testing`, `production`, `main`, or `master`:
+| Event | What runs |
+| ----- | --------- |
+| Pull request (any CI branch) | Checks only: Ruff, pytest, ESLint, builds |
+| Push to `development` | Checks, then opens a `development → testing` PR |
+| Push to `testing` | Checks → **build images once** (tag = commit SHA, pushed to `ghcr.io/kubernitimoney-tech`) → deploy to the test VPS → opens a `testing → production` PR |
+| Push to `production` | Checks only — **does not deploy** |
+| **Actions → CI/CD → Run workflow** (branch `production`, type `DEPLOY`) | Deploys the newest tested images already merged into `production` to the production VPS |
 
-- **Backend** — Ruff check + format check; pytest
-- **Frontend** — ESLint; production build
-- **Marketing site** — ESLint; production build
-- **Push to `testing` / `production`** (merging a promotion PR) — SSH deploy after all checks pass. Pull requests only run checks; they never deploy.
+**Servers never build.** Each deploy runs [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) on the server:
 
-**Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
+1. Pull the images for the commit SHA.
+2. Back up the database to `/knm-crm/backups/` (last 7 kept). Stops if the backup is empty.
+3. Run migrations with the new image while the current version keeps serving.
+4. Restart containers (static files are baked into the image, so Django starts in seconds; Caddy holds requests up to 30 s instead of returning 502).
+5. Health check `/api/v1/health/`. If it fails, switch back to the previous images automatically.
 
-**Environments are separate Compose projects.** Each has its own checkout, database, Redis, media volume and images:
+Production deploy steps:
 
-| Environment | Folder on VPS      | Compose project | `STACK`   | Runs Caddy |
-| ----------- | ------------------ | --------------- | --------- | ---------- |
-| Test        | `/knm-crm`         | `knm-crm`       | `test`    | yes (`--profile edge`) |
-| Production  | `/knm-crm` (prod VPS) | `knm-crm`    | `prod`    | yes (`--profile edge`) |
+1. Merge the `testing → production` PR.
+2. GitHub → **Actions → CI/CD → Run workflow** → branch **production** → confirm **DEPLOY** → Run.
+3. To roll back, run it again with **image_tag** = an earlier commit SHA (see `/knm-crm/.deploy/history.log` on the server), or on the server: `STACK=prod bash scripts/deploy/rollback.sh`.
+
+Migrations should be backward compatible (add columns/tables first, remove later) so an image rollback keeps working; a full database restore is possible from `backups/`.
+
+**Environments are separate Compose projects** (own database, Redis, media):
+
+| Environment | Folder on VPS | Compose project | `STACK` | Runs Caddy |
+| ----------- | ------------- | --------------- | ------- | ---------- |
+| Test | `/knm-crm` | `knm-crm` | `test` | yes (`--profile edge`) |
+| Production | `/knm-crm` (prod VPS) | `knm-crm` | `prod` | yes (`--profile edge`) |
 
 Web containers join the shared external network `knm-edge` as `<STACK>-django`, `<STACK>-frontend` and `<STACK>-marketing`; the Caddyfile routes each hostname to the right stack.
 
-**Deploy on VPS manually** (same as CI; always set `STACK` and `-p`):
+**Manual deploy on a VPS** (needs `docker login ghcr.io` with a token that can read packages):
 
 ```bash
-export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 STACK=test
-docker network inspect knm-edge >/dev/null 2>&1 || docker network create knm-edge
-cd /knm-crm && git fetch origin testing && git checkout testing && git reset --hard origin/testing
-docker compose -p knm-crm -f docker-compose.prod.yml --profile edge build --parallel django frontend marketing
-docker compose -p knm-crm -f docker-compose.prod.yml --profile edge up -d --remove-orphans
+cd /knm-crm && git fetch origin && git reset --hard <commit-sha>
+STACK=test IMAGE_TAG=<commit-sha> bash scripts/deploy/deploy.sh
 ```
 
-`celery` and `celery-beat` reuse the same `lms-backend:<STACK>` image as `django` (one backend build, not three).
+**Emergency (registry unavailable):** build on the server, then deploy those local images:
+
+```bash
+export VITE_API_URL=https://api.kubernitimoney.com/api/v1 VITE_SITE_URL=https://kubernitimoney.com
+STACK=prod IMAGE_TAG=local docker compose -p knm-crm -f docker-compose.prod.yml --profile edge build django frontend marketing
+STACK=prod IMAGE_TAG=local SKIP_PULL=1 bash scripts/deploy/deploy.sh
+```
 
 ---
 
