@@ -192,6 +192,10 @@ class LoanCalculationService:
         if value is None:
             return None
         if isinstance(value, datetime):
+            # Aware datetimes are UTC; take the business-day date in local time
+            # (a 01:00 IST collection is still that IST day, not the UTC day before).
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
             return value.date()
         return value
 
