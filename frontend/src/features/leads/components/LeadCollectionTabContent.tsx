@@ -61,10 +61,12 @@ import {
   EditDeleteActions,
   GridDetailTable,
   HeavyNavTableSection,
-  sectionHeadClassName,
-  sectionCellClassName,
   textareaClassName,
 } from '@/features/leads/components/leadDetailSectionShared';
+import {
+  sectionHeadClassName,
+  sectionCellClassName,
+} from '@/features/leads/components/leadDetailSectionUtils';
 import { cn } from '@/lib/utils';
 import { collectionStatusBadgeClass, remarkPriorityBadgeClass } from '@/lib/badgeStyles';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback, fromDateTimeLocalInputValue, toDateTimeLocalInputValue, validateDateTimeLocalNotAfterNow, currentDateTimeLocalInputValue } from '@/lib/dateUtils';

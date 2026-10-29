@@ -2,14 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
   Search,
-  Clock,
-  AlertCircle,
-  UserCheck,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
@@ -111,15 +108,6 @@ export const PendingSanctionsPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      totalAmount: pendingRows.reduce((acc, curr) => acc + curr.loanAmount, 0),
-      highPriority: pendingRows.filter(l => l.loanAmount > 200000).length,
-      total: pendingRows.length
-    };
-  }, [pendingRows]);
 
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {

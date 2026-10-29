@@ -33,7 +33,6 @@ import {
   TableLoadingRow,
 } from '@/components/ui/table';
 import {
-  DataTableFilterPill,
   DataTableFooter,
   DataTablePageSizeSelect,
   DataTablePrimaryCell,
@@ -42,7 +41,6 @@ import {
   dataTableCardClass,
   dataTableFilterControlClass,
   dataTableFilterToolbarClass,
-  dataTableFilterDividerClass,
   dataTableHeadClass,
   dataTableHeaderClass,
   dataTableHeaderRowClass,
@@ -58,7 +56,6 @@ import { DateRangePicker } from '@/components/ui/date-picker';
 import { Lead } from '@/types';
 import { cn, exportToExcel, formatCurrency, formatPersonName, buildExportFilename, periodFilterSlug } from '@/lib/utils';
 import {
-  leadStatusBadgeClass,
   leadPipelineStatusBadgeClass,
   statSummaryBadgeClass,
 } from '@/lib/badgeStyles';
@@ -91,12 +88,6 @@ import {
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
-
-function leadCategoryAccent(status: string) {
-  if (status === 'Fresh') return 'bg-emerald-400';
-  if (status === 'Reloan') return 'bg-blue-400';
-  return 'bg-amber-400';
-}
 
 export const LeadsPage = () => {
   useTitle('Leads Management');
@@ -271,15 +262,6 @@ export const LeadsPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  const categoryCounts = useMemo(
-    () => ({
-      all: summary.total,
-      fresh: summary.fresh,
-      reloan: summary.reloan,
-    }),
-    [summary],
-  );
 
   const stats = useMemo(
     () => ({

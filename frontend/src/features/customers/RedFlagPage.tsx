@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
-  AlertTriangle,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
@@ -44,7 +42,6 @@ import {
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatPersonName } from '@/lib/utils';
 import { leadDetailsPath } from '@/lib/leadNavigation';
-import { buttonVariants } from '@/components/ui/button';
 import { usePipelineRows } from '@/hooks/usePipelineRows';
 import { useLeadListingActions } from '@/hooks/useLeadListingActions';
 import {

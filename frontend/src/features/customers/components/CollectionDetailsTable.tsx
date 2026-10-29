@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import {
-  Search,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,

@@ -76,17 +76,20 @@ export function usePermissions() {
 
   const isCollectionOfficer = hasRole('collection-manager');
 
-  function hasPathPermission(pathname: string) {
-    const required = getRequiredPermissionsForPath(pathname);
-    if (required.length > 0 && !required.every((code) => hasPermission(code))) {
-      return false;
-    }
-    const anyOf = getAnyPermissionsForPath(pathname);
-    if (anyOf.length > 0 && !anyOf.some((code) => hasPermission(code))) {
-      return false;
-    }
-    return true;
-  }
+  const hasPathPermission = useCallback(
+    (pathname: string) => {
+      const required = getRequiredPermissionsForPath(pathname);
+      if (required.length > 0 && !required.every((code) => hasPermission(code))) {
+        return false;
+      }
+      const anyOf = getAnyPermissionsForPath(pathname);
+      if (anyOf.length > 0 && !anyOf.some((code) => hasPermission(code))) {
+        return false;
+      }
+      return true;
+    },
+    [hasPermission],
+  );
 
   const navSections = useMemo(
     () => resolveNavSections(roles, isSuperAdmin),
@@ -148,7 +151,7 @@ export function usePermissions() {
       }
       return item;
     }).filter((item): item is NavItem => item !== null);
-  }, [navSections, isSuperAdmin, permissions]);
+  }, [navSections, isSuperAdmin, hasPermission, hasPathPermission]);
 
   const primaryRoleName = resolvePrimaryRoleName(roles, isSuperAdmin);
   const roleNamesLabel = formatRoleDisplayNames(roles);

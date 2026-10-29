@@ -2,14 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
   Search,
-  BadgeCheck,
-  TrendingUp,
-  UserCheck,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
@@ -111,17 +108,6 @@ export const SanctionsPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      totalAmount: sanctionRows.reduce((acc, curr) => acc + curr.loanAmount, 0),
-      avgCibil: sanctionRows.length
-        ? Math.round(sanctionRows.reduce((acc, curr) => acc + curr.cibil, 0) / sanctionRows.length)
-        : 0,
-      total: sanctionRows.length
-    };
-  }, [sanctionRows]);
 
   // Filtering & Sorting Logic
   const filteredAndSortedSanctions = useMemo(() => {

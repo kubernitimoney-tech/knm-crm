@@ -27,7 +27,7 @@ import {
   Paperclip
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { formatAppDateTime, formatAppDateTimeOrFallback, parseIsoDate } from '@/lib/dateUtils';
+import { formatAppDateTime, parseIsoDate } from '@/lib/dateUtils';
 import { DatePicker } from '@/components/ui/date-picker';
 import {
   assignUserRole,

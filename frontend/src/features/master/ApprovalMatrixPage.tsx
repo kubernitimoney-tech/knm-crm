@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   Search,
@@ -8,7 +7,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  ShieldAlert,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
