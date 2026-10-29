@@ -39,6 +39,11 @@ repos:
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
         pass_filenames: false
         entry: python scripts/npm_run.py frontend lint:eslint
+      - id: no-latest-runner
+        name: CI runners pinned (no -latest labels)
+        language: pygrep
+        entry: '^\s*runs-on:\s*\S*-latest'
+        files: ^\.github/workflows/
       - id: eslint-marketing-site
         name: eslint (marketing-site)
         language: python
