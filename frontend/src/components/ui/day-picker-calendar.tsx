@@ -17,6 +17,9 @@ export interface CalendarAvailabilityOptions {
   holidayLabelsByIsoDate?: Record<string, string>;
 }
 
+/** Stable empty map so the memoised day button is not rebuilt every render. */
+const NO_HOLIDAY_LABELS: Record<string, string> = {};
+
 const calendarClassNames = {
   root: 'rdp-root p-2',
   months: 'flex flex-col sm:flex-row gap-3',
@@ -165,7 +168,7 @@ export const SingleDateCalendar = memo(function SingleDateCalendar({
     () => buildDisabledMatcher(minDate, maxDate, availability),
     [minDate, maxDate, availability],
   );
-  const holidayLabelsByIsoDate = availability?.holidayLabelsByIsoDate ?? {};
+  const holidayLabelsByIsoDate = availability?.holidayLabelsByIsoDate ?? NO_HOLIDAY_LABELS;
   const disableSundays = availability?.disableSundays ?? false;
   const DayButtonComponent = useMemo(
     () => createHolidayAwareDayButton(holidayLabelsByIsoDate, disableSundays),

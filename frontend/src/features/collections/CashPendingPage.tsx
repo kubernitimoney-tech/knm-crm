@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
-  Clock,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
@@ -49,7 +47,6 @@ import {
   DataTableSearchInput,
   DataTableClearFiltersButton,
   DataTableFooter,
-  DataTablePageSizeSelect,
 } from '@/components/ui/data-table';
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatCurrency, formatPersonName, formatRatePercent } from '@/lib/utils';
@@ -159,7 +156,7 @@ export const CashPendingPage = () => {
     to: undefined,
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({
     key: 'repayDate',
     direction: 'asc'
@@ -193,14 +190,6 @@ export const CashPendingPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      total: cashPendingRows.length,
-      amount: cashPendingRows.reduce((acc, curr) => acc + (curr.loanAmount || 0), 0)
-    };
-  }, [cashPendingRows]);
 
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {

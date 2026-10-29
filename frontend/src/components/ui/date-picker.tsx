@@ -151,8 +151,6 @@ export interface DateRangePickerProps {
   align?: 'start' | 'center' | 'end';
 }
 
-export { getDefaultDateRange };
-
 function isCompleteRange(from?: Date, to?: Date): from is Date {
   return Boolean(from && to && !isSameCalendarDay(from, to));
 }
