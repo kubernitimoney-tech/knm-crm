@@ -3,7 +3,6 @@ import { useTitle } from '@/hooks/useTitle';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Mail,
   MapPin,
   Clock,
   ChevronLeft,
@@ -12,29 +11,16 @@ import {
   Building2,
   Users,
   Fingerprint,
-  Lock,
   MessageSquare,
-  AlertCircle,
   Coins,
   FileCheck,
   XCircle,
-  Send,
-  Plus,
-  CheckCircle,
   PhoneCall,
-  Activity,
-  UserCheck,
   CheckCheck,
-  FileSearch,
-  BookOpen,
   Receipt,
   RotateCcw,
   Sparkles,
-  Search,
-  User,
   ShieldAlert,
-  HelpCircle,
-  Undo2,
   BellRing,
   Video
 } from 'lucide-react';
@@ -48,7 +34,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { MODAL_HEADER_CLASS, SURFACE_INPUT_CLASS } from '@/lib/uiTokens';
@@ -278,7 +263,7 @@ export const LeadDetailsPage = () => {
         setSanctionLoading(false);
       }
     }
-  }, [id, apiLead?.status, apiLead?.application_status]);
+  }, [id, apiLead?.application_status]);
 
   const handleSanctionSaved = useCallback(async (record: ApiLeadSanction) => {
     pendingFreshSanctionRef.current = record;
@@ -505,7 +490,7 @@ export const LeadDetailsPage = () => {
       freshSanction: freshSanction ?? undefined,
       silent: freshSanction != null,
     });
-  }, [id, loading, workflowRefresh, esignKycRefresh, activeTab, loadWorkflowReadiness]);
+  }, [id, loading, workflowRefresh, esignKycRefresh, activeTab, apiLead?.status, loadWorkflowReadiness]);
 
   const leadTimelineItems = useMemo(
     () =>

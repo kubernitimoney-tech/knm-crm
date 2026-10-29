@@ -24,10 +24,12 @@ import {
   FormFieldLabel,
   FormSelect,
   SectionTable,
+} from '@/features/leads/components/leadDetailSectionShared';
+import {
   sectionHeadClassName,
   sectionCellClassName,
   useAnimatedFormPanel,
-} from '@/features/leads/components/leadDetailSectionShared';
+} from '@/features/leads/components/leadDetailSectionUtils';
 import {
   digitsOnly,
   normalizeIndianMobile,

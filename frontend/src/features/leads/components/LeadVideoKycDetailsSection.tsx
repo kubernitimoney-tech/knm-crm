@@ -24,9 +24,11 @@ import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import {
   EmptyTableRow,
   SectionTable,
+} from '@/features/leads/components/leadDetailSectionShared';
+import {
   sectionHeadClassName,
   sectionCellClassName,
-} from '@/features/leads/components/leadDetailSectionShared';
+} from '@/features/leads/components/leadDetailSectionUtils';
 
 export type VideoKycRequestStatus = ApiLeadVideoKycRequest['status'];
 
@@ -89,11 +91,11 @@ export function LeadVideoKycDetailsSection({
     } finally {
       setIsLoading(false);
     }
-  }, [leadId, refreshToken]);
+  }, [leadId]);
 
   useEffect(() => {
     loadEntries();
-  }, [loadEntries]);
+  }, [loadEntries, refreshToken]);
 
   const handleSendRequest = async () => {
     setIsSending(true);

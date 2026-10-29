@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
@@ -13,13 +13,12 @@ import {
   type ApiLeadSanction,
 } from '@/lib/leadDetailsApi';
 import { fetchBanks, type ApiBank } from '@/lib/banksApi';
+import { SanctionSalaryBankMultiSelect } from '@/features/leads/components/SanctionSalaryAccountsTable';
 import {
-  SanctionSalaryBankMultiSelect,
-  apiSalaryBanksToBankIds,
   bankIdsToApiSalaryBanks,
   validateSelectedBankIds,
   resolveSalaryBankIdsFromRecord,
-} from '@/features/leads/components/SanctionSalaryAccountsTable';
+} from '@/features/leads/components/sanctionSalaryBanks';
 import type { ApiLoanProduct } from '@/lib/applicationsApi';
 import { resolveLoanProductLabel } from '@/lib/applicationsApi';
 import {
@@ -494,6 +493,12 @@ export function LeadLoanSanctionSection({
     onSanctionStateChange?.(Boolean(submitted) && !isEditing);
   }, [submitted, isEditing, onSanctionStateChange]);
 
+  // The form context loads once per lead; read the edit state current when it arrives.
+  const editStateRef = useRef({ sanctionRecord, isEditing });
+  useEffect(() => {
+    editStateRef.current = { sanctionRecord, isEditing };
+  }, [sanctionRecord, isEditing]);
+
   useEffect(() => {
     let cancelled = false;
     setProductPricingLoading(true);
@@ -513,6 +518,7 @@ export function LeadLoanSanctionSection({
           loanPurpose: loadedLoanPurpose,
           residentialType: loadedResidentialType,
         });
+        const { sanctionRecord, isEditing } = editStateRef.current;
         if (!sanctionRecord && !isEditing && selectedProduct) {
           setForm((prev) => ({
             ...prev,

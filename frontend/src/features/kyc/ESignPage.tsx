@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
 import { cn, exportToExcel, formatPersonName } from '@/lib/utils';
+import type { ExportColumn } from '@/lib/exportExcel';
 import { fetchEsignRows, type EsignRow } from '@/lib/pipelineApi';
 import { toast } from '@/components/ui/toast';
 import { leadDetailsPath } from '@/lib/leadNavigation';
@@ -115,15 +116,15 @@ export function ESignPage() {
   );
 
   const handleExport = () => {
-    const headers = [
-      { label: 'S.No', key: (_: any, idx: number) => idx + 1 },
+    const headers: ExportColumn<EsignRow>[] = [
+      { label: 'S.No', key: (_, idx) => idx + 1 },
       { label: 'Name', key: 'name' },
       { label: 'Email Address', key: 'email' },
       { label: 'Mobile No.', key: 'mob' },
-      { label: 'Loan Amt.', key: (item: any) => `${parseFloat(item.loanAmt)}` },
+      { label: 'Loan Amt.', key: (item) => `${parseFloat(item.loanAmt)}` },
       { label: 'Requested By', key: 'requestedBy' },
       { label: 'Status', key: 'status' },
-      { label: 'Resend (Yes/No)', key: (item: any) => item.resend ? 'Yes' : 'No' }
+      { label: 'Resend (Yes/No)', key: (item) => item.resend ? 'Yes' : 'No' }
     ];
     exportToExcel(filteredData, headers, `ESign_Status_${new Date().toISOString().split('T')[0]}`, 'E-Sign');
   };

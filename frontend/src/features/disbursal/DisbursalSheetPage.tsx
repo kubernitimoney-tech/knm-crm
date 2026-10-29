@@ -107,14 +107,6 @@ export const DisbursalSheetPage = () => {
     setCurrentPage(1);
   };
 
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      total: disbursalRows.length,
-      amount: disbursalRows.reduce((acc, curr) => acc + (curr.disbursedAmount || 0), 0)
-    };
-  }, [disbursalRows]);
-
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {
     const result = disbursalRows.filter(lead => {

@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
@@ -117,14 +116,6 @@ export const DisbursedLoansPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      total: disbursedRows.length,
-      amount: disbursedRows.reduce((acc, curr) => acc + (curr.disbursedAmount || 0), 0)
-    };
-  }, [disbursedRows]);
 
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {
