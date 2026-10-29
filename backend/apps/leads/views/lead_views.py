@@ -18,7 +18,6 @@ from apps.accounts.permissions import (
 from apps.accounts.services.permission_cache import resolve_user_permissions
 from apps.accounts.services.role_helpers import (
     can_change_sanction_product,
-    is_admin_user,
     is_super_admin,
 )
 from apps.applications.services.sanction_fee_service import SanctionFeeService
@@ -273,28 +272,46 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
             return error_response(message=str(exc), status_code=status.HTTP_400_BAD_REQUEST)
         return success_response(message="Disbursed loan deleted")
 
-    @rbac_permission("lead.assign")
+    @rbac_permission("lead.transfer")
     @action(detail=True, methods=["post"], url_path="transfer")
     def transfer(self, request, pk=None):
-        # lead.assign gates the RBAC decorator; only Super Admin / Admin may transfer
-        # (RM roster auto-assignment on create does not use this endpoint or lead.assign).
-        if not (is_super_admin(request.user) or is_admin_user(request.user)):
-            return error_response(
-                message="Only Super Admin or Admin can transfer leads.",
-                status_code=status.HTTP_403_FORBIDDEN,
-            )
         lead = self.get_object()
         serializer = LeadTransferSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            new_rm = User.objects.get(pk=serializer.validated_data["new_rm"], is_active=True)
-        except User.DoesNotExist:
-            return error_response(message="Target relationship manager not found", status_code=404)
+        new_rm = None
+        new_cm = None
+        new_rm_id = serializer.validated_data.get("new_rm")
+        new_cm_id = serializer.validated_data.get("new_cm")
+        if new_rm_id:
+            new_rm = User.objects.filter(pk=new_rm_id, is_active=True).first()
+            if new_rm is None:
+                return error_response(
+                    message="Target relationship manager not found",
+                    status_code=status.HTTP_404_NOT_FOUND,
+                )
+            if not LeadService.get_relationship_managers().filter(pk=new_rm.id).exists():
+                return error_response(
+                    message="Selected user is not a relationship manager.",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+        if new_cm_id:
+            new_cm = User.objects.filter(pk=new_cm_id, is_active=True).first()
+            if new_cm is None:
+                return error_response(
+                    message="Target credit manager not found",
+                    status_code=status.HTTP_404_NOT_FOUND,
+                )
+            if not LeadService.get_credit_managers().filter(pk=new_cm.id).exists():
+                return error_response(
+                    message="Selected user is not a credit manager.",
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
         try:
             lead = LeadService.transfer_lead(
                 user=request.user,
                 lead=lead,
                 new_rm=new_rm,
+                new_cm=new_cm,
                 remarks=serializer.validated_data.get("remarks", ""),
             )
         except LeadServiceError as exc:
@@ -364,15 +381,9 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
                 return company_account.account_number
             return ""
 
-        def _latest_sanction_decision(app):
-            return app.decisions.order_by("-decided_at").first()
-
         def _repay_date_for_application(app) -> str:
-            decision = _latest_sanction_decision(app)
-            if decision and decision.sanction_details:
-                raw = str(decision.sanction_details.get("repayment_date") or "").strip()
-                return raw[:10] if raw else ""
-            return ""
+            repay_date = LoanCalculationService.resolve_repayment_date(application=app, loan=loan)
+            return repay_date.isoformat() if repay_date else ""
 
         def _disbursal_row(
             sheet_details: dict,
@@ -394,9 +405,11 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
             beneficiary_branch = str(sheet_details.get("branch") or "")
             if not beneficiary_branch:
                 beneficiary_branch = disbursal_defaults.get("branch") or ""
-            reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
-            if not reference_no and disbursement_utr:
-                reference_no = str(disbursement_utr).strip()
+            # The disbursement record is the source of truth for the UTR; the sheet copy
+            # goes stale when the UTR is edited directly (e.g. via Django admin).
+            reference_no = str(disbursement_utr or "").strip()
+            if not reference_no:
+                reference_no = str(sheet_details.get("disbursal_reference_no") or "").strip()
             loan_no = ""
             if loan:
                 loan_no = loan.loan_account_number
@@ -501,6 +514,12 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
                 "application_status_display": status_display,
                 "company_account_profile": company_account_profile,
                 "disbursal_defaults": disbursal_defaults,
+                "loan_status": loan.status if loan else None,
+                "loan_closed_at": (
+                    timezone.localtime(loan.closed_at).isoformat()
+                    if loan and loan.closed_at
+                    else None
+                ),
             }
         )
 

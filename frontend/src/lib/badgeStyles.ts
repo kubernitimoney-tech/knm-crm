@@ -208,6 +208,10 @@ export function userStatusBadgeClass(status: string, className?: string): string
       return badgeClass('success', className);
     case 'Inactive':
       return badgeClass('neutral', className);
+    case 'Pending Approval':
+      return badgeClass('warning', className);
+    case 'Rejected':
+      return badgeClass('danger', className);
     case 'Resigned':
       return badgeClass('warning', className);
     case 'Absconding':
@@ -252,6 +256,10 @@ export function esignRequestStatusDisplay(status: string): { label: string; clas
 export function videoKycRequestStatusDisplay(status: string): { label: string; className: string } {
   if (status === 'completed') {
     return { label: 'Completed', className: esignStatusBadgeClass(status) };
+  }
+  if (status === 'video_pending') {
+    // Step 1 (OTP + DigiLocker) done in Digio; video recording still pending.
+    return { label: 'Video Pending', className: badgeClass('warning') };
   }
   return { label: 'Requested', className: esignStatusBadgeClass(status) };
 }

@@ -45,6 +45,12 @@ export interface DisbursedReportRow {
   utm: string;
   state: string;
   redFlag: string;
+  pdType: string;
+  disbursedAmount: string;
+  ckycNo: string;
+  loanType: string;
+  reloanCount: number;
+  productName: string;
   leadCategory: string;
   customerLeadCount: number;
   status: string;
@@ -53,6 +59,7 @@ export interface DisbursedReportRow {
 
 export interface CollectionReportRow {
   id: string;
+  repaymentId: string;
   customerId: string;
   leadId: string;
   loanNo: string;
@@ -64,6 +71,9 @@ export interface CollectionReportRow {
   state: string;
   repayDate: string;
   collectedAmount: string;
+  loanAmount: string;
+  repayAmount: string;
+  excessAmount: string;
   principalAmt: string;
   interestAmt: string;
   penalInterest: string;
@@ -76,6 +86,8 @@ export interface CollectionReportRow {
   status: string;
   remarks: string;
   collectionDateTime: string;
+  collectionDate: string;
+  collectionTime: string;
 }
 
 export interface CibilReportRow {
@@ -108,6 +120,26 @@ export interface CibilReportRow {
   cibilScore: string;
 }
 
+/** Server-side filters: date range follows the tab's own date (disbursal / collection). */
+export interface ReportFilterParams {
+  date_from?: string;
+  date_to?: string;
+  branch?: string;
+  search?: string;
+}
+
+export interface ReportQuery extends ReportFilterParams {
+  page?: number;
+  page_size?: number;
+}
+
+function applyReportFilters(query: URLSearchParams, params?: ReportFilterParams) {
+  if (params?.date_from) query.set('date_from', params.date_from);
+  if (params?.date_to) query.set('date_to', params.date_to);
+  if (params?.branch && params.branch !== 'All') query.set('branch', params.branch);
+  if (params?.search?.trim()) query.set('search', params.search.trim());
+}
+
 /** Paginated reporting API envelope ({ count, results }). */
 export interface PaginatedReportRows<T> {
   count: number;
@@ -119,25 +151,21 @@ export async function fetchReportingFilters(): Promise<ReportingFilters> {
 }
 
 /** Disbursed-loan reporting rows for the active page (GET /reports/disbursed/). */
-export async function fetchDisbursedReportRows(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedReportRows<DisbursedReportRow>> {
+export async function fetchDisbursedReportRows(params?: ReportQuery): Promise<PaginatedReportRows<DisbursedReportRow>> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.page_size) query.set('page_size', String(params.page_size));
+  applyReportFilters(query, params);
   const qs = query.toString();
   return apiGet<PaginatedReportRows<DisbursedReportRow>>(`/reports/disbursed/${qs ? `?${qs}` : ''}`);
 }
 
 /** Collection repayment rows for the active page (GET /reports/collection/). */
-export async function fetchCollectionReportRows(params?: {
-  page?: number;
-  page_size?: number;
-}): Promise<PaginatedReportRows<CollectionReportRow>> {
+export async function fetchCollectionReportRows(params?: ReportQuery): Promise<PaginatedReportRows<CollectionReportRow>> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.page_size) query.set('page_size', String(params.page_size));
+  applyReportFilters(query, params);
   const qs = query.toString();
   return apiGet<PaginatedReportRows<CollectionReportRow>>(`/reports/collection/${qs ? `?${qs}` : ''}`);
 }
@@ -154,19 +182,46 @@ export async function fetchCibilReportRows(params?: {
   return apiGet<PaginatedReportRows<CibilReportRow>>(`/reports/cibil/${qs ? `?${qs}` : ''}`);
 }
 
-/** Load every CIBIL row (paginated API) for client-side report filters/export. */
-export async function fetchAllCibilReportRows(): Promise<CibilReportRow[]> {
+async function fetchAllReportPages<T>(
+  fetchPage: (page: number, pageSize: number) => Promise<PaginatedReportRows<T>>,
+): Promise<T[]> {
   const pageSize = 100;
-  const rows: CibilReportRow[] = [];
+  const rows: T[] = [];
   let page = 1;
   let total = 0;
 
-  do {
-    const batch = await fetchCibilReportRows({ page, page_size: pageSize });
+  while (true) {
+    const batch = await fetchPage(page, pageSize);
     total = batch.count;
     rows.push(...batch.results);
+    if (batch.results.length === 0 || rows.length >= total) {
+      break;
+    }
     page += 1;
-  } while (rows.length < total);
+  }
 
   return rows;
+}
+
+/** Load every CIBIL row (paginated API) for client-side report filters/export. */
+export async function fetchAllCibilReportRows(): Promise<CibilReportRow[]> {
+  return fetchAllReportPages((page, page_size) => fetchCibilReportRows({ page, page_size }));
+}
+
+/** Load every disbursed reporting row for export (table stays paginated). */
+export async function fetchAllDisbursedReportRows(
+  filters?: ReportFilterParams,
+): Promise<DisbursedReportRow[]> {
+  return fetchAllReportPages((page, page_size) =>
+    fetchDisbursedReportRows({ ...filters, page, page_size }),
+  );
+}
+
+/** Load every collection reporting row for export (table stays paginated). */
+export async function fetchAllCollectionReportRows(
+  filters?: ReportFilterParams,
+): Promise<CollectionReportRow[]> {
+  return fetchAllReportPages((page, page_size) =>
+    fetchCollectionReportRows({ ...filters, page, page_size }),
+  );
 }

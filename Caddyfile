@@ -17,37 +17,53 @@
 # Same Caddyfile can be deployed on both VPS. Caddy only gets a certificate
 # for hostnames whose DNS A record points at that server.
 
+# Each environment runs as its own Docker Compose project (see
+# docker-compose.prod.yml). Its django/frontend/marketing containers join the
+# shared "knm-edge" network as <stack>-django, <stack>-frontend and
+# <stack>-marketing, where <stack> is prod, test or staging. Only one Caddy runs
+# per server (the stack deployed with --profile edge).
+#
+# Uploaded files (/media/*) are NOT served from disk here: Django serves them
+# only through signed, expiring links.
+
 {
 	email admin@kubernitimoney.com
 }
 
 (marketing) {
 	encode gzip
-	reverse_proxy marketing:80
+	reverse_proxy {args[0]}-marketing:80 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
+	}
 }
 
 (crm) {
 	encode gzip
-	reverse_proxy frontend:80
+	reverse_proxy {args[0]}-frontend:80 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
+	}
 }
 
 (api) {
 	encode gzip
-
-	handle_path /media/* {
-		root * /srv/media
-		file_server
-	}
-
-	handle {
-		reverse_proxy django:8000
+	reverse_proxy {args[0]}-django:8000 {
+		# Hold requests while a container restarts during a deploy
+		# instead of returning 502 straight away.
+		lb_try_duration 30s
+		lb_try_interval 500ms
 	}
 }
 
 # --- Production ---
 
 kubernitimoney.com {
-	import marketing
+	import marketing prod
 }
 
 www.kubernitimoney.com {
@@ -55,33 +71,33 @@ www.kubernitimoney.com {
 }
 
 app.kubernitimoney.com {
-	import crm
+	import crm prod
 }
 
 api.kubernitimoney.com {
-	import api
+	import api prod
 }
 
 # --- Test ---
 
 dev.kubernitimoney.com {
-	import marketing
+	import marketing test
 }
 
 test.kubernitimoney.com {
-	import crm
+	import crm test
 }
 
 api-test.kubernitimoney.com {
-	import api
+	import api test
 }
 
-# --- Staging (same VPS as test; promote testing → staging) ---
+# --- Staging (same VPS as test, separate stack and database) ---
 
 staging.kubernitimoney.com {
-	import crm
+	import crm staging
 }
 
 api-staging.kubernitimoney.com {
-	import api
+	import api staging
 }

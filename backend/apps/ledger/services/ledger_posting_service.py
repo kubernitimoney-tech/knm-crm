@@ -36,7 +36,10 @@ class LedgerPostingService:
         idempotency_key: str | None = None,
         user=None,
         transaction_date=None,
+        allow_negative: bool = False,
     ) -> LoanLedgerEntry:
+        """Post one entry. ``allow_negative`` lets a collection exceed the ledger
+        outstanding (excess/late charges collected); the balance goes into credit."""
         if idempotency_key:
             existing = LoanLedgerEntry.objects.filter(idempotency_key=idempotency_key).first()
             if existing:
@@ -48,7 +51,7 @@ class LedgerPostingService:
         prior_balance = cls.get_balance(locked_loan.id)
         balance_after = prior_balance + debit_amount - credit_amount
 
-        if balance_after < 0:
+        if balance_after < 0 and not allow_negative:
             raise LedgerPostingError("Ledger balance cannot go negative.")
 
         return LoanLedgerEntry.objects.create(

@@ -262,7 +262,8 @@ export const DashboardPage = () => {
   useTitle('Dashboard');
   const { user } = useAuthStore();
   const dashboardMotivation = useMemo(() => pickEmployeeMotivationLine(), []);
-  const employeeFirstName = user?.first_name?.trim() || user?.full_name?.split(' ')[0] || 'team';
+  const employeeFirstName =
+    user?.display_name?.trim() || user?.first_name?.trim() || user?.full_name?.split(' ')[0] || 'team';
 
   const [dateFilter, setDateFilter] = useState<DashboardDateFilter>('Current Month');
   const [dateRange, setDateRange] = useState<DashboardDateRange>({

@@ -41,8 +41,8 @@ export function StatusWiseLeadsPage() {
   const tabParam = searchParams.get('tab');
   const activeTab: StatusWiseLeadTab = isStatusWiseLeadTab(tabParam) ? tabParam : 'fresh';
 
-  const { hasPermission, isSuperAdmin, isAdmin } = usePermissions();
-  const canTransfer = hasPermission('lead.assign') && (isSuperAdmin || isAdmin);
+  const { hasPermission } = usePermissions();
+  const canTransfer = hasPermission('lead.transfer');
   const canEdit = hasPermission('lead.update');
   const canDelete = hasPermission('lead.delete');
   const { isAuthenticated } = useAuthStore();

@@ -56,16 +56,21 @@ import {
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 import { toast } from '@/components/ui/toast';
-import { User } from '@/types';
 import { cn, formatPersonName } from '@/lib/utils';
-import { AddEmployeeDialog } from '@/components/users/AddEmployeeDialog';
-import { fetchUsers, mapApiUserToListItem } from '@/lib/usersApi';
+import { getApiErrorMessage } from '@/lib/api';
+import { AddUserDialog } from '@/components/users/AddUserDialog';
+import {
+  deactivateUser,
+  fetchUsers,
+  mapApiUserToListItem,
+  type UserListItem,
+} from '@/lib/usersApi';
 import { usePermissions } from '@/hooks/usePermissions';
 
-const STATUSES: User['status'][] = ['Active', 'Inactive', 'Resigned', 'Absconding'];
+const STATUS_FILTERS = ['All', 'Active', 'Inactive', 'Pending Approval', 'Rejected'] as const;
 
 export const UsersPage = () => {
-  useTitle('System Users');
+  useTitle('CRM Users');
   const navigate = useNavigate();
   const { canCreateUser, canAssignRoles, canUi } = usePermissions();
   const actionCol = useDataTableActionColumn({
@@ -74,7 +79,7 @@ export const UsersPage = () => {
     delete: canUi('users', 'user', 'delete'),
   });
   const tableColSpan = actionCol.showColumn ? 7 : 6;
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -94,11 +99,20 @@ export const UsersPage = () => {
     try {
       const isActive =
         statusFilter === 'Active' ? true : statusFilter === 'Inactive' ? false : undefined;
+      const approvalStatus =
+        statusFilter === 'Pending Approval'
+          ? 'pending'
+          : statusFilter === 'Rejected'
+            ? 'rejected'
+            : statusFilter === 'Inactive'
+              ? 'approved' // deactivated after approval, not still awaiting it
+              : undefined;
       const data = await fetchUsers({
         page: currentPage,
         page_size: itemsPerPage,
         search: searchQuery || undefined,
         is_active: isActive,
+        approval_status: approvalStatus,
       });
       setUsers(data.results.map(mapApiUserToListItem));
       setTotalCount(data.count);
@@ -151,8 +165,8 @@ export const UsersPage = () => {
 
     if (sortConfig.key && sortConfig.direction) {
       result.sort((a, b) => {
-        const aVal = a[sortConfig.key as keyof User];
-        const bVal = b[sortConfig.key as keyof User];
+        const aVal = a[sortConfig.key as keyof UserListItem];
+        const bVal = b[sortConfig.key as keyof UserListItem];
 
         if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
@@ -165,7 +179,7 @@ export const UsersPage = () => {
 
   const paginatedUsers = filteredAndSortedUsers;
 
-  const getStatusBadge = (status: User['status']) => (
+  const getStatusBadge = (status: UserListItem['status']) => (
     <Badge className={userStatusBadgeClass(status)}>{status}</Badge>
   );
 
@@ -174,8 +188,8 @@ export const UsersPage = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <Breadcrumbs />
-          <h1 className="text-[22px] font-black text-primary-deep leading-tight">Employee Directory</h1>
-          <p className="text-mid-shade text-xs mt-1 font-medium italic">Manage workforce access and monitoring</p>
+          <h1 className="text-[22px] font-black text-primary-deep leading-tight">CRM Users</h1>
+          <p className="text-mid-shade text-xs mt-1 font-medium italic">Create, approve and manage CRM login access</p>
         </div>
         {canCreateUser && (
           <Button
@@ -183,12 +197,12 @@ export const UsersPage = () => {
             className="h-11 bg-primary-deep text-white rounded-xl shadow-lg shadow-primary-deep/20 px-6 font-bold gap-2 hover:opacity-95 transition-all"
           >
             <UserPlus size={18} />
-            Add New Employee
+            Add CRM User
           </Button>
         )}
       </div>
 
-      <AddEmployeeDialog
+      <AddUserDialog
         isOpen={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         canAssignRoles={canAssignRoles}
@@ -206,7 +220,7 @@ export const UsersPage = () => {
       <div className="space-y-3">
         <div className={dataTableFilterToolbarClass}>
           <DataTableSearchInput
-            placeholder={searchPlaceholder('Name', 'Email', 'or Employee ID')}
+            placeholder={searchPlaceholder('Name', 'Email', 'or Username')}
             value={searchQuery}
             onChange={(value) => {
               setSearchQuery(value);
@@ -222,11 +236,11 @@ export const UsersPage = () => {
                 <SelectValue placeholder={selectPlaceholder('Status')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-                <SelectItem value="Resigned">Resigned</SelectItem>
-                <SelectItem value="Absconding">Absconding</SelectItem>
+                {STATUS_FILTERS.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status === 'All' ? 'All Status' : status}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
@@ -243,7 +257,7 @@ export const UsersPage = () => {
               <TableRow className={dataTableHeaderRowClass}>
                 <TableHead className={cn(dataTableHeadClass, 'w-[60px] pl-4 text-center')}>S.No</TableHead>
                 <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('name')}>
-                  <div className="flex items-center">Employee Info {getSortIcon('name')}</div>
+                  <div className="flex items-center">User {getSortIcon('name')}</div>
                 </TableHead>
                 <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('role')}>
                   <div className="flex items-center">Role {getSortIcon('role')}</div>
@@ -270,7 +284,7 @@ export const UsersPage = () => {
                     <TableCell className={nameCellClass}>
                       <div className="flex flex-col gap-0.5">
                         <DataTableCustomerNameCell label={formatPersonName(user.name)} tone="neutral" />
-                        <span className="text-[10px] text-slate-400 uppercase tracking-tighter">{user.employeeId} • {user.email}</span>
+                        <span className="text-[10px] text-slate-400 tracking-tighter">@{user.username} • {user.email}</span>
                       </div>
                     </TableCell>
                     <TableCell className={dataTableCellClass}>{user.role}</TableCell>
@@ -289,16 +303,18 @@ export const UsersPage = () => {
                         viewTo={`/master/users/${user.id}`}
                         onEdit={() => navigate(`/master/users/${user.id}`)}
                         onDelete={async () => {
-                          toast({
-                            title: 'Delete not available',
-                            description: 'User deletion must be performed from the admin console.',
-                            variant: 'info',
-                          });
+                          try {
+                            await deactivateUser(user.id);
+                            toast({ title: 'User deactivated', variant: 'success' });
+                            void loadUsers();
+                          } catch (err) {
+                            toast({ title: 'Could not deactivate user', description: getApiErrorMessage(err), variant: 'error' });
+                          }
                         }}
                         viewTitle="View Profile"
                         editTitle="Edit Details"
-                        deleteTitle="Delete user?"
-                        deleteDescription={`${user.name} will be permanently removed.`}
+                        deleteTitle="Deactivate user?"
+                        deleteDescription={`${user.name} will no longer be able to sign in. Their records are kept.`}
                       />
                     </TableCell>
                     )}

@@ -1,19 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
-  Clock,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
-import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
+import { format, subMonths } from 'date-fns';
+import { matchesPeriodFilter } from '@/lib/periodFilter';
+import { formatAppDateOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/badge';
 import { leadPipelineStatusBadgeClass } from '@/lib/badgeStyles';
-import { CibilScoreBadge } from '@/components/ui/CibilScoreBadge';
 import { ExportButton } from '@/components/ui/ExportButton';
 import {
   Select,
@@ -41,7 +39,6 @@ import {
   dataTableHeaderClass,
   dataTableHeaderRowClass,
   dataTableSortableHeadClass,
-  indexCellClass,
   nameCellClass,
   dataTableCardClass,
   dataTableFilterToolbarClass,
@@ -50,7 +47,6 @@ import {
   DataTableSearchInput,
   DataTableClearFiltersButton,
   DataTableFooter,
-  DataTablePageSizeSelect,
 } from '@/components/ui/data-table';
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatCurrency, formatPersonName, formatRatePercent } from '@/lib/utils';
@@ -65,6 +61,92 @@ import {
 } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 
+type CashPendingRow = ReturnType<typeof usePipelineRows>['rows'][number];
+
+/** Blank values show as "-" in the table and the export. */
+function dash(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  const text = String(value).trim();
+  return text === '' || text === '—' ? '-' : text;
+}
+
+function money(value: unknown): string {
+  const text = dash(value);
+  if (text === '-') return text;
+  const number = Number(text);
+  return Number.isFinite(number) ? formatCurrency(number) : text;
+}
+
+function exportMoney(value: unknown): string | number {
+  const text = dash(value);
+  if (text === '-') return text;
+  const number = Number(text);
+  return Number.isFinite(number) ? number : text;
+}
+
+interface CashPendingColumn {
+  label: string;
+  cell: (row: CashPendingRow) => React.ReactNode;
+  exportValue: (row: CashPendingRow) => string | number;
+  sortKey?: string;
+  align?: 'right' | 'center';
+  primary?: boolean;
+}
+
+const CASH_PENDING_COLUMNS: CashPendingColumn[] = [
+  {
+    label: 'Lead ID',
+    sortKey: 'leadId',
+    primary: true,
+    cell: (row) => <DataTablePrimaryCell label={row.leadId} to={`/leads/all/${row.id}`} />,
+    exportValue: (row) => dash(row.leadId),
+  },
+  {
+    label: 'Name',
+    sortKey: 'customerName',
+    primary: true,
+    cell: (row) => (
+      <DataTableCustomerNameCell label={formatPersonName(row.customerName)} to={leadDetailsPath(row.id)} />
+    ),
+    exportValue: (row) => dash(row.customerName),
+  },
+  { label: 'Branch', cell: (row) => dash(row.branch), exportValue: (row) => dash(row.branch) },
+  { label: 'Loan ID', cell: (row) => dash(row.loanNo), exportValue: (row) => dash(row.loanNo) },
+  { label: 'Email', cell: (row) => dash(row.email), exportValue: (row) => dash(row.email) },
+  { label: 'Mobile No.', cell: (row) => dash(row.mobile), exportValue: (row) => dash(row.mobile) },
+  { label: 'Loan Amt.', sortKey: 'loanAmount', align: 'right', cell: (row) => money(row.loanAmount), exportValue: (row) => exportMoney(row.loanAmount) },
+  { label: 'Repayment Amt', align: 'right', cell: (row) => money(row.repayAmount), exportValue: (row) => exportMoney(row.repayAmount) },
+  { label: 'Collected Amount', align: 'right', cell: (row) => money(row.collectedAmount), exportValue: (row) => exportMoney(row.collectedAmount) },
+  { label: 'Till Date Amount', align: 'right', cell: (row) => money(row.tillDateAmount), exportValue: (row) => exportMoney(row.tillDateAmount) },
+  { label: 'Processing Fee', align: 'right', cell: (row) => money(row.processingFee), exportValue: (row) => exportMoney(row.processingFee) },
+  { label: 'ROI', align: 'center', cell: (row) => formatRatePercent(row.roi), exportValue: (row) => row.roi ?? '-' },
+  { label: 'Tenure', align: 'center', cell: (row) => dash(row.tenure), exportValue: (row) => dash(row.tenure) },
+  {
+    label: 'Repay Date',
+    sortKey: 'repayDate',
+    cell: (row) => formatAppDateOrFallback(row.repayDate, '-'),
+    exportValue: (row) => formatAppDateOrFallback(row.repayDate, '-'),
+  },
+  {
+    label: 'Disbursal Date',
+    sortKey: 'disbursalDate',
+    cell: (row) => formatAppDateOrFallback(row.disbursalDate, '-'),
+    exportValue: (row) => formatAppDateOrFallback(row.disbursalDate, '-'),
+  },
+  {
+    label: 'Status',
+    align: 'center',
+    cell: (row) => (dash(row.status) === '-' ? '-' : <Badge className={leadPipelineStatusBadgeClass(row.status)}>{row.status}</Badge>),
+    exportValue: (row) => dash(row.status),
+  },
+  { label: 'Credit By', cell: (row) => dash(formatPersonName(row.creditBy ?? '')), exportValue: (row) => dash(row.creditBy) },
+  { label: 'Customer Type', cell: (row) => dash(row.customerType), exportValue: (row) => dash(row.customerType) },
+];
+
+function alignClass(align?: 'right' | 'center') {
+  return align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : '';
+}
+
 export const CashPendingPage = () => {
   useTitle('Cash Pending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,17 +156,17 @@ export const CashPendingPage = () => {
     to: undefined,
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({
-    key: 'date',
-    direction: 'desc'
+    key: 'repayDate',
+    direction: 'asc'
   });
   const { rows: cashPendingRows, isLoading, refetch } = usePipelineRows('cash-pending');
   const { openEditByLeadUuid, setDeleteTarget, dialogs: leadActionDialogs } = useLeadListingActions({
     onDeleted: refetch,
   });
   const actionCol = useLeadListingActionColumn();
-  const tableColSpan = actionCol.showColumn ? 18 : 17;
+  const tableColSpan = CASH_PENDING_COLUMNS.length + (actionCol.showColumn ? 1 : 0);
 
   const handleSort = (key: string) => {
     setSortConfig(prev => ({
@@ -109,14 +191,6 @@ export const CashPendingPage = () => {
     setCurrentPage(1);
   };
 
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      total: cashPendingRows.length,
-      amount: cashPendingRows.reduce((acc, curr) => acc + (curr.loanAmount || 0), 0)
-    };
-  }, [cashPendingRows]);
-
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {
     const result = cashPendingRows.filter(lead => {
@@ -127,24 +201,8 @@ export const CashPendingPage = () => {
         lead.leadId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lead.loanNo?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      let matchesDate = true;
-      const leadDate = new Date(lead.date);
-
-      if (dateFilter === 'Today') {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(new Date()),
-          end: endOfDay(new Date())
-        });
-      } else if (dateFilter === 'Last 7 Days') {
-        matchesDate = leadDate >= subDays(new Date(), 7);
-      } else if (dateFilter === 'Current Month') {
-        matchesDate = leadDate >= startOfMonth(new Date());
-      } else if (dateFilter === 'Custom' && dateRange.from && dateRange.to) {
-        matchesDate = isWithinInterval(leadDate, {
-          start: startOfDay(dateRange.from),
-          end: endOfDay(dateRange.to)
-        });
-      }
+      // Period filter applies to the repay date.
+      const matchesDate = matchesPeriodFilter(lead.repayDate, dateFilter, dateRange);
 
       return matchesSearch && matchesDate;
     });
@@ -170,43 +228,10 @@ export const CashPendingPage = () => {
     currentPage * itemsPerPage
   );
 
+  // Export follows the same filters (repay date, search) and columns as the table.
   const handleExport = () => {
-    const headers = [
-      'S.No',
-      'Lead ID',
-      'Name',
-      'Branch',
-      'Loan ID',
-      'Loan Type',
-      'Email',
-      'Mobile No.',
-      'Loan Amt.',
-      'Monthly Income',
-      'Processing Fee',
-      'ROI',
-      'Tenure',
-      'Repay Date',
-      'Date'
-    ];
-
-    const data = filteredAndSorted.map((lead, index) => [
-      index + 1,
-      lead.leadId,
-      lead.customerName,
-      lead.branch,
-      lead.loanNo,
-      lead.loanType,
-      lead.email,
-      lead.mobile,
-      lead.loanAmount,
-      lead.monthlyIncome,
-      lead.processingFee,
-      lead.roi,
-      lead.tenure,
-      lead.repayDate,
-      lead.date
-    ]);
-
+    const headers = CASH_PENDING_COLUMNS.map((column) => column.label);
+    const data = filteredAndSorted.map((row) => CASH_PENDING_COLUMNS.map((column) => column.exportValue(row)));
     exportRowsToExcel(headers, data, `cash_pending_records_${format(new Date(), 'yyyy-MM-dd')}`);
   };
 
@@ -239,6 +264,7 @@ export const CashPendingPage = () => {
           <div className="hidden h-5 w-px shrink-0 bg-slate-200 sm:block" />
 
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Repay date</span>
             <Select value={dateFilter} onValueChange={(val) => { setDateFilter(val); setCurrentPage(1); }}>
               <SelectTrigger className={cn('w-[128px]', dataTableFilterControlClass)}>
                 <SelectValue placeholder={selectPlaceholder('Period')} />
@@ -256,7 +282,7 @@ export const CashPendingPage = () => {
               <DateRangePicker
                 from={dateRange.from}
                 to={dateRange.to}
-                onChange={setDateRange}
+                onChange={(range) => { setDateRange({ from: range.from, to: range.to }); setCurrentPage(1); }}
                 defaultMonth={subMonths(new Date(), 1)}
                 triggerClassName={dataTableDateRangeTriggerClass}
               />
@@ -273,31 +299,23 @@ export const CashPendingPage = () => {
           <Table>
             <TableHeader className={dataTableHeaderClass}>
               <TableRow className={dataTableHeaderRowClass}>
-                <TableHead className={cn(dataTableHeadClass, 'w-[60px] pl-4 text-center')}>S.No</TableHead>
-                <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('leadId')}>
-                  <div className="flex items-center">Lead ID {getSortIcon('leadId')}</div>
-                </TableHead>
-                <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('customerName')}>
-                  <div className="flex items-center">Name {getSortIcon('customerName')}</div>
-                </TableHead>
-                <TableHead className={dataTableHeadClass}>Branch</TableHead>
-                <TableHead className={dataTableHeadClass}>Loan ID</TableHead>
-                <TableHead className={dataTableHeadClass}>Loan Type</TableHead>
-                <TableHead className={dataTableHeadClass}>Email</TableHead>
-                <TableHead className={dataTableHeadClass}>Mobile No.</TableHead>
-                <TableHead className={cn(dataTableSortableHeadClass, 'text-right')} onClick={() => handleSort('loanAmount')}>
-                  <div className="flex items-center justify-end">Loan Amt. {getSortIcon('loanAmount')}</div>
-                </TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-center')}>ROI</TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-center')}>Tenure</TableHead>
-                <TableHead className={dataTableHeadClass}>Repay Date</TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-right')}>Processing Fee</TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-right')}>Monthly Income</TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-center')}>CIBIL</TableHead>
-                <TableHead className={cn(dataTableHeadClass, 'text-center')}>Status</TableHead>
-                <TableHead className={dataTableSortableHeadClass} onClick={() => handleSort('date')}>
-                  <div className="flex items-center justify-end">Date {getSortIcon('date')}</div>
-                </TableHead>
+                {CASH_PENDING_COLUMNS.map((column) =>
+                  column.sortKey ? (
+                    <TableHead
+                      key={column.label}
+                      className={cn(dataTableSortableHeadClass, alignClass(column.align))}
+                      onClick={() => handleSort(column.sortKey as string)}
+                    >
+                      <div className={cn('flex items-center', column.align === 'right' && 'justify-end')}>
+                        {column.label} {getSortIcon(column.sortKey)}
+                      </div>
+                    </TableHead>
+                  ) : (
+                    <TableHead key={column.label} className={cn(dataTableHeadClass, alignClass(column.align))}>
+                      {column.label}
+                    </TableHead>
+                  ),
+                )}
                 <DataTableActionHead visible={actionCol.showColumn} />
               </TableRow>
             </TableHeader>
@@ -305,53 +323,16 @@ export const CashPendingPage = () => {
               {isLoading ? (
                 <TableLoadingRow colSpan={tableColSpan} message="Loading cash pending…" />
               ) : paginated.length > 0 ? (
-                paginated.map((lead, idx) => (
+                paginated.map((lead) => (
                   <TableRow key={lead.id} className={dataTableBodyRowClass}>
-                    <TableCell className={indexCellClass}>
-                      {(currentPage - 1) * itemsPerPage + idx + 1}
-                    </TableCell>
-                    <TableCell className={nameCellClass}>
-                      <DataTablePrimaryCell
-                        label={lead.leadId}
-                        to={`/leads/all/${lead.id}`}
-                      />
-                    </TableCell>
-                    <TableCell className={nameCellClass}>
-                      <DataTableCustomerNameCell
-                        label={formatPersonName(lead.customerName)}
-                        to={leadDetailsPath(lead.id)}
-                      />
-                    </TableCell>
-                    <TableCell className={dataTableCellClass}>{lead.branch}</TableCell>
-                    <TableCell className={dataTableCellClass}>{lead.loanNo}</TableCell>
-                    <TableCell className={dataTableCellClass}>{lead.loanType}</TableCell>
-                    <TableCell className={dataTableCellClass}>{lead.email}</TableCell>
-                    <TableCell className={dataTableCellClass}>{lead.mobile}</TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-right')}>
-                      {formatCurrency(lead.loanAmount)}
-                    </TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-center')}>{formatRatePercent(lead.roi)}</TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-center')}>{lead.tenure}</TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'uppercase')}>
-                       {formatAppDateOrFallback(lead.repayDate)}
-                    </TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-right')}>
-                      {formatCurrency(lead.processingFee)}
-                    </TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-right')}>
-                      {formatCurrency(lead.monthlyIncome)}
-                    </TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-center')}>
-                      <CibilScoreBadge score={lead.cibil} />
-                    </TableCell>
-                    <TableCell className={cn(dataTableCellClass, 'text-center')}>
-                      <Badge className={leadPipelineStatusBadgeClass(lead.status)}>
-                        {lead.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={dataTableCellClass}>
-                      {formatAppDateTimeOrFallback(lead.date)}
-                    </TableCell>
+                    {CASH_PENDING_COLUMNS.map((column) => (
+                      <TableCell
+                        key={column.label}
+                        className={cn(column.primary ? nameCellClass : dataTableCellClass, alignClass(column.align))}
+                      >
+                        {column.cell(lead)}
+                      </TableCell>
+                    ))}
                     {actionCol.showColumn && (
                     <TableCell className={dataTableActionCellClass}>
                       <DataTableListingActions

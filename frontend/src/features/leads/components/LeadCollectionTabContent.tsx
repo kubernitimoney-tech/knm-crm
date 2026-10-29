@@ -86,6 +86,7 @@ export interface LeadCollectionEntry {
   gatewayReference: string;
   remarks: string;
   recordedOn: string;
+  collectedBy?: string;
 }
 
 export interface LeadRemarkEntry {
@@ -191,6 +192,7 @@ function CollectionViewDialog({
               { label: 'Order reference', value: collectionDetailValue(entry.gatewayReference) },
               { label: 'Date & time', value: formatAppDateTimeOrFallback(entry.collectionDateTime) },
               { label: 'Recorded on', value: formatAppDateTimeOrFallback(entry.recordedOn) },
+              { label: 'Collected by', value: collectionDetailValue(entry.collectedBy ?? '') },
               { label: 'Status', value: <CollectionStatusBadge status={entry.status} /> },
               { label: 'Source', value: collectionDetailValue(entry.collectionSource) },
               { label: 'Remarks', value: collectionDetailValue(entry.remarks) },
@@ -234,6 +236,7 @@ function CollectionDetailsTable({
           <TableHead className={sectionHeadClassName()}>Mode</TableHead>
           <TableHead className={sectionHeadClassName()}>UTR</TableHead>
           <TableHead className={sectionHeadClassName()}>Date & Time</TableHead>
+          <TableHead className={sectionHeadClassName()}>Collected By</TableHead>
           <TableHead className={sectionHeadClassName()}>Status</TableHead>
           <TableHead className={sectionHeadClassName()}>Source</TableHead>
           <TableHead className={sectionHeadClassName()}>Remarks</TableHead>
@@ -251,6 +254,7 @@ function CollectionDetailsTable({
             <TableCell className={cn(sectionCellClassName, 'whitespace-nowrap')}>
               {formatAppDateTimeOrFallback(entry.collectionDateTime)}
             </TableCell>
+            <TableCell className={sectionCellClassName}>{entry.collectedBy || '—'}</TableCell>
             <TableCell className={sectionCellClassName}>
               <CollectionStatusBadge status={entry.status} />
             </TableCell>
@@ -389,6 +393,9 @@ export function LeadCollectionTabContent({
   const [remarkFormError, setRemarkFormError] = useState<string | null>(null);
   const [isSubmittingRemark, setIsSubmittingRemark] = useState(false);
   const [repayDate, setRepayDate] = useState<string>('');
+  const [loanStatus, setLoanStatus] = useState<string>('');
+  const [loanClosedAt, setLoanClosedAt] = useState<string>('');
+  const isLoanClosed = loanStatus === 'closed';
 
   const collectionStatusOptions = useMemo(
     () => collectionStatusOptionsForRepayDate(collectionForm.collectionDateTime, repayDate),
@@ -419,22 +426,28 @@ export function LeadCollectionTabContent({
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
+  const loadLoanState = useCallback(async () => {
     if (!leadId) return;
-    fetchLeadDisbursal(leadId)
-      .then((response) => {
-        const tillDateAmount = response.loan_summary?.till_date_amount;
-        const repay = response.disbursal?.repay_date ?? '';
-        setRepayDate(repay);
-        if (tillDateAmount) {
-          setCollectionForm((prev) => ({
-            ...prev,
-            tillDateAmount: prev.tillDateAmount || tillDateAmount,
-          }));
-        }
-      })
-      .catch(() => undefined);
-  }, [leadId, defaultTillDateAmount]);
+    try {
+      const response = await fetchLeadDisbursal(leadId);
+      const tillDateAmount = response.loan_summary?.till_date_amount;
+      setRepayDate(response.disbursal?.repay_date ?? '');
+      setLoanStatus(response.loan_status ?? '');
+      setLoanClosedAt(response.loan_closed_at ?? '');
+      if (tillDateAmount) {
+        setCollectionForm((prev) => ({
+          ...prev,
+          tillDateAmount: prev.tillDateAmount || tillDateAmount,
+        }));
+      }
+    } catch {
+      // Collection form still works without the summary.
+    }
+  }, [leadId]);
+
+  useEffect(() => {
+    void loadLoanState();
+  }, [loadLoanState, defaultTillDateAmount]);
 
   useEffect(() => {
     if (!collectionForm.status) return;
@@ -523,6 +536,7 @@ export function LeadCollectionTabContent({
           : [mapped, ...prev],
       );
       onCollectionSaved?.(response.lead_status_display, response.lead_status);
+      void loadLoanState();
       setCollectionForm(emptyCollectionForm(defaultTillDateAmount));
       setEditingCollectionId(null);
       // Keep accordion open so the new/updated row stays visible in the table below.
@@ -542,6 +556,7 @@ export function LeadCollectionTabContent({
     try {
       const approved = mapCollectionFromApi(await approveLeadCollection(leadId, entryId));
       setCollections((prev) => prev.map((entry) => (entry.id === entryId ? approved : entry)));
+      void loadLoanState();
       toast({ title: 'Payment approved', variant: 'success' });
     } catch (error) {
       toast({ title: getApiErrorMessage(error), variant: 'error' });
@@ -572,6 +587,7 @@ export function LeadCollectionTabContent({
         setAccordionValue('');
       }
       onCollectionSaved?.(response.lead_status_display, response.lead_status);
+      void loadLoanState();
       toast({ title: 'Collection deleted', variant: 'success' });
     } catch (error) {
       toast({ title: getApiErrorMessage(error), variant: 'error' });
@@ -676,11 +692,22 @@ export function LeadCollectionTabContent({
                 <CreditCard size={15} />
               </div>
               <span className="text-xs font-bold uppercase tracking-wider">
-                {editingCollectionId ? 'Edit Collection' : 'Add Collection'}
+                {isLoanClosed
+                  ? 'Collections'
+                  : editingCollectionId
+                    ? 'Edit Collection'
+                    : 'Add Collection'}
               </span>
             </div>
           </AccordionTrigger>
           <AccordionContent className="pb-5 space-y-4">
+            {isLoanClosed ? (
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-[11px] font-medium leading-relaxed text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                Loan closed{loanClosedAt ? ` on ${formatAppDateTimeOrFallback(loanClosedAt)}` : ''} — no further
+                interest or penalty. Wrong collection? Delete it below to reopen the loan.
+              </p>
+            ) : (
+            <>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
               Record repayment collection against this loan.
             </p>
@@ -822,10 +849,12 @@ export function LeadCollectionTabContent({
                 </Button>
               </div>
             </div>
+            </>
+            )}
 
             <CollectionDetailsTable
               entries={collections}
-              canEdit={canEdit}
+              canEdit={canEdit && !isLoanClosed}
               canDelete={canDelete}
               onApprove={handleApproveCollection}
               onEdit={handleEditCollection}

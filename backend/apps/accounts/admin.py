@@ -9,31 +9,82 @@ from apps.accounts.models import (
     RolePermission,
     RolePermissionChangeRecord,
     User,
+    UserApproval,
     UserPermission,
+    UserProfile,
     UserRole,
 )
 
 
+class UserProfileInline(admin.StackedInline):
+    model = UserProfile
+    can_delete = False
+    fields = ("mobile_number", "branch", "address")
+
+
+class UserApprovalInline(admin.StackedInline):
+    model = UserApproval
+    fk_name = "user"
+    can_delete = False
+    extra = 0
+    # Decisions go through the CRM so the maker-checker rules apply.
+    readonly_fields = (
+        "status",
+        "attachment",
+        "attachment_name",
+        "request_remarks",
+        "created_by",
+        "created_at",
+        "approved_by",
+        "approved_at",
+        "approver_remarks",
+    )
+    fields = readonly_fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
+    inlines = (UserProfileInline, UserApprovalInline)
     list_display = (
         "employee_code",
+        "username",
         "email",
         "first_name",
         "last_name",
+        "display_name",
         "is_active",
         "is_staff",
         "is_verified",
         "last_login",
     )
     list_filter = ("is_active", "is_staff", "is_verified", "is_superuser")
-    search_fields = ("employee_code", "email", "first_name", "last_name", "mobile_number")
+    search_fields = (
+        "employee_code",
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "display_name",
+        "profile__mobile_number",
+    )
     ordering = ("email",)
     fieldsets = (
-        (None, {"fields": ("email", "password")}),
-        ("Personal", {"fields": ("first_name", "last_name", "mobile_number")}),
+        (None, {"fields": ("email", "username", "password")}),
+        (
+            "Personal",
+            {"fields": ("first_name", "middle_name", "last_name", "display_name")},
+        ),
         ("Status", {"fields": ("is_active", "is_staff", "is_verified", "is_superuser")}),
+        (
+            "Password policy",
+            {"fields": ("must_change_password", "password_expires_at", "password_changed_at")},
+        ),
+        ("Audit", {"fields": ("created_by", "updated_by", "created_at", "updated_at")}),
     )
+    readonly_fields = ("username", "created_by", "updated_by", "created_at", "updated_at")
     add_fieldsets = ((None, {"classes": ("wide",), "fields": ("email", "password1", "password2")}),)
 
 

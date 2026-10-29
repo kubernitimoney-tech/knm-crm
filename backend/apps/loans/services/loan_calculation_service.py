@@ -13,6 +13,11 @@ from apps.leads.models import LeadStatus
 from apps.loans.models import LoanStatus
 
 PERCENTAGE_DISBURSAL_TYPE = "percentage"
+_CLOSING_LABELS = {
+    "close": "Closed",
+    "payday_pre_close": "Payday Pre-Close",
+    "settlement": "Settlement",
+}
 DEFAULT_PERCENTAGE_PENALTY_RATE = Decimal("0.25")
 
 
@@ -187,6 +192,10 @@ class LoanCalculationService:
         if value is None:
             return None
         if isinstance(value, datetime):
+            # Aware datetimes are UTC; take the business-day date in local time
+            # (a 01:00 IST collection is still that IST day, not the UTC day before).
+            if timezone.is_aware(value):
+                value = timezone.localtime(value)
             return value.date()
         return value
 
@@ -240,8 +249,11 @@ class LoanCalculationService:
     def _positive_penalty_rate(cls, raw) -> Decimal | None:
         if raw in (None, ""):
             return None
-        rate = Decimal(str(raw))
-        return rate if rate > 0 else None
+        try:
+            rate = Decimal(str(raw).strip().rstrip("%"))
+        except (ArithmeticError, ValueError):
+            return None
+        return rate if rate.is_finite() and rate > 0 else None
 
     @classmethod
     def _resolve_product_for_penalty(cls, *, loan=None, application=None):
@@ -366,10 +378,39 @@ class LoanCalculationService:
         )
 
     @classmethod
+    def accrual_end_date(cls, loan) -> date | None:
+        """Last day interest and penalty accrue, or None while the loan is open.
+
+        A closed loan stops accruing on the day it was closed, whether it was
+        closed by a collection or manually by the business. Older rows closed
+        without ``closed_at`` fall back to the status history, then the last
+        confirmed collection.
+        """
+        if loan is None or loan.status != LoanStatus.CLOSED:
+            return None
+        if loan.closed_at:
+            return timezone.localtime(loan.closed_at).date()
+        history = (
+            loan.status_history.filter(to_status=LoanStatus.CLOSED)
+            .order_by("-changed_at")
+            .values_list("changed_at", flat=True)
+            .first()
+        )
+        if history:
+            return timezone.localtime(history).date()
+        last_repayment = cls._last_confirmed_repayment(loan)
+        if last_repayment is not None and last_repayment.payment_date:
+            return timezone.localtime(last_repayment.payment_date).date()
+        return timezone.localtime(loan.updated_at).date() if loan.updated_at else None
+
+    @classmethod
     def compute_for_application(
         cls, application, *, loan=None, as_of: date | None = None
     ) -> LoanSummaryMetrics:
         loan = loan if loan is not None else getattr(application, "loan", None)
+        accrual_end = cls.accrual_end_date(loan)
+        if accrual_end is not None and (as_of is None or as_of > accrual_end):
+            as_of = accrual_end
         details = dict(application.disbursal_sheet_details or {})
         disbursal_type = str(details.get("disbursal_type") or "")
         decision = application.decisions.filter(decision="approved").order_by("-decided_at").first()
@@ -498,6 +539,10 @@ class LoanCalculationService:
             return "part_payment", "Part Payment"
 
         last_repayment = cls._last_confirmed_repayment(loan)
+        chosen = getattr(last_repayment, "collection_status", "") if last_repayment else ""
+        if loan.status == LoanStatus.CLOSED and chosen in _CLOSING_LABELS:
+            # Accounts closed this loan explicitly (possibly on a short payment).
+            return chosen, _CLOSING_LABELS[chosen]
         if as_of is None and last_repayment is not None:
             as_of = cls.to_date(last_repayment.payment_date)
 

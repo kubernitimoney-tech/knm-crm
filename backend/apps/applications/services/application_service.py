@@ -40,6 +40,7 @@ from apps.customers.services.bank_account_service import (
 from apps.leads.models import LeadStatus
 from apps.leads.services.lead_conversion_service import LeadConversionService
 from apps.leads.services.lead_status_service import change_lead_status
+from apps.loans.models import Loan
 from apps.loans.services.loan_service import LoanService, LoanServiceError
 from apps.notifications.services.notification_service import NotificationService
 from apps.organization.models import Branch
@@ -398,11 +399,17 @@ class ApplicationService:
                     application=application,
                 )
             NotificationService.notify_application_approved(application)
-            try:
-                LoanService.create_from_application(user=user, application=application)
-            except LoanServiceError as exc:
-                if "already exists" not in str(exc).lower():
-                    raise ApplicationServiceError(str(exc)) from exc
+            existing_loan = Loan.objects.filter(application=application).first()
+            if existing_loan is not None:
+                LoanService.sync_with_sanction(
+                    user=user, loan=existing_loan, decision=decision_record
+                )
+            else:
+                try:
+                    LoanService.create_from_application(user=user, application=application)
+                except LoanServiceError as exc:
+                    if "already exists" not in str(exc).lower():
+                        raise ApplicationServiceError(str(exc)) from exc
         else:
             cls._cleanup_on_rejection(user=user, application=application)
             application.decided_at = timezone.now()

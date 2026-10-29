@@ -1,12 +1,12 @@
 import logging
 import time
-from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from apps.core.responses import error_response, success_response
+from apps.core.throttling import PublicLookupThrottle
 from apps.integrations.cashfree.orders import (
     CashfreeOrderError,
     create_order,
@@ -15,7 +15,9 @@ from apps.integrations.cashfree.orders import (
 )
 from apps.repayments.services.online_repayment_service import (
     find_cash_pending_loan,
+    gateway_payment_time,
     loan_lookup_payload,
+    loan_payment_amount,
     payable_amount,
     record_online_payment,
 )
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 class PublicLoanRepaymentLookupAPIView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [PublicLookupThrottle]
 
     def post(self, request):
         mobile = str(request.data.get("mobile") or "")
@@ -41,6 +44,7 @@ class PublicLoanRepaymentLookupAPIView(APIView):
 class PublicLoanRepaymentCheckoutAPIView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
+    throttle_classes = [PublicLookupThrottle]
 
     def post(self, request):
         mobile = str(request.data.get("mobile") or "")
@@ -98,14 +102,14 @@ class PublicLoanRepaymentConfirmAPIView(APIView):
             return error_response(message="Payment is not successful yet.", status_code=404)
         tags = order.get("order_tags") if isinstance(order.get("order_tags"), dict) else {}
         loan_id = str(tags.get("loan_id") or "").strip()
-        try:
-            amount = Decimal(str(payment.get("payment_amount") or order.get("order_amount")))
-        except (InvalidOperation, TypeError):
+        amount = loan_payment_amount(order=order, payment=payment)
+        if amount is None:
             return error_response(message="Payment amount was missing.", status_code=400)
         record_online_payment(
             loan_id=loan_id,
             order_id=order_id,
             amount=amount,
             utr=str(payment.get("cf_payment_id") or ""),
+            paid_at=gateway_payment_time(payment),
         )
         return success_response(message="Payment received and waiting for approval.")

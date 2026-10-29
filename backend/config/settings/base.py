@@ -112,10 +112,17 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 10},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {"NAME": "apps.accounts.password_validation.CharacterMixValidator"},
 ]
+
+# How long an admin-issued temporary password stays usable before first sign-in.
+TEMPORARY_PASSWORD_TTL_HOURS = env.int("TEMPORARY_PASSWORD_TTL_HOURS", default=72)
 
 LANGUAGE_CODE = "en-in"
 TIME_ZONE = env("TIME_ZONE", default="Asia/Kolkata")
@@ -125,8 +132,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
+    # Uploaded files (KYC, agreements, video KYC) are only reachable through
+    # signed, expiring URLs served by apps.core.media.signed_media_view.
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "apps.core.media.SignedMediaStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
@@ -134,6 +143,8 @@ STORAGES = {
 }
 MEDIA_URL = env("MEDIA_URL", default="/media/")
 MEDIA_ROOT = env.path("MEDIA_ROOT", default=BASE_DIR / "media")
+# How long a signed media link stays valid after the API returns it.
+MEDIA_URL_TTL_SECONDS = env.int("MEDIA_URL_TTL_SECONDS", default=60 * 60)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -181,6 +192,19 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
+    # Only unauthenticated traffic (public website endpoints, login) is
+    # throttled globally; sensitive public endpoints add stricter scopes.
+    "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.AnonRateThrottle",),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("THROTTLE_ANON_RATE", default="120/min"),
+        "public_lookup": env("THROTTLE_PUBLIC_LOOKUP_RATE", default="30/hour"),
+        "otp": env("THROTTLE_OTP_RATE", default="10/hour"),
+        "login": env("THROTTLE_LOGIN_RATE", default="10/min"),
+        "password_change": env("THROTTLE_PASSWORD_CHANGE_RATE", default="10/hour"),
+    },
+    # Number of reverse proxies in front of Django that append to
+    # X-Forwarded-For (Caddy in production). 0 = trust REMOTE_ADDR only.
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
 }
 
 # JWT (SimpleJWT config used by our custom auth layer)
@@ -194,6 +218,9 @@ SIMPLE_JWT = {
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
 }
+
+# Demo seed passwords (README) are only allowed outside staging/production.
+ALLOW_DEMO_PASSWORDS = env.bool("ALLOW_DEMO_PASSWORDS", default=True)
 
 # RBAC cache key pattern
 RBAC_PERMISSION_CACHE_PREFIX = "user"

@@ -28,17 +28,29 @@ def get_customer_list_queryset():
     )
 
 
+# A closed loan was still disbursed: closure moves the application to CLOSED.
+DISBURSED_APPLICATION_STATUSES = frozenset(
+    {
+        ApplicationStatus.DISBURSED,
+        ApplicationStatus.DISBURSAL_SHEET_SENT,
+        ApplicationStatus.CLOSED,
+    }
+)
+
+
+def _application_was_disbursed(application) -> bool:
+    if application.status in DISBURSED_APPLICATION_STATUSES:
+        return True
+    loan = getattr(application, "loan", None)
+    return bool(loan and not loan.is_deleted and loan.disbursed_at)
+
+
 def _compute_lead_stats(leads_qs):
     """Per-customer lead counts for profile KPI cards."""
-    leads = leads_qs.select_related("converted_application")
+    leads = leads_qs.select_related("converted_application", "converted_application__loan")
     applied = leads.count()
     disbursed = 0
     rejected = 0
-
-    disbursed_app_statuses = {
-        ApplicationStatus.DISBURSED,
-        ApplicationStatus.DISBURSAL_SHEET_SENT,
-    }
 
     disbursed_lead_ids = set()
     rejected_lead_ids = set()
@@ -49,7 +61,7 @@ def _compute_lead_stats(leads_qs):
             if application.status == ApplicationStatus.REJECTED:
                 rejected += 1
                 rejected_lead_ids.add(lead.id)
-            elif application.status in disbursed_app_statuses:
+            elif _application_was_disbursed(application):
                 disbursed += 1
                 disbursed_lead_ids.add(lead.id)
         elif lead.status == LeadStatus.NOT_INTERESTED:

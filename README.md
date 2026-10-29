@@ -5,7 +5,7 @@ Full-stack FinTech LMS: **Django REST API** (`backend/`) + **React dashboard** (
 ## Project layout
 
 ```
-lms/
+knm-crm/
 ├── docker-compose.yml   # ← use this (repo root)
 ├── backend/             # Django 5.2 API, PostgreSQL, Redis, Celery, RBAC
 │   └── apps/
@@ -15,7 +15,7 @@ lms/
 │       ├── loans, ledger, repayments, collections
 │       ├── documents, workflow, activities, audit_logs
 │       └── dashboard, reports, notifications
-└── frontend/            # React (Vite) + TypeScript UI (LMS employee app, :3000)
+└── frontend/            # React (Vite) + TypeScript UI (CRM employee app, :3000)
 └── marketing-site/      # Customer marketing SPA (:3001)
 ```
 
@@ -692,6 +692,7 @@ User.objects.create_superuser(
 
 
 > Passwords are only set when the account has no usable password yet. Existing passwords are left unchanged.
+> These demo passwords are for **local development only**. On test, staging and production (`ALLOW_DEMO_PASSWORDS=False`) the command generates a random password for each new account and prints it once.
 
 
 
@@ -924,7 +925,7 @@ Each app has a `README.md` with schema, APIs, permission matrix, and flows where
 - [apps/audit_logs](backend/apps/audit_logs/README.md) · [apps/notifications](backend/apps/notifications/README.md)
 - [apps/dashboard](backend/apps/dashboard/README.md) · [apps/reports](backend/apps/reports/README.md)
 
-Domain apps (CRM/LMS split): `organization`, `products`, `applications`, `underwriting`, `ledger`, `repayments`, `collections` — see [TABLE.md](TABLE.md) for full schema.
+Domain apps (CRM/LMS split): `organization`, `products`, `applications`, `underwriting`, `ledger`, `repayments`, `collections` — generate the full schema reference with `python backend/scripts/generate_table_md.py`.
 
 ## Linting & code quality
 
@@ -1009,29 +1010,57 @@ python -m pre_commit run eslint-marketing-site --all-files
 
 Hooks also run automatically on `git commit` after `python -m pre_commit install`.
 
-### CI (GitHub Actions)
+### CI/CD (GitHub Actions)
 
 Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
-On push/PR to `development`, `testing`, `staging`, `production`, `main`, or `master`:
+| Event | What runs |
+| ----- | --------- |
+| Pull request (any CI branch) | Checks only: Ruff, pytest, ESLint, builds |
+| Push to `development` | Checks, then opens a `development → testing` PR |
+| Push to `testing` | Checks → **build images once** (tag = commit SHA, pushed to `ghcr.io/kubernitimoney-tech`) → deploy to the test VPS → opens a `testing → production` PR |
+| Push to `production` | Checks only — **does not deploy** |
+| **Actions → CI/CD → Run workflow** (branch `production`, type `DEPLOY`) | Deploys the newest tested images already merged into `production` to the production VPS |
 
-- **Backend** — Ruff check + format check; pytest
-- **Frontend** — ESLint; production build
-- **Marketing site** — ESLint; production build
-- **PR into `testing`, or push to `testing`** — SSH deploy to the test VPS after all checks pass
+**Servers never build.** Each deploy runs [`scripts/deploy/deploy.sh`](scripts/deploy/deploy.sh) on the server:
 
-**Why deploy feels slow:** GitHub runs 6 jobs first (~5–15 min), then the VPS builds 3 Docker images (`django`, `frontend`, `marketing`) with `npm ci`, Vite, and `pip install`. First deploy or dependency changes take longest; later deploys reuse Docker layer cache.
+1. Pull the images for the commit SHA.
+2. Back up the database to `/knm-crm/backups/` (last 7 kept). Stops if the backup is empty.
+3. Run migrations with the new image while the current version keeps serving.
+4. Restart containers (static files are baked into the image, so Django starts in seconds; Caddy holds requests up to 30 s instead of returning 502).
+5. Health check `/api/v1/health/`. If it fails, switch back to the previous images automatically.
 
-**Deploy on VPS** (also run manually over SSH):
+Production deploy steps:
+
+1. Merge the `testing → production` PR.
+2. GitHub → **Actions → CI/CD → Run workflow** → branch **production** → confirm **DEPLOY** → Run.
+3. To roll back, run it again with **image_tag** = an earlier commit SHA (see `/knm-crm/.deploy/history.log` on the server), or on the server: `STACK=prod bash scripts/deploy/rollback.sh`.
+
+Migrations should be backward compatible (add columns/tables first, remove later) so an image rollback keeps working; a full database restore is possible from `backups/`.
+
+**Environments are separate Compose projects** (own database, Redis, media):
+
+| Environment | Folder on VPS | Compose project | `STACK` | Runs Caddy |
+| ----------- | ------------- | --------------- | ------- | ---------- |
+| Test | `/knm-crm` | `knm-crm` | `test` | yes (`--profile edge`) |
+| Production | `/knm-crm` (prod VPS) | `knm-crm` | `prod` | yes (`--profile edge`) |
+
+Web containers join the shared external network `knm-edge` as `<STACK>-django`, `<STACK>-frontend` and `<STACK>-marketing`; the Caddyfile routes each hostname to the right stack.
+
+**Manual deploy on a VPS** (needs `docker login ghcr.io` with a token that can read packages):
 
 ```bash
-export DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1
-cd ~/lms && git fetch origin testing && git checkout testing && git reset --hard origin/testing
-docker compose -f docker-compose.prod.yml build --parallel django frontend marketing
-docker compose -f docker-compose.prod.yml up -d --remove-orphans
+cd /knm-crm && git fetch origin && git reset --hard <commit-sha>
+STACK=test IMAGE_TAG=<commit-sha> bash scripts/deploy/deploy.sh
 ```
 
-`celery` and `celery-beat` reuse the same `lms-backend:latest` image as `django` (one backend build, not three).
+**Emergency (registry unavailable):** build on the server, then deploy those local images:
+
+```bash
+export VITE_API_URL=https://api.kubernitimoney.com/api/v1 VITE_SITE_URL=https://kubernitimoney.com
+STACK=prod IMAGE_TAG=local docker compose -p knm-crm -f docker-compose.prod.yml --profile edge build django frontend marketing
+STACK=prod IMAGE_TAG=local SKIP_PULL=1 bash scripts/deploy/deploy.sh
+```
 
 ---
 
@@ -1056,6 +1085,25 @@ pytest --cov=apps
 5. Use managed PostgreSQL + Redis; set `DATABASE_URL`, `REDIS_URL` via secrets.
 6. Mount object storage for `media/` (swap `LocalStorageBackend` for S3).
 7. Enable `DOCUMENT_VIRUS_SCAN_ENABLED` with ClamAV sidecar.
+
+### Security settings (required on test, staging and production)
+
+**Field encryption key.** Deployed settings refuse to start without `FIELD_ENCRYPTION_KEY`. If it was never set, existing PAN/Aadhaar/account data is encrypted with a key derived from `SECRET_KEY`. Keep that data readable by setting `FIELD_ENCRYPTION_KEY` to exactly that derived key — run this on the server with the current `SECRET_KEY` and paste the output into `backend/.env`:
+
+```bash
+docker compose -p knm-crm -f docker-compose.prod.yml run --rm --no-deps django \
+  python -c "import base64,hashlib,os;print(base64.urlsafe_b64encode(hashlib.sha256(os.environ['SECRET_KEY'].encode()).digest()).decode())"
+```
+
+If `FIELD_ENCRYPTION_KEY` is already set, change nothing. Never change it without re-encrypting data.
+
+**Uploaded files.** `/media/*` is no longer served from disk by Caddy. Django serves files only through signed links that expire after `MEDIA_URL_TTL_SECONDS` (default 1 hour). API responses always contain fresh links; do not store or email `/media/` URLs.
+
+**Cashfree.** Webhooks are processed only when `CASHFREE_CLIENT_SECRET` (or `CASHFREE_WEBHOOK_SECRET`) is set and the signature matches. Each payment is then re-checked against the Cashfree API before a pending collection is recorded.
+
+**Rate limits.** Unauthenticated requests are throttled (`THROTTLE_ANON_RATE`, default `120/min`). The public repayment lookup/checkout (`THROTTLE_PUBLIC_LOOKUP_RATE`, `30/hour`) and e-sign OTP endpoints (`THROTTLE_OTP_RATE`, `10/hour`) are stricter, and an OTP is destroyed after 5 wrong attempts. Behind Caddy, `NUM_PROXIES=1` (the default in deployed settings) makes rate limits and audit logs use the real client IP.
+
+**Seed users.** `seed_sample_data` uses the demo passwords below only in local development. On test, staging and production it generates a random password per new account and prints it once.
 
 
 

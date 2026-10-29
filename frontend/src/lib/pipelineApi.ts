@@ -1,5 +1,5 @@
 import { fetchApplications } from '@/lib/applicationsApi';
-import { fetchLeads } from '@/lib/leadsApi';
+import { fetchAllLeads } from '@/lib/leadsApi';
 import { formatRate } from '@/lib/utils';
 import type { SanctionLead } from '@/types';
 
@@ -76,6 +76,14 @@ interface ApiApplicationPipelineRow {
   payment_amount?: string | number;
   payment_mode?: string;
   payment_date?: string;
+  closed_date?: string | null;
+  disbursal_date?: string;
+  repay_amount?: string;
+  collected_amount?: string;
+  till_date_amount?: string;
+  credit_by?: string;
+  customer_type?: string;
+  settlement_date?: string | null;
   ref_no?: string;
   discount_amt?: string | number;
   settled_amount?: string | number;
@@ -113,6 +121,14 @@ function mapApiPipelineRow(row: ApiApplicationPipelineRow): PipelineRow {
     paymentAmount: Number(row.payment_amount ?? 0),
     paymentMode: row.payment_mode ?? '',
     paymentDate: row.payment_date ?? '',
+    closedDate: row.closed_date ?? '',
+    disbursalDate: row.disbursal_date ?? '',
+    repayAmount: row.repay_amount ?? '',
+    collectedAmount: row.collected_amount ?? '',
+    tillDateAmount: row.till_date_amount ?? '',
+    creditBy: row.credit_by ?? '',
+    customerType: row.customer_type ?? '',
+    settlementDate: row.settlement_date ?? '',
     refNo: row.ref_no ?? '',
     discountAmt: Number(row.discount_amt ?? 0),
     settledAmount: Number(row.settled_amount ?? 0),
@@ -177,11 +193,10 @@ export async function fetchPipelineRows(stage: PipelineStage): Promise<PipelineR
   }
 
   if (stage === 'red-flag') {
-    const leads = await fetchLeads({
-      page_size: 100,
+    const leads = await fetchAllLeads({
       status: 'not_interested',
     });
-    return leads.results.map((lead) => ({
+    return leads.map((lead) => ({
       id: lead.id,
       leadId: lead.lead_id,
       customerName: lead.customer_name,
@@ -249,7 +264,7 @@ export async function fetchAssignmentRoster(type: 'rm' | 'cm'): Promise<RosterMe
     id: member.id,
     name: member.name,
     email: member.email,
-    designation: type === 'rm' ? 'Relationship Manager' : 'Collection Manager',
+    designation: type === 'rm' ? 'Relationship Manager' : 'Credit Manager',
     status: true,
   }));
 }

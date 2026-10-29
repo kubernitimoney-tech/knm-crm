@@ -66,6 +66,7 @@ export const PERMISSION_UI_MANIFEST = {
       create: 'user.create',
       update: 'user.update',
       delete: 'user.delete',
+      approve: 'user.approve',
     },
   },
   activityLogs: {
@@ -80,6 +81,7 @@ export const PERMISSION_UI_MANIFEST = {
       update: 'lead.update',
       delete: 'lead.delete',
       assign: 'lead.assign',
+      transfer: 'lead.transfer',
       export: 'lead.export',
       create: 'lead.create',
     },

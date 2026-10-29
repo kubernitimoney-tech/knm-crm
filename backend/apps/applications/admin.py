@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 
 from apps.applications.models import (
@@ -7,13 +8,57 @@ from apps.applications.models import (
     LoanApplication,
     SanctionSalaryBank,
 )
+from apps.core.admin_mixins import LeadFirstSearchMixin
+from apps.loans.services.loan_calculation_service import LoanCalculationService
+
+
+class ApplicationDecisionAdminForm(forms.ModelForm):
+    """Expose the repayment date stored inside ``sanction_details`` as a date field."""
+
+    repayment_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text="Sanctioned repayment date. Saving updates the loan's due date.",
+    )
+
+    class Meta:
+        model = ApplicationDecision
+        fields = (
+            "application",
+            "decision",
+            "decided_by",
+            "approved_amount",
+            "approved_tenure_value",
+            "interest_rate",
+            "processing_fee",
+            "repayment_date",
+            "rejection_reason",
+            "remarks",
+            "created_by",
+            "updated_by",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        details = self.instance.sanction_details or {}
+        self.fields["repayment_date"].initial = LoanCalculationService.parse_iso_date(
+            details.get("repayment_date")
+        )
 
 
 @admin.register(LoanApplication)
-class LoanApplicationAdmin(admin.ModelAdmin):
-    list_display = ("application_number", "customer", "product", "status", "requested_amount")
+class LoanApplicationAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
+    list_display = (
+        "lead",
+        "application_number",
+        "customer",
+        "product",
+        "status",
+        "requested_amount",
+    )
     list_filter = ("status", "product")
-    search_fields = ("application_number", "customer__customer_code")
+    search_fields = ("lead__lead_id", "application_number", "customer__customer_code")
+    list_select_related = ("lead", "customer", "product")
 
 
 @admin.register(ApplicationVerification)
@@ -55,9 +100,41 @@ class ApplicationDecisionAdmin(admin.ModelAdmin):
         "created_by",
         "updated_by",
     )
-    exclude = ("sanction_details",)
+    form = ApplicationDecisionAdminForm
     readonly_fields = ("id", "decided_at", "created_at", "updated_at")
     ordering = ("-decided_at",)
+
+    def save_model(self, request, obj, form, change):
+        """Write the repayment date back into sanction_details and, when this is the
+        current sanction, push the edited terms onto the application and loan."""
+        if "repayment_date" in form.changed_data:
+            details = dict(obj.sanction_details or {})
+            repayment_date = form.cleaned_data.get("repayment_date")
+            if repayment_date:
+                details["repayment_date"] = repayment_date.isoformat()
+            else:
+                details.pop("repayment_date", None)
+            obj.sanction_details = details
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+        if not change or obj.decision != "approved":
+            return
+        application = obj.application
+        latest = application.decisions.filter(decision="approved").order_by("-decided_at").first()
+        if latest is None or latest.pk != obj.pk:
+            return
+        if obj.approved_amount is not None and application.approved_amount != obj.approved_amount:
+            application.approved_amount = obj.approved_amount
+            application.updated_by = request.user
+            application.save(update_fields=["approved_amount", "updated_by", "updated_at"])
+
+        from apps.loans.models import Loan
+        from apps.loans.services.loan_service import LoanService
+
+        loan = Loan.objects.filter(application=application).first()
+        if loan is not None:
+            LoanService.sync_with_sanction(user=request.user, loan=loan, decision=obj)
 
 
 @admin.register(ApplicationStatusHistory)

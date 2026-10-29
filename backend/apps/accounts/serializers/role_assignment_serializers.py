@@ -1,13 +1,16 @@
 from rest_framework import serializers
 
 from apps.accounts.models import RoleChangeRecord, UserRole
+from apps.core.validators.attachments import validate_approval_attachment
 
 
 class AssignRoleSerializer(serializers.Serializer):
     role_slug = serializers.SlugField(max_length=100)
     confirm = serializers.BooleanField(default=False)
     replace_existing = serializers.BooleanField(default=True)
-    approval_email = serializers.FileField(required=False, allow_null=True)
+    approval_email = serializers.FileField(
+        required=False, allow_null=True, validators=[validate_approval_attachment]
+    )
 
     def validate(self, attrs):
         if attrs.get("confirm") and not attrs.get("approval_email"):
@@ -20,7 +23,9 @@ class AssignRoleSerializer(serializers.Serializer):
 class RevokeRoleSerializer(serializers.Serializer):
     role_slug = serializers.SlugField(max_length=100)
     confirm = serializers.BooleanField(default=False)
-    approval_email = serializers.FileField(required=False, allow_null=True)
+    approval_email = serializers.FileField(
+        required=False, allow_null=True, validators=[validate_approval_attachment]
+    )
 
     def validate(self, attrs):
         if attrs.get("confirm") and not attrs.get("approval_email"):

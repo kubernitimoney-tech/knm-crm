@@ -14,7 +14,18 @@ def _confirmed_repayments(loan):
     )
 
 
+CHOSEN_STATUS_LABELS = {
+    "part_payment": "Part Payment",
+    "close": "Closed",
+    "payday_pre_close": "Payday Pre-Close",
+    "settlement": "Settlement",
+}
+
+
 def collection_status_for_repayment(repayment) -> tuple[str, str]:
+    chosen = getattr(repayment, "collection_status", "") or ""
+    if chosen in CHOSEN_STATUS_LABELS:
+        return chosen, CHOSEN_STATUS_LABELS[chosen]
     loan = repayment.loan
     application = getattr(loan, "application", None)
     if application is None:
@@ -139,4 +150,12 @@ def _collection_row(
         "gateway_reference": repayment.gateway_reference or "",
         "remarks": repayment.remarks,
         "recorded_on": repayment.created_at.isoformat() if repayment.created_at else "",
+        # For payment-link rows this is the approver; blank while pending.
+        "collected_by": _user_label(repayment.collected_by),
     }
+
+
+def _user_label(user) -> str:
+    if user is None:
+        return ""
+    return user.get_full_name().strip() or user.email

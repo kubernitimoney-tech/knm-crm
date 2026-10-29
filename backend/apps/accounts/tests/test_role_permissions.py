@@ -35,6 +35,7 @@ class TestRoleMatrix:
         assert "user.create" in codes
         assert "permission.grant" in codes
         assert "lead.update" in codes
+        assert "lead.transfer" in codes
         assert "application.update" in codes
         assert "loan.update" not in codes
         assert "collection.update" not in codes
@@ -58,6 +59,7 @@ class TestRoleMatrix:
         excluded = {
             "user.create",
             "user.update",
+            "user.approve",
             "permission.view",
             "permission.create",
             "permission.update",
@@ -70,6 +72,7 @@ class TestRoleMatrix:
         assert "lead.view" in production_codes
         assert "application.approve" in production_codes
         assert "user.view" in production_codes
+        assert "user.approve" in admin_codes
 
     def test_credit_manager_has_sanction(self):
         from django.core.management import call_command
@@ -97,6 +100,7 @@ class TestRoleMatrix:
         role = Role.objects.get(slug="relationship-manager")
         codes = {rp.permission.code for rp in role.role_permissions.select_related("permission")}
         assert "lead.view" in codes
+        assert "lead.transfer" not in codes
         assert "call_log.create" in codes
         assert "document.upload" not in codes
         assert "application.submit" not in codes

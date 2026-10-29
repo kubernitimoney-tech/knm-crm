@@ -8,8 +8,10 @@ By default this command is non-destructive for direct user grants (UserPermissio
 Use --reset to wipe all UserPermission rows and rebuild RolePermission from scratch.
 
 Notes:
-- lead.assign is seeded for roster/transfer tooling; lead transfer API remains Admin-only
-  (see LeadViewSet.transfer) — RM auto-assignment on intake does not require lead.assign.
+- lead.assign is seeded for RM/CM roster tooling; RM auto-assignment on intake
+  does not require lead.assign.
+- lead.transfer gates the lead transfer API (RM and/or CM). Grant it on a role
+  or user to allow transfers; Admin and Super Admin receive it from the default templates.
 - production-manager uses the admin template minus user create/update and permission
   view/grant/revoke (user directory management stays admin/super-admin).
 - Sr. RM / Sr. CM org-wide visibility (see visible_applications_for / visible_loans_for)
@@ -39,6 +41,7 @@ PERMISSION_MATRIX = {
         PermissionAction.UPDATE,
         PermissionAction.DELETE,
         PermissionAction.ASSIGN,
+        PermissionAction.TRANSFER,
         PermissionAction.CONVERT,
         PermissionAction.EXPORT,
     ],
@@ -132,6 +135,7 @@ PERMISSION_MATRIX = {
         PermissionAction.CREATE,
         PermissionAction.UPDATE,
         PermissionAction.DELETE,
+        PermissionAction.APPROVE,
     ],
     PermissionModule.ROLE: [
         PermissionAction.VIEW,
@@ -253,6 +257,7 @@ PRODUCTION_MANAGER_EXCLUDED_CODES = frozenset(
     {
         "user.create",
         "user.update",
+        "user.approve",
         "permission.view",
         "permission.create",
         "permission.update",
