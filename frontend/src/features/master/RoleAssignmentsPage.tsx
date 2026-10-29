@@ -57,8 +57,9 @@ export const RoleAssignmentsPage = () => {
         const data = await fetchRoleDirectory();
         if (cancelled) return;
         setRoles(data.roles);
-        if (!selectedRole && data.roles[0]) {
-          setSelectedRole(data.roles[0].slug);
+        const firstRole = data.roles[0];
+        if (firstRole) {
+          setSelectedRole((current) => current || firstRole.slug);
         }
       } catch (error) {
         toast({
@@ -76,7 +77,7 @@ export const RoleAssignmentsPage = () => {
   }, []);
 
   useEffect(() => {
-    if (roleParam && roleParam !== selectedRole) {
+    if (roleParam) {
       setSelectedRole(roleParam);
     }
   }, [roleParam]);

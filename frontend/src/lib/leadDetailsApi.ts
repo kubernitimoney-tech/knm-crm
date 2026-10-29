@@ -13,7 +13,6 @@ import {
 } from '@/lib/applicationsApi';
 import {
   disburseLoan,
-  fetchLoanRepayments,
   recordLoanRepayment,
   updateLoanRepayment,
   deleteLoanRepayment,
@@ -710,13 +709,6 @@ export interface ApiLeadFollowUpRemark {
   recorded_on: string;
 }
 
-const COLLECTION_STATUS_TO_API: Record<string, string> = {
-  'Part Payment': 'part_payment',
-  Close: 'close',
-  'Payday Pre-Close': 'payday_pre_close',
-  Settlement: 'settlement',
-};
-
 const COLLECTION_STATUS_FROM_API: Record<string, string> = {
   part_payment: 'Part Payment',
   close: 'Closed',
@@ -1214,45 +1206,6 @@ export async function createLeadRejection(
     throw new Error('Rejection decision was not recorded.');
   }
   return mapped;
-}
-
-function payloadBranch(application: Awaited<ReturnType<typeof getLeadApplication>>): string {
-  const sheetBranch = application?.disbursal_sheet_details?.branch;
-  if (typeof sheetBranch === 'string' && sheetBranch) {
-    return sheetBranch;
-  }
-  return application?.branch ?? '';
-}
-
-function mapDisbursalSheetToApi(
-  application: NonNullable<Awaited<ReturnType<typeof getLeadApplication>>>,
-  loanId?: string,
-): ApiLeadDisbursal {
-  const details = (application.disbursal_sheet_details ?? {}) as Record<string, unknown>;
-  const sentAt = application.disbursal_sheet_sent_at ?? application.updated_at ?? '';
-  return {
-    id: loanId ?? application.id,
-    company_account: String(details.company_account ?? details.salary_account ?? ''),
-    salary_account: String(details.company_account ?? details.salary_account ?? ''),
-    account_number: String(details.account_number ?? ''),
-    ifsc_code: String(details.ifsc_code ?? ''),
-    bank_name: String(details.bank_name ?? ''),
-    branch: String(details.branch ?? payloadBranch(application)),
-    cheque_no: String(details.cheque_no ?? ''),
-    enach_id: String(details.enach_id ?? ''),
-    fi_date: details.fi_date ? String(details.fi_date) : null,
-    fi_type: String(details.fi_type ?? ''),
-    fi_done_by: String(details.fi_done_by ?? ''),
-    amount_to_be_disbursed: String(details.amount_to_be_disbursed ?? ''),
-    total_deduction: String(details.total_deduction ?? '0'),
-    disbursal_reference_no: String(details.disbursal_reference_no ?? ''),
-    payment_type: String(details.payment_type ?? 'IMPS'),
-    disbursal_date: String(details.disbursal_date ?? ''),
-    disbursed_date: String(details.disbursed_date ?? ''),
-    disbursal_type: String(details.disbursal_type ?? ''),
-    remarks: String(details.remarks ?? ''),
-    disbursed_on: sentAt,
-  };
 }
 
 function buildDisbursalSheetPayload(payload: {

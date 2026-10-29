@@ -1,10 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   Search,
-  RefreshCw,
   Plus,
   ArrowUpDown,
   ArrowUp,
@@ -13,7 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { ExportButton } from '@/components/ui/ExportButton';
 import {
   Table,

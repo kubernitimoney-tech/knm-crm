@@ -151,15 +151,6 @@ export const UsersPage = () => {
     setCurrentPage(1);
   };
 
-  // Stats from current page (server-side list)
-  const stats = useMemo(() => {
-    return {
-      active: users.filter(u => u.status === 'Active').length,
-      inactive: users.filter(u => u.status === 'Inactive').length,
-      total: totalCount,
-    };
-  }, [users, totalCount]);
-
   const filteredAndSortedUsers = useMemo(() => {
     const result = [...users];
 

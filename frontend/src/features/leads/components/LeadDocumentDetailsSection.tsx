@@ -44,13 +44,15 @@ import {
   type ApiLeadDocument,
 } from '@/lib/leadDetailsApi';
 import {
-  FORM_TRANSITION_MS,
   FormFieldLabel,
   FormSelect,
-  STATUS_OPTIONS,
+} from '@/features/leads/components/leadDetailSectionShared';
+import {
   entryStatusLabel,
   sectionCellClassName,
-} from '@/features/leads/components/leadDetailSectionShared';
+  FORM_TRANSITION_MS,
+  STATUS_OPTIONS,
+} from '@/features/leads/components/leadDetailSectionUtils';
 
 export const LEAD_DOCUMENT_TYPES = [
   'Aadhaar Card',
