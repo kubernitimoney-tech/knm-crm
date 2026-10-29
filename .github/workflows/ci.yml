@@ -45,7 +45,7 @@ env:
 jobs:
   backend-lint:
     name: Backend — Ruff
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
@@ -68,9 +68,19 @@ jobs:
       - name: Ruff format (check)
         run: ruff format --check .
 
+      # Pinned runner versions: `-latest` labels move without notice and
+      # trigger GitHub migration notices. Upgrade the version here on purpose.
+      - name: CI runners pinned (no -latest labels)
+        working-directory: .
+        run: |
+          if grep -nE '^\s*runs-on:\s*\S*-latest' .github/workflows/*.yml; then
+            echo "::error::Use a pinned runner (e.g. ubuntu-24.04), not a -latest label."
+            exit 1
+          fi
+
   backend-test:
     name: Backend — Pytest
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
@@ -94,7 +104,7 @@ jobs:
 
   frontend-lint:
     name: Frontend — Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
@@ -118,7 +128,7 @@ jobs:
 
   frontend-build:
     name: Frontend — Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     needs: frontend-lint
     defaults:
@@ -143,7 +153,7 @@ jobs:
 
   marketing-site-lint:
     name: Marketing site — Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     defaults:
       run:
@@ -167,7 +177,7 @@ jobs:
 
   marketing-site-build:
     name: Marketing site — Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'workflow_dispatch'
     needs: marketing-site-lint
     defaults:
@@ -195,7 +205,7 @@ jobs:
   # ---------------------------------------------------------------------------
   promote-development-to-testing:
     name: Promote — development → testing
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
     needs:
       - backend-lint
@@ -222,7 +232,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-images:
     name: Build images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
     needs:
       - backend-lint
@@ -329,7 +339,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-test:
     name: Deploy — Test (test.kubernitimoney.com)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/testing'
     needs: build-images
     permissions:
@@ -391,7 +401,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-production:
     name: Deploy — Production (app.kubernitimoney.com)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
     permissions:
       contents: read
