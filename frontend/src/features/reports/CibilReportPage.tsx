@@ -5,7 +5,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  MoreVertical
 } from 'lucide-react';
 import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { formatAppDateField, formatAppDateOrFallback } from '@/lib/dateUtils';

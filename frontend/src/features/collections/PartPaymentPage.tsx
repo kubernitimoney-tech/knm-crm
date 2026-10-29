@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
-  PieChart,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
@@ -12,7 +10,6 @@ import { matchesPeriodFilter } from '@/lib/periodFilter';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/badge';
 import { ExportButton } from '@/components/ui/ExportButton';
 import {
   Select,
@@ -49,7 +46,6 @@ import {
   DataTableSearchInput,
   DataTableClearFiltersButton,
   DataTableFooter,
-  DataTablePageSizeSelect,
 } from '@/components/ui/data-table';
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatCurrency, formatPersonName, formatRatePercent } from '@/lib/utils';
@@ -73,7 +69,7 @@ export const PartPaymentPage = () => {
     to: undefined,
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({
     key: 'date',
     direction: 'desc'

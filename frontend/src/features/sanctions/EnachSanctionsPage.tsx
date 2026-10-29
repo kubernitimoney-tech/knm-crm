@@ -9,7 +9,7 @@ import {
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
-import { format, subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { subDays, subMonths, startOfMonth, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card } from '@/components/ui/Card';
@@ -112,16 +112,6 @@ export const EnachSanctionsPage = () => {
     setDateRange({ from: undefined, to: undefined });
     setCurrentPage(1);
   };
-
-  // Stats calculation
-  const stats = useMemo(() => {
-    return {
-      total: enachRows.length,
-      registered: enachRows.filter(l => l.enachStatus === 'Registered').length,
-      pending: enachRows.filter(l => l.enachStatus === 'Pending').length,
-      failed: enachRows.filter(l => l.enachStatus === 'Failed').length,
-    };
-  }, [enachRows]);
 
   // Filtering & Sorting Logic
   const filteredAndSorted = useMemo(() => {

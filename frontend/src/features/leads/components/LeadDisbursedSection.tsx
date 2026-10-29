@@ -405,7 +405,7 @@ export function LeadDisbursedSection({
     } finally {
       setIsLoading(false);
     }
-  }, [leadId, defaultSalaryAccount, refreshKey, lookupIfsc]);
+  }, [leadId, defaultSalaryAccount, lookupIfsc]);
 
   useEffect(() => {
     if (disbursalStage !== 'none' || isEditing || !defaultSalaryAccount?.trim()) {
@@ -421,7 +421,7 @@ export function LeadDisbursedSection({
 
   useEffect(() => {
     loadDisbursal();
-  }, [loadDisbursal]);
+  }, [loadDisbursal, refreshKey]);
 
   const handleRefreshReference = () => {
     setCompletionForm((prev) => ({

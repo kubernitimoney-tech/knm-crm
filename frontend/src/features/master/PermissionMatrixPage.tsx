@@ -95,8 +95,8 @@ export const PermissionMatrixPage = () => {
     setUploadedFile(null);
   });
 
-  const roles = matrixData?.roles ?? [];
-  const modules = matrixData?.modules ?? [];
+  const roles = useMemo(() => matrixData?.roles ?? [], [matrixData]);
+  const modules = useMemo(() => matrixData?.modules ?? [], [matrixData]);
   const totalPermissions = matrixData?.total_permissions ?? 0;
 
   const allPermissions = useMemo(

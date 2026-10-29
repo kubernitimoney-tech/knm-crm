@@ -195,7 +195,7 @@ export function validateChequeNo(
   return null;
 }
 
-function parsePositiveAmount(value: string, label: string): number | null {
+function parsePositiveAmount(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const numeric = Number(trimmed);
@@ -206,11 +206,11 @@ function parsePositiveAmount(value: string, label: string): number | null {
 }
 
 export function validateSanctionLoanAmount(loanAmount: string, monthlyIncome: string): string | null {
-  const amount = parsePositiveAmount(loanAmount, 'Loan amount');
+  const amount = parsePositiveAmount(loanAmount);
   if (amount == null) {
     return 'Loan amount must be a positive number.';
   }
-  const income = parsePositiveAmount(monthlyIncome, 'Monthly income');
+  const income = parsePositiveAmount(monthlyIncome);
   if (income == null) {
     return 'Monthly income must be a positive number.';
   }
@@ -232,7 +232,7 @@ export function validateSanctionMonthlyObligation(
     return 'Monthly obligation cannot be negative.';
   }
 
-  const income = parsePositiveAmount(monthlyIncome, 'Monthly income');
+  const income = parsePositiveAmount(monthlyIncome);
   if (income == null) {
     return 'Monthly income must be a positive number.';
   }

@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import {
-  Search,
-  CheckCircle,
   ArrowUpDown,
   ArrowUp,
   ArrowDown
@@ -50,7 +48,6 @@ import {
   DataTableSearchInput,
   DataTableClearFiltersButton,
   DataTableFooter,
-  DataTablePageSizeSelect,
 } from '@/components/ui/data-table';
 import { SanctionLead } from '@/types';
 import { cn, exportRowsToExcel, formatCurrency, formatPersonName } from '@/lib/utils';
@@ -74,7 +71,7 @@ export const ClosedAccountsPage = () => {
     to: undefined,
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({
     key: 'date',
     direction: 'desc'

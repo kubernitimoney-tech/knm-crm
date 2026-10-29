@@ -5,7 +5,6 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  MoreHorizontal
 } from 'lucide-react';
 import { format, subMonths } from 'date-fns';
 import {
@@ -336,9 +335,7 @@ export function AllReportingPage() {
             )}
             table={(
               <DisbursedTable
-                paginatedData={paginatedData}
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
+                paginatedData={paginatedData as DisbursedReportRow[]}
                 handleSort={handleSort}
                 getSortIcon={getSortIcon}
                 openEditByLeadUuid={openEditByLeadUuid}
@@ -393,14 +390,9 @@ export function AllReportingPage() {
             )}
             table={(
               <CollectionTable
-                paginatedData={paginatedData}
-                currentPage={currentPage}
-                itemsPerPage={itemsPerPage}
+                paginatedData={paginatedData as CollectionReportRow[]}
                 handleSort={handleSort}
                 getSortIcon={getSortIcon}
-                openEditByLeadUuid={openEditByLeadUuid}
-                setDeleteTarget={setDeleteTarget}
-                actionCol={actionCol}
               />
             )}
             footer={(
@@ -769,7 +761,25 @@ function ReportHeadRow<T>({ columns, handleSort, getSortIcon, showAction }: {
   );
 }
 
-function DisbursedTable({ paginatedData, handleSort, getSortIcon, openEditByLeadUuid, setDeleteTarget, actionCol }: any) {
+type ReportTableProps<T> = {
+  paginatedData: T[];
+  handleSort: (key: string) => void;
+  getSortIcon: (key: string) => React.ReactNode;
+};
+
+type LeadListingActions = ReturnType<typeof useLeadListingActions>;
+
+function DisbursedTable({
+  paginatedData,
+  handleSort,
+  getSortIcon,
+  openEditByLeadUuid,
+  setDeleteTarget,
+  actionCol,
+}: ReportTableProps<DisbursedReportRow> &
+  Pick<LeadListingActions, 'openEditByLeadUuid' | 'setDeleteTarget'> & {
+    actionCol: ReturnType<typeof useLeadListingActionColumn>;
+  }) {
   const tableColSpan = DISBURSED_COLUMNS.length + (actionCol.showColumn ? 1 : 0);
   return (
     <Table>
@@ -783,7 +793,7 @@ function DisbursedTable({ paginatedData, handleSort, getSortIcon, openEditByLead
       </TableHeader>
       <TableBody>
         {paginatedData.length > 0 ? (
-          paginatedData.map((item: DisbursedReportRow) => (
+          paginatedData.map((item) => (
             <TableRow key={`${item.id}-${item.loanNo}`} className={dataTableBodyRowClass}>
               {DISBURSED_COLUMNS.map((column) => (
                 <TableCell
@@ -817,7 +827,7 @@ function DisbursedTable({ paginatedData, handleSort, getSortIcon, openEditByLead
   );
 }
 
-function CollectionTable({ paginatedData, handleSort, getSortIcon }: any) {
+function CollectionTable({ paginatedData, handleSort, getSortIcon }: ReportTableProps<CollectionReportRow>) {
   return (
     <Table>
       <TableHeader className={dataTableHeaderClass}>
@@ -830,7 +840,7 @@ function CollectionTable({ paginatedData, handleSort, getSortIcon }: any) {
       </TableHeader>
       <TableBody>
         {paginatedData.length > 0 ? (
-          paginatedData.map((item: CollectionReportRow) => (
+          paginatedData.map((item) => (
             <TableRow key={item.repaymentId || `${item.id}-${item.collectionDateTime}`} className={dataTableBodyRowClass}>
               {COLLECTION_COLUMNS.map((column) => (
                 <TableCell

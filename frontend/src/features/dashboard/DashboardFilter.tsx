@@ -1,12 +1,9 @@
 import React from 'react';
-import { Filter, X, Calendar, BarChart3, LayoutDashboard, Clock, History, CalendarDays, Orbit } from 'lucide-react';
+import { Filter, Calendar, BarChart3, LayoutDashboard, Clock, History, CalendarDays, Orbit } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,

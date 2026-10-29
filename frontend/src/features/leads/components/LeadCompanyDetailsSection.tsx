@@ -20,17 +20,19 @@ import {
   AnimatedAddFormPanel,
   EditDeleteActions,
   EmptyTableRow,
-  EntryStatus,
   FormFieldLabel,
   FormSelect,
   SectionTable,
   StatusBadge,
+  textareaClassName,
+} from '@/features/leads/components/leadDetailSectionShared';
+import {
   sectionHeadClassName,
   sectionCellClassName,
   binaryStatusOptions,
-  textareaClassName,
   useAnimatedFormPanel,
-} from '@/features/leads/components/leadDetailSectionShared';
+  type EntryStatus,
+} from '@/features/leads/components/leadDetailSectionUtils';
 import { cn } from '@/lib/utils';
 import { enterPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 
