@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTitle } from '@/hooks/useTitle';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, ArrowLeft, ShieldCheck, CheckCircle2, Lock, Timer, RefreshCw } from 'lucide-react';
+import { Mail, ArrowLeft, ShieldCheck, CheckCircle2, Timer, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { FieldLabel } from '@/components/ui/field-label';

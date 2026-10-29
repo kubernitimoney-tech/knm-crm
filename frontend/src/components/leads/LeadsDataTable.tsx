@@ -60,12 +60,6 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { DataTableListingActions, DataTableActionHead, useLeadListingActionColumn, RowTransferButton } from '@/components/ui/data-table-listing-actions';
 import { searchPlaceholder, selectPlaceholder } from '@/lib/placeholders';
 
-function leadCategoryAccent(status: string) {
-  if (status === 'Fresh') return 'bg-emerald-400';
-  if (status === 'Reloan') return 'bg-blue-400';
-  return 'bg-amber-400';
-}
-
 export interface LeadsDataTableProps {
   leads: Lead[];
   isLoading?: boolean;
