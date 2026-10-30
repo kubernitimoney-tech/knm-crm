@@ -1,6 +1,6 @@
 import pytest
 
-from apps.core.validators.india import normalize_mobile, validate_mobile
+from apps.core.validators.india import mask_aadhaar, normalize_mobile, validate_mobile
 
 
 class TestNormalizeMobile:
@@ -54,3 +54,16 @@ class TestValidateChequeNumber:
 
         with pytest.raises(ValueError):
             validate_cheque_number(value)
+
+
+class TestMaskAadhaar:
+    @pytest.mark.parametrize("value", ["234123412341", "2341 2341 2341", "2341-2341-2341"])
+    def test_shows_only_last_four(self, value):
+        assert mask_aadhaar(value) == "XXXX-XXXX-2341"
+
+    @pytest.mark.parametrize(
+        "value",
+        ["", None, "12345", "XXXX1234", "gAAAAABQS37DREZ6JDTS6FJTCUZI_H11OSCXDEIKTXT1CAV1234567=="],
+    )
+    def test_non_aadhaar_gives_blank(self, value):
+        assert mask_aadhaar(value) == ""

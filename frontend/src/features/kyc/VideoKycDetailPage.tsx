@@ -42,7 +42,7 @@ function detailRows(record: Record<string, string>) {
 
 const VIDEO_KYC_TAB_ITEMS = [
   { value: 'video', label: 'Selfie / Video' },
-  { value: 'aadhaar', label: 'Aadhar Details' },
+  { value: 'aadhaar', label: 'Aadhaar Details' },
   { value: 'pan', label: 'Pancard Details' },
 ] as const;
 

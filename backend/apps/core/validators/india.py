@@ -34,6 +34,16 @@ def normalize_aadhaar(value: str) -> str:
     return _strip_digits(value)
 
 
+def mask_aadhaar(value: str) -> str:
+    """UIDAI masked format (last 4 digits only). Anything that is not an Aadhaar gives ""."""
+    if not isinstance(value, str) or not re.fullmatch(r"[\d\s-]+", value):
+        return ""
+    digits = normalize_aadhaar(value)
+    if not AADHAAR_PATTERN.fullmatch(digits):
+        return ""
+    return f"XXXX-XXXX-{digits[-4:]}"
+
+
 def normalize_pan(value: str) -> str:
     return (value or "").strip().upper()
 

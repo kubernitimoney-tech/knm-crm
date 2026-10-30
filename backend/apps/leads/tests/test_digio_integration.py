@@ -899,7 +899,7 @@ class TestDigioEsignAndVideoKyc:
             "request_details": {
                 "id": "KIDSELFIEOCR12345",
                 "status": "approved",
-                "workflow_name": "AadharPAN with selfie and OCR",
+                "workflow_name": "Aadhaar + PAN with selfie and OCR",
                 "actions": [
                     {
                         "type": "digilocker",
@@ -1281,7 +1281,7 @@ class TestDigioClientResponseHandling:
             client.create_kyc_request(
                 customer_identifier="test@example.com",
                 customer_name="Test User",
-                template_name="AadharPAN with selfie and OCR",
+                template_name="Aadhaar + PAN with selfie and OCR",
                 reference_id="01234567-89ab-cdef-0123-456789abcdef",
             )
 
