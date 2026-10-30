@@ -279,6 +279,8 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_201_CREATED
         row = LeadVideoKycRequest.objects.get(lead=lead)
         assert row.provider_request_id == "KID1234567890ABCD"
+        assert row.provider_reference_id == str(lead.id)
+        assert response.data["data"]["provider_reference_id"] == str(lead.id)
         assert row.status == VideoKycRequestStatus.SENT
         assert "/#/gateway/ekyc/" in row.request_url
         assert row.session_details["email_sent"] is True

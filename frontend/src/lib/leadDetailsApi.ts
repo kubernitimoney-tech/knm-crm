@@ -118,6 +118,7 @@ export interface ApiLeadVideoKycRequest {
   sms_sent: boolean;
   request_url?: string | null;
   provider_request_id?: string | null;
+  provider_reference_id?: string | null;
 }
 
 export interface ApiLeadVideoKycGeolocation {
@@ -129,6 +130,8 @@ export interface ApiLeadVideoKycGeolocation {
 export interface ApiLeadVideoKycDetail {
   id: string;
   status: ApiLeadVideoKycRequest['status'];
+  provider_request_id: string;
+  provider_reference_id: string;
   customer_name: string;
   customer_email: string;
   approval_status: string;

@@ -405,6 +405,7 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
             "sms_sent",
             "request_url",
             "provider_request_id",
+            "provider_reference_id",
         ]
         read_only_fields = fields
 
@@ -472,6 +473,8 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "status",
+            "provider_request_id",
+            "provider_reference_id",
             "customer_name",
             "customer_email",
             "approval_status",
