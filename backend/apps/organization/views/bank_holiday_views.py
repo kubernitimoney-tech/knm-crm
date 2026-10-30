@@ -1,9 +1,15 @@
 from rest_framework import status, viewsets
 
-from apps.accounts.permissions import HasRBACPermission, IsSuperAdmin
+from apps.accounts.permissions import HasRBACPermission
 from apps.core.responses import error_response, success_response
 from apps.organization.models import BankHoliday
 from apps.organization.serializers import BankHolidaySerializer
+
+ACTION_PERMISSIONS = {
+    "create": "bank_holiday.create",
+    "partial_update": "bank_holiday.update",
+    "destroy": "bank_holiday.delete",
+}
 
 
 class BankHolidayViewSet(viewsets.ModelViewSet):
@@ -12,9 +18,7 @@ class BankHolidayViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("create", "partial_update", "destroy"):
-            return [IsSuperAdmin()]
-        self.required_permission = "dashboard.view"
+        self.required_permission = ACTION_PERMISSIONS.get(self.action, "dashboard.view")
         return [HasRBACPermission()]
 
     def get_queryset(self):

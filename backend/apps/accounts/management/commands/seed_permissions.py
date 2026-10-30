@@ -152,8 +152,13 @@ PERMISSION_MATRIX = {
         PermissionAction.DELETE,
     ],
     PermissionModule.AUDIT: [PermissionAction.VIEW, PermissionAction.DELETE],
-    # Listing branch targets uses dashboard.view; these gate Define/Edit/Delete.
+    # Listing branch targets / bank holidays uses dashboard.view; these gate Add/Edit/Delete.
     PermissionModule.BRANCH_TARGET: [
+        PermissionAction.CREATE,
+        PermissionAction.UPDATE,
+        PermissionAction.DELETE,
+    ],
+    PermissionModule.BANK_HOLIDAY: [
         PermissionAction.CREATE,
         PermissionAction.UPDATE,
         PermissionAction.DELETE,

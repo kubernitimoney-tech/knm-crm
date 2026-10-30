@@ -67,8 +67,12 @@ const ALL_FINANCIAL_YEARS = 'all';
 export const BankHolidaysPage = () => {
   useTitle('Bank Holidays');
   const navigate = useNavigate();
-  const { isSuperAdmin } = usePermissions();
-  const actionCol = useDataTableActionColumn({ edit: isSuperAdmin, delete: isSuperAdmin });
+  const { isSuperAdmin, canUi } = usePermissions();
+  const canCreate = canUi('master', 'bankHoliday', 'create');
+  const actionCol = useDataTableActionColumn({
+    edit: canUi('master', 'bankHoliday', 'update'),
+    delete: canUi('master', 'bankHoliday', 'delete'),
+  });
   const tableColSpan = actionCol.showColumn ? 6 : 5;
 
   const [holidays, setHolidays] = useState<BankHoliday[]>([]);
@@ -216,14 +220,16 @@ export const BankHolidaysPage = () => {
 
         <div className="flex items-center gap-2">
           {isSuperAdmin && <ExportButton onClick={handleExport} />}
-          <Button
-            size="sm"
-            onClick={openCreateForm}
-            className={dataTablePrimaryActionButtonClass}
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Add Holiday
-          </Button>
+          {canCreate && (
+            <Button
+              size="sm"
+              onClick={openCreateForm}
+              className={dataTablePrimaryActionButtonClass}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Holiday
+            </Button>
+          )}
         </div>
       </div>
 
@@ -354,7 +360,7 @@ export const BankHolidaysPage = () => {
                             Add an RBI holiday or adjust your filters
                           </p>
                         </div>
-                        {!hasActiveFilters && (
+                        {!hasActiveFilters && canCreate && (
                           <Button
                             size="sm"
                             onClick={openCreateForm}

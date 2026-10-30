@@ -132,6 +132,38 @@ class BankHolidayAPITests(TestCase):
         self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
 
 
+class BankHolidayPermissionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_permissions")
+
+    def test_any_user_with_bank_holiday_permissions_can_add_update_delete(self):
+        user = UserFactory(email="holiday-ops@test.com")
+        client = APIClient()
+        client.force_authenticate(user=user)
+        url = "/api/v1/organization/bank-holidays/"
+        payload = {
+            "holiday_date": "2026-11-08",
+            "holiday_name": "Diwali",
+            "financial_year_start": 2026,
+        }
+
+        self.assertEqual(client.post(url, payload, format="json").status_code, 403)
+        grant_permission(user, "bank_holiday.create")
+        create_response = client.post(url, payload, format="json")
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        detail_url = f"{url}{create_response.data['data']['id']}/"
+
+        patch = {"holiday_name": "Deepavali"}
+        self.assertEqual(client.patch(detail_url, patch, format="json").status_code, 403)
+        grant_permission(user, "bank_holiday.update")
+        self.assertEqual(client.patch(detail_url, patch, format="json").status_code, 200)
+
+        self.assertEqual(client.delete(detail_url).status_code, 403)
+        grant_permission(user, "bank_holiday.delete")
+        self.assertEqual(client.delete(detail_url).status_code, 200)
+
+
 class SeedPermissionsNonDestructiveTests(TestCase):
     @classmethod
     def setUpTestData(cls):

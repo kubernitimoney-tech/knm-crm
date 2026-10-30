@@ -13,7 +13,7 @@ Use it to detect nav/API drift when seed permissions or routes change.
 | Collections | `/collections/*` | `collection.view`, `collection.create` |
 | Reports | `/reports/*` | `report.view`, `audit.view` |
 | Master (category) | `/master/category` | `dashboard.view` (read); mutations Super Admin only |
-| Bank holidays | `/master/category/bank-holidays` | GET `dashboard.view`; POST/PATCH/DELETE Super Admin |
+| Bank holidays | `/master/category/bank-holidays` | GET `dashboard.view`; POST `bank_holiday.create`, PATCH `bank_holiday.update`, DELETE `bank_holiday.delete` |
 | Branch targets | `/master/branch-targets` | GET `dashboard.view`; POST `branch_target.create`, PATCH `branch_target.update`, DELETE `branch_target.delete` |
 | Users | `/users` | `user.view`, `user.create` |
 | Permission matrix | `/master/permission-matrix` | `permission.view`, `permission.grant` |

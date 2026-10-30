@@ -48,6 +48,8 @@ class PermissionModule(models.TextChoices):
 
     BRANCH_TARGET = "branch_target", "Branch Target"
 
+    BANK_HOLIDAY = "bank_holiday", "Bank Holiday"
+
 
 class PermissionAction(models.TextChoices):
     VIEW = "view", "View"

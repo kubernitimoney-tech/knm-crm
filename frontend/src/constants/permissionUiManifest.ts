@@ -75,6 +75,11 @@ export const PERMISSION_UI_MANIFEST = {
       update: 'branch_target.update',
       delete: 'branch_target.delete',
     },
+    bankHoliday: {
+      create: 'bank_holiday.create',
+      update: 'bank_holiday.update',
+      delete: 'bank_holiday.delete',
+    },
   },
   activityLogs: {
     log: {
