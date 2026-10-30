@@ -160,7 +160,7 @@ class LeadListSerializer(serializers.ModelSerializer):
         return CustomerService.get_primary_pan(obj.customer)
 
     def get_aadhaar_no(self, obj):
-        return CustomerService.get_primary_aadhaar(obj.customer)
+        return CustomerService.get_masked_aadhaar(obj.customer)
 
     def get_assigned_rm_name(self, obj):
         return _user_label(obj.assigned_rm)

@@ -206,7 +206,7 @@ export function CibilReportPage() {
       item.dob,
       item.gender,
       item.pan,
-      item.adharCard,
+      item.aadhaarCard,
       item.mob,
       item.email,
       item.address,
@@ -361,7 +361,7 @@ export function CibilReportPage() {
                     <TableCell className={dataTableCellClass}>{item.dob}</TableCell>
                     <TableCell className={dataTableCellClass}>{item.gender}</TableCell>
                     <TableCell className={cn(dataTableCellClass, 'uppercase')}>{item.pan}</TableCell>
-                    <TableCell className={dataTableCellClass}>{item.adharCard}</TableCell>
+                    <TableCell className={dataTableCellClass}>{item.aadhaarCard}</TableCell>
                     <TableCell className={dataTableCellClass}>{item.mob}</TableCell>
                     <TableCell className={dataTableCellClass}>{item.email}</TableCell>
                     <TableCell className={cn(dataTableCellClass, 'max-w-xs truncate')}>{item.address}</TableCell>

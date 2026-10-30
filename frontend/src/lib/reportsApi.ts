@@ -15,7 +15,7 @@ export interface DisbursedReportRow {
   dob: string;
   gender: string;
   pan: string;
-  adharCard: string;
+  aadhaarCard: string;
   mob: string;
   email: string;
   branch: string;
@@ -99,7 +99,7 @@ export interface CibilReportRow {
   dob: string;
   gender: string;
   pan: string;
-  adharCard: string;
+  aadhaarCard: string;
   mob: string;
   email: string;
   address: string;

@@ -90,7 +90,7 @@ export function CustomerProfileSummaryCard({
             </span>
           </span>
           <span className="text-right">
-            <span className="text-slate-400 font-medium">Adhaar:</span>{' '}
+            <span className="text-slate-400 font-medium">Aadhaar:</span>{' '}
             <span className="text-slate-600 dark:text-slate-350 font-semibold font-mono">
               {data.aadhaar}
             </span>

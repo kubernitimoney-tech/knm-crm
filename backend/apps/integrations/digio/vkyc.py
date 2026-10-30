@@ -42,12 +42,13 @@ def create_lead_video_kyc_request(
             "Digio KYC template is not configured. Set DIGIO_KYC_TEMPLATE_NAME."
         )
 
+    reference_id = str(lead.id)
     client = DigioClient.from_settings()
     payload = client.create_kyc_request(
         customer_identifier=identifier,
         customer_name=customer.full_name or identifier,
         template_name=template_name,
-        reference_id=str(lead.id),
+        reference_id=reference_id,
     )
     entity_id, access_token, request_url = gateway_from_payload(
         payload=payload if isinstance(payload, dict) else {},
@@ -56,6 +57,8 @@ def create_lead_video_kyc_request(
     )
     if not entity_id:
         raise DigioAPIError("Digio did not return a KYC request id.")
+    returned_reference = payload.get("reference_id") if isinstance(payload, dict) else ""
+    reference_id = str(returned_reference or reference_id).strip()
 
     row = LeadVideoKycRequest.objects.create(
         lead=lead,
@@ -65,11 +68,13 @@ def create_lead_video_kyc_request(
         status=VideoKycRequestStatus.SENT,
         provider=IntegrationProvider.DIGIO,
         provider_request_id=entity_id,
+        provider_reference_id=reference_id,
         request_url=request_url,
         access_token=access_token,
         session_details={
             "provider": IntegrationProvider.DIGIO.value,
             "request_id": entity_id,
+            "reference_id": reference_id,
             "workflow_name": template_name,
             "verification_method": verification_method,
             "customer_identifier": identifier,

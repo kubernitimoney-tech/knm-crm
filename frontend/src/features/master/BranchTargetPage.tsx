@@ -136,8 +136,12 @@ function matchesPeriodFilter(
 export const BranchTargetPage = () => {
   useTitle('Branch Targets');
   const navigate = useNavigate();
-  const { isSuperAdmin } = usePermissions();
-  const actionCol = useDataTableActionColumn({ edit: isSuperAdmin, delete: isSuperAdmin });
+  const { isSuperAdmin, canUi } = usePermissions();
+  const canCreate = canUi('master', 'branchTarget', 'create');
+  const actionCol = useDataTableActionColumn({
+    edit: canUi('master', 'branchTarget', 'update'),
+    delete: canUi('master', 'branchTarget', 'delete'),
+  });
   const tableColSpan = actionCol.showColumn ? 6 : 5;
 
   const [targets, setTargets] = useState<BranchTarget[]>([]);
@@ -292,14 +296,16 @@ export const BranchTargetPage = () => {
 
         <div className="flex items-center gap-2">
           {isSuperAdmin && <ExportButton onClick={handleExport} />}
-          <Button
-            size="sm"
-            onClick={openCreateForm}
-            className={dataTablePrimaryActionButtonClass}
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Define Target
-          </Button>
+          {canCreate && (
+            <Button
+              size="sm"
+              onClick={openCreateForm}
+              className={dataTablePrimaryActionButtonClass}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Define Target
+            </Button>
+          )}
         </div>
       </div>
 
@@ -483,7 +489,7 @@ export const BranchTargetPage = () => {
                           Define a target or adjust your filters
                         </p>
                       </div>
-                      {!hasActiveFilters && (
+                      {!hasActiveFilters && canCreate && (
                         <Button
                           size="sm"
                           onClick={openCreateForm}

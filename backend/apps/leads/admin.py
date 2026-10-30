@@ -152,5 +152,10 @@ class LeadVideoKycRequestAdmin(LeadFirstSearchMixin, admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("status", "provider")
-    search_fields = ("lead__lead_id", "recipient_email", "provider_request_id")
+    search_fields = (
+        "lead__lead_id",
+        "recipient_email",
+        "provider_request_id",
+        "provider_reference_id",
+    )
     readonly_fields = ("access_token",)

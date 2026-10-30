@@ -181,6 +181,8 @@ class LeadVideoKycRequest(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel):
         db_index=True,
     )
     provider_request_id = models.CharField(max_length=64, blank=True, db_index=True)
+    # Digio dashboard "Customer Ref No" (reference_id sent on create).
+    provider_reference_id = models.CharField(max_length=64, blank=True, db_index=True)
     request_url = models.URLField(max_length=500, blank=True)
     access_token = models.CharField(max_length=255, blank=True)
 

@@ -1,9 +1,14 @@
 from django.db import transaction
 
 from apps.activities.services.activity_service import ActivityService
-from apps.core.encryption import blind_hash
+from apps.core.encryption import blind_hash, looks_like_ciphertext
 from apps.core.validators.email import validate_business_email
-from apps.core.validators.india import normalize_aadhaar, normalize_pan, validate_mobile
+from apps.core.validators.india import (
+    mask_aadhaar,
+    normalize_aadhaar,
+    normalize_pan,
+    validate_mobile,
+)
 from apps.customers.models import (
     AddressType,
     Customer,
@@ -459,18 +464,26 @@ class CustomerService:
         return customer.identities.all()
 
     @staticmethod
-    def get_primary_pan(customer: Customer) -> str:
+    def _primary_identity_number(customer: Customer, identity_type: str) -> str:
         for identity in CustomerService._iter_identities(customer):
-            if identity.identity_type == IdentityType.PAN and identity.is_primary:
-                return identity.identity_number
+            if identity.identity_type == identity_type and identity.is_primary:
+                number = identity.identity_number or ""
+                # Encrypted with another FIELD_ENCRYPTION_KEY: never show ciphertext.
+                return "" if looks_like_ciphertext(number) else number
         return ""
 
     @staticmethod
+    def get_primary_pan(customer: Customer) -> str:
+        return CustomerService._primary_identity_number(customer, IdentityType.PAN)
+
+    @staticmethod
     def get_primary_aadhaar(customer: Customer) -> str:
-        for identity in CustomerService._iter_identities(customer):
-            if identity.identity_type == IdentityType.AADHAAR and identity.is_primary:
-                return identity.identity_number
-        return ""
+        return CustomerService._primary_identity_number(customer, IdentityType.AADHAAR)
+
+    @staticmethod
+    def get_masked_aadhaar(customer: Customer) -> str:
+        """Aadhaar for any API/UI/export: never the full number."""
+        return mask_aadhaar(CustomerService.get_primary_aadhaar(customer))
 
     @staticmethod
     def customer_lookup_payload(customer: Customer) -> dict:
@@ -482,7 +495,7 @@ class CustomerService:
             "email": customer.email,
             "mobile_number": customer.mobile_number,
             "pan_no": CustomerService.get_primary_pan(customer),
-            "aadhaar_no": CustomerService.get_primary_aadhaar(customer),
+            "aadhaar_no": CustomerService.get_masked_aadhaar(customer),
             "dob": customer.dob,
             "gender": customer.gender,
         }

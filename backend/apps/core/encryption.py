@@ -69,6 +69,11 @@ def is_encrypted(token: str | None) -> bool:
         return False
 
 
+def looks_like_ciphertext(value: str | None) -> bool:
+    """True for a Fernet token this server could not decrypt (wrong/missing key)."""
+    return bool(value) and value.startswith("gAAAAA") and len(value) >= 100
+
+
 def decrypt_for_display(token: str | None) -> str:
     """Return plaintext for API/UI; unwraps legacy double-encrypted values."""
     if not token:
