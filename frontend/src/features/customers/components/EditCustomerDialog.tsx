@@ -73,7 +73,8 @@ function buildFormState(customer: ApiCustomer) {
     gender: customer.gender ?? '',
     dob: customer.dob ?? '',
     pan: customer.pan_no ?? '',
-    aadhaar: customer.aadhaar_no ?? '',
+    // API only returns the masked Aadhaar; leave blank unless a new number is typed.
+    aadhaar: '',
     employmentType: customer.employment_type ?? '',
     monthlyIncome:
       customer.monthly_income != null && customer.monthly_income !== ''
@@ -167,7 +168,7 @@ export function EditCustomerDialog({
           gender: form.gender || '',
           dob: form.dob || null,
           pan_no: upperAlphanumeric(form.pan, 10),
-          aadhaar_no: digitsOnly(form.aadhaar, 12),
+          aadhaar_no: digitsOnly(form.aadhaar, 12) || undefined,
           employment_type: form.employmentType || '',
           monthly_income: form.monthlyIncome ? Number(form.monthlyIncome) : null,
           city: form.city.trim(),
@@ -330,6 +331,7 @@ export function EditCustomerDialog({
                   </Label>
                   <Input
                     value={form.aadhaar}
+                    placeholder={customer?.aadhaar_no || 'Enter Aadhaar Number'}
                     onChange={(e) =>
                       setForm((prev) => ({ ...prev, aadhaar: digitsOnly(e.target.value, 12) }))
                     }

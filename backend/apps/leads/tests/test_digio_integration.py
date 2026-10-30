@@ -279,6 +279,8 @@ class TestDigioEsignAndVideoKyc:
         assert response.status_code == status.HTTP_201_CREATED
         row = LeadVideoKycRequest.objects.get(lead=lead)
         assert row.provider_request_id == "KID1234567890ABCD"
+        assert row.provider_reference_id == str(lead.id)
+        assert response.data["data"]["provider_reference_id"] == str(lead.id)
         assert row.status == VideoKycRequestStatus.SENT
         assert "/#/gateway/ekyc/" in row.request_url
         assert row.session_details["email_sent"] is True
@@ -897,7 +899,7 @@ class TestDigioEsignAndVideoKyc:
             "request_details": {
                 "id": "KIDSELFIEOCR12345",
                 "status": "approved",
-                "workflow_name": "AadharPAN with selfie and OCR",
+                "workflow_name": "Aadhaar + PAN with selfie and OCR",
                 "actions": [
                     {
                         "type": "digilocker",
@@ -1279,7 +1281,7 @@ class TestDigioClientResponseHandling:
             client.create_kyc_request(
                 customer_identifier="test@example.com",
                 customer_name="Test User",
-                template_name="AadharPAN with selfie and OCR",
+                template_name="Aadhaar + PAN with selfie and OCR",
                 reference_id="01234567-89ab-cdef-0123-456789abcdef",
             )
 

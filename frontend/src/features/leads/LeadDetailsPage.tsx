@@ -580,8 +580,8 @@ export const LeadDetailsPage = () => {
       dob: cv?.dob ?? leadDob,
       gender: cv?.gender ?? formatGender(leadGender) ?? '—',
       type: apiLead?.category_display ?? '—',
-      pan: cv?.pan ?? apiLead?.pan_no ?? '—',
-      aadhaar: cv?.aadhaar ?? apiLead?.aadhaar_no ?? '—',
+      pan: cv?.pan || apiLead?.pan_no || '—',
+      aadhaar: cv?.aadhaar || apiLead?.aadhaar_no || '—',
       address: customerProfile?.customer.address ?? '—',
       avatar: getCustomerAvatarUrl(
         customerProfile?.customer.gender ?? leadGender,

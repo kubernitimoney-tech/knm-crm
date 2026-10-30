@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from apps.core.encryption import decrypt_for_display
 from apps.core.validators.drf_fields import IndianMobileField
+from apps.core.validators.india import mask_aadhaar
 from apps.core.verification import (
     EntryVerificationStatus,
     apply_entry_verification_status,
@@ -405,6 +406,7 @@ class LeadVideoKycRequestSerializer(serializers.ModelSerializer):
             "sms_sent",
             "request_url",
             "provider_request_id",
+            "provider_reference_id",
         ]
         read_only_fields = fields
 
@@ -472,6 +474,8 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "status",
+            "provider_request_id",
+            "provider_reference_id",
             "customer_name",
             "customer_email",
             "approval_status",
@@ -552,11 +556,12 @@ class LeadVideoKycRequestDetailSerializer(serializers.ModelSerializer):
         session = obj.session_details or {}
         stored = session.get("aadhaar_details") or {}
         if stored:
-            return stored
+            # Digio OCR can return the full UID; never send it to the browser.
+            return {key: mask_aadhaar(value) or value for key, value in stored.items()}
         customer = obj.lead.customer
         return {
             "name": self.get_customer_name(obj),
-            "aadhaar_number": _mask_identity(CustomerService.get_primary_aadhaar(customer)),
+            "aadhaar_number": CustomerService.get_masked_aadhaar(customer) or "—",
             "date_of_birth": customer.dob.isoformat() if customer.dob else "—",
             "gender": customer.get_gender_display() if customer.gender else "—",
             "address": self._customer_address_line(customer),

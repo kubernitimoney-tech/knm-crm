@@ -42,7 +42,7 @@ function detailRows(record: Record<string, string>) {
 
 const VIDEO_KYC_TAB_ITEMS = [
   { value: 'video', label: 'Selfie / Video' },
-  { value: 'aadhaar', label: 'Aadhar Details' },
+  { value: 'aadhaar', label: 'Aadhaar Details' },
   { value: 'pan', label: 'Pancard Details' },
 ] as const;
 
@@ -197,6 +197,18 @@ export function VideoKycDetailPage() {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Request ID</p>
             <p className="font-semibold text-slate-700 dark:text-slate-200 break-all">{detail.id}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Digio KYC Request ID</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200 break-all">
+              {detail.provider_request_id || '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Customer Ref No</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200 break-all">
+              {detail.provider_reference_id || '—'}
+            </p>
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Customer Name</p>

@@ -131,7 +131,7 @@ export function LeadVideoKycDetailsSection({
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          Uses the “AadharPAN with selfie and OCR” DigiStudio workflow to collect DigiLocker
+          Uses the “Aadhaar + PAN with selfie and OCR” DigiStudio workflow to collect DigiLocker
           identity data, selfie/video and OCR results.
         </p>
         {canSendRequest && !isLoading && (entries.length === 0 || isSuperAdmin) ? (

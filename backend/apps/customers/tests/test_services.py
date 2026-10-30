@@ -189,3 +189,22 @@ class TestCustomerService:
         assert created is True
         assert customer.first_name == "Fresh"
         assert customer.email == "fresh@example.com"
+
+
+@pytest.mark.django_db
+def test_customer_api_payloads_mask_aadhaar():
+    from apps.customers.serializers.customer_serializers import CustomerSerializer
+
+    customer = CustomerService.create_customer(
+        user=UserFactory(),
+        data={
+            "first_name": "Asha",
+            "email": "asha@test.com",
+            "mobile_number": "9876543210",
+            "aadhaar_no": "234123412341",
+        },
+    )
+
+    assert CustomerService.get_primary_aadhaar(customer) == "234123412341"
+    assert CustomerSerializer(customer).data["aadhaar_no"] == "XXXX-XXXX-2341"
+    assert CustomerService.customer_lookup_payload(customer)["aadhaar_no"] == "XXXX-XXXX-2341"
