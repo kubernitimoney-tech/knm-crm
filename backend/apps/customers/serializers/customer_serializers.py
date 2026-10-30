@@ -47,12 +47,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         return CustomerService.get_primary_pan(obj)
 
     def get_aadhaar_no(self, obj):
-        from apps.customers.models import IdentityType
-
-        identity = obj.identities.filter(
-            identity_type=IdentityType.AADHAAR, is_primary=True
-        ).first()
-        return identity.identity_number if identity else ""
+        return CustomerService.get_masked_aadhaar(obj)
 
 
 def _current_employment(customer: Customer):

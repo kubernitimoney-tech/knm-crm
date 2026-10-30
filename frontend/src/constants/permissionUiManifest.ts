@@ -69,6 +69,13 @@ export const PERMISSION_UI_MANIFEST = {
       approve: 'user.approve',
     },
   },
+  master: {
+    branchTarget: {
+      create: 'branch_target.create',
+      update: 'branch_target.update',
+      delete: 'branch_target.delete',
+    },
+  },
   activityLogs: {
     log: {
       view: 'audit.view',

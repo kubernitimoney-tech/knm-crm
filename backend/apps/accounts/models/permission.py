@@ -46,6 +46,8 @@ class PermissionModule(models.TextChoices):
 
     AUDIT = "audit", "Audit"
 
+    BRANCH_TARGET = "branch_target", "Branch Target"
+
 
 class PermissionAction(models.TextChoices):
     VIEW = "view", "View"

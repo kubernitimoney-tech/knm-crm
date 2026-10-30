@@ -169,7 +169,7 @@ export const CustomerDetailsPage = () => {
                   <p className="text-slate-800 dark:text-slate-200 font-semibold">{customerData.email}</p>
                 </div>
                 <div className="border border-slate-100 dark:border-slate-800 p-3 rounded-lg bg-slate-50/25 dark:bg-slate-950/20">
-                  <p className="text-slate-400 font-bold mb-1">Adhaar Number</p>
+                  <p className="text-slate-400 font-bold mb-1">Aadhaar Number</p>
                   <p className="text-slate-800 dark:text-slate-200 font-semibold">{customerData.aadhaar}</p>
                 </div>
                 <div className="border border-slate-100 dark:border-slate-800 p-3 rounded-lg bg-slate-50/25 dark:bg-slate-950/20">

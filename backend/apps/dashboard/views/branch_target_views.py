@@ -1,9 +1,15 @@
 from rest_framework import status, viewsets
 
-from apps.accounts.permissions import HasRBACPermission, IsSuperAdmin
+from apps.accounts.permissions import HasRBACPermission
 from apps.core.responses import error_response, success_response
 from apps.dashboard.models import BranchSanctionTarget
 from apps.dashboard.serializers import BranchSanctionTargetSerializer
+
+ACTION_PERMISSIONS = {
+    "create": "branch_target.create",
+    "partial_update": "branch_target.update",
+    "destroy": "branch_target.delete",
+}
 
 
 class BranchSanctionTargetViewSet(viewsets.ModelViewSet):
@@ -12,9 +18,7 @@ class BranchSanctionTargetViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
-        if self.action in ("create", "partial_update", "destroy"):
-            return [IsSuperAdmin()]
-        self.required_permission = "dashboard.view"
+        self.required_permission = ACTION_PERMISSIONS.get(self.action, "dashboard.view")
         return [HasRBACPermission()]
 
     def get_queryset(self):

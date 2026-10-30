@@ -152,6 +152,12 @@ PERMISSION_MATRIX = {
         PermissionAction.DELETE,
     ],
     PermissionModule.AUDIT: [PermissionAction.VIEW, PermissionAction.DELETE],
+    # Listing branch targets uses dashboard.view; these gate Define/Edit/Delete.
+    PermissionModule.BRANCH_TARGET: [
+        PermissionAction.CREATE,
+        PermissionAction.UPDATE,
+        PermissionAction.DELETE,
+    ],
 }
 
 
