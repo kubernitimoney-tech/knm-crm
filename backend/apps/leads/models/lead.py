@@ -168,6 +168,7 @@ class Lead(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel, SoftDeleteModel):
             is_account_finance,
             is_admin_user,
             is_collection_officer,
+            is_it_support,
             is_senior_credit_manager,
             is_senior_relationship_manager,
             is_super_admin,
@@ -175,7 +176,7 @@ class Lead(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel, SoftDeleteModel):
         from apps.applications.constants import FINANCE_VISIBLE_STATUSES
         from apps.loans.selectors.loan_selectors import disbursed_loan_exists_filter
 
-        if is_super_admin(user) or is_admin_user(user):
+        if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
             return True
         if is_collection_officer(user):
             return self.applications.filter(

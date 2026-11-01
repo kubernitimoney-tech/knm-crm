@@ -40,8 +40,8 @@ export const ROLE_NAV_SECTIONS: Record<string, NavSection[]> = {
   'account-finance': ['dashboard', 'sanction', 'disbursal', 'collection', 'reporting'],
   'collection-manager': ['dashboard', 'collection'],
   auditor: ['dashboard', 'leads', 'sanction', 'disbursal', 'collection', 'red-flag', 'reporting', 'kyc'],
-  // IT Support investigates help desk tickets with read-only access to these screens.
-  'it-support': ['dashboard', 'leads', 'sanction', 'disbursal', 'collection'],
+  // IT Support: view everywhere a ticket can point, correct record details; no admin screens.
+  'it-support': ['dashboard', 'leads', 'sanction', 'disbursal', 'collection', 'red-flag', 'reporting', 'kyc'],
   // field-investigator: intentionally omitted — no UI access for now
 };
 

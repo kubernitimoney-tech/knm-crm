@@ -46,11 +46,11 @@ ADMIN_ASSIGNABLE_ROLE_SLUGS = frozenset(
         "account-finance",
         "collection-manager",
         "auditor",
-        IT_SUPPORT_SLUG,
     }
 )
 
-ALL_ROLE_SLUGS = frozenset({SUPER_ADMIN_SLUG, *ADMIN_ASSIGNABLE_ROLE_SLUGS})
+# IT Support can correct records across the CRM, so only Super Admin assigns it.
+ALL_ROLE_SLUGS = frozenset({SUPER_ADMIN_SLUG, IT_SUPPORT_SLUG, *ADMIN_ASSIGNABLE_ROLE_SLUGS})
 
 
 def user_has_role_slug(user, slug: str) -> bool:
@@ -133,6 +133,11 @@ def is_account_finance(user) -> bool:
 
 def is_collection_officer(user) -> bool:
     return user_has_role_slug(user, COLLECTION_OFFICER_SLUG)
+
+
+def is_it_support(user) -> bool:
+    """Org-wide read visibility for help desk work; actions are still gated by RBAC codes."""
+    return user_has_role_slug(user, IT_SUPPORT_SLUG)
 
 
 def can_view_all_collection_pipeline_loans(user) -> bool:

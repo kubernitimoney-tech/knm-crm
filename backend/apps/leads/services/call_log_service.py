@@ -125,3 +125,32 @@ class CallLogService:
             notes=remarks,
         )
         return call_log
+
+    @staticmethod
+    @transaction.atomic
+    def correct(
+        *, user, call_log: CallLog, disposition: str | None = None, remarks: str | None = None
+    ) -> CallLog:
+        """
+        Fix a saved call log (help desk correction). Only the log's own fields change:
+        lead status, CM assignment and application sync from the original disposition
+        are left alone, so a wrong status is corrected separately via lead.update.
+        """
+        call_log = CallLog.objects.select_for_update().get(pk=call_log.pk)
+        before = {"disposition": call_log.disposition, "remarks": call_log.remarks}
+        if disposition is not None:
+            call_log.disposition = disposition
+        if remarks is not None:
+            call_log.remarks = remarks
+        after = {"disposition": call_log.disposition, "remarks": call_log.remarks}
+        if after == before:
+            return call_log
+        call_log.save(update_fields=["disposition", "remarks", "updated_at"])
+        ActivityService.log(
+            actor=user,
+            verb="call_log_corrected",
+            description="Call log corrected",
+            target=call_log.lead,
+            metadata={"call_log_id": str(call_log.id), "before": before, "after": after},
+        )
+        return call_log

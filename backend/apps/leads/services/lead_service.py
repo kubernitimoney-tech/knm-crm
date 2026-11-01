@@ -390,6 +390,7 @@ class LeadService:
             is_admin_user,
             is_collection_officer,
             is_credit_manager,
+            is_it_support,
             is_relationship_manager,
             is_senior_credit_manager,
             is_senior_relationship_manager,
@@ -399,7 +400,7 @@ class LeadService:
         from apps.loans.selectors.loan_selectors import disbursed_loan_exists_filter
 
         qs = lead_list_queryset()
-        if is_super_admin(user) or is_admin_user(user):
+        if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
             return qs.order_by("-created_at")
 
         if is_collection_officer(user):

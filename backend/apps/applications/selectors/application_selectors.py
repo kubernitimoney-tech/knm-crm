@@ -5,6 +5,7 @@ from apps.accounts.services.role_helpers import (
     is_admin_user,
     is_collection_officer,
     is_credit_manager,
+    is_it_support,
     is_relationship_manager,
     is_senior_credit_manager,
     is_senior_relationship_manager,
@@ -123,12 +124,17 @@ def _is_assigned_cm(user) -> bool:
 
 
 def _can_view_all_disbursal_records(user) -> bool:
-    return is_super_admin(user) or is_admin_user(user) or is_account_finance(user)
+    return (
+        is_super_admin(user)
+        or is_admin_user(user)
+        or is_it_support(user)
+        or is_account_finance(user)
+    )
 
 
 def visible_applications_for(user):
     qs = _base_application_queryset()
-    if is_super_admin(user) or is_admin_user(user):
+    if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
         return qs
     if is_collection_officer(user):
         return (
@@ -151,7 +157,7 @@ def applications_for_pipeline_stage(*, user, stage: str):
         qs = qs.exclude(loan__is_deleted=True)
 
     if stage in SANCTION_QUEUE_STAGES:
-        if is_super_admin(user) or is_admin_user(user):
+        if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
             return qs.order_by("-created_at")
         if _is_assigned_rm(user) or _is_assigned_cm(user):
             return (
@@ -179,6 +185,6 @@ def applications_for_pipeline_stage(*, user, stage: str):
             )
         return qs.none()
 
-    if is_super_admin(user) or is_admin_user(user):
+    if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
         return qs.order_by("-created_at")
     return qs.filter(_application_assignment_visibility(user)).distinct().order_by("-created_at")

@@ -31,9 +31,16 @@ All transitions go through `TicketService`, which writes a `TicketEvent`, logs a
 | `ticket.view`, `ticket.create` | every role (Auditor: view only) |
 | `ticket.resolve`, `ticket.assign`, `ticket.export` | IT Support, Admin tiers |
 
-Role `it-support` (IT Support) has read-only access to leads, call logs, customers,
-applications, sanction, disbursal, loans, collection and documents. Edit grants needed
-for a correction are given per user, not baked into the role.
+Role `it-support` (IT Support) is a scoped correction role; only Super Admin assigns it.
+
+- Sees every lead, application, loan and report (org-wide, like Admin), plus `audit.view`.
+- May correct record details: `call_log.update` (PATCH `leads/{id}/call-logs/{log_id}/`,
+  logged before → after, no lead-status side effects), `lead/customer/address/company/
+  reference.update`, `document.download`, and the module exports.
+- Never: approve / reject / sanction / send, `disbursal.*` / `collection.*` / `loan.update`
+  (they change amounts, collection status, payment approval, loan closure), any `*.delete`,
+  or user / role / permission admin. Money-side fixes stay with the business roles until
+  guided corrections with maker-checker exist.
 
 Visibility: ticket.resolve / ticket.assign holders and admins see all tickets; everyone
 else sees tickets they raised or are assigned.

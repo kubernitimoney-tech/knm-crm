@@ -129,13 +129,14 @@ class LoanApplication(UUIDPrimaryKeyModel, TimeStampedModel, AuditModel, SoftDel
             is_account_finance,
             is_admin_user,
             is_collection_officer,
+            is_it_support,
             is_senior_credit_manager,
             is_senior_relationship_manager,
             is_super_admin,
         )
         from apps.applications.constants import FINANCE_VISIBLE_STATUSES
 
-        if is_super_admin(user) or is_admin_user(user):
+        if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
             return True
         if is_collection_officer(user):
             from apps.loans.models import Loan

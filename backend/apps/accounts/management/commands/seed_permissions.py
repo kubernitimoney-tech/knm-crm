@@ -76,6 +76,8 @@ PERMISSION_MATRIX = {
     PermissionModule.CALL_LOG: [
         PermissionAction.VIEW,
         PermissionAction.CREATE,
+        # Correct a saved call log (help desk); RMs only create.
+        PermissionAction.UPDATE,
     ],
     PermissionModule.DOCUMENT: [
         PermissionAction.VIEW,
@@ -254,21 +256,29 @@ FIELD_INVESTIGATOR = BASE + [
 ]
 
 
-# IT Support investigates with read access; edit grants for corrections are
-# given per user, not baked into the role.
-IT_SUPPORT = BASE + [
+# IT Support: see everything, correct record details for tickets, never move money.
+# Excluded on purpose: approve/reject/sanction/send, disbursal/collection/loan updates
+# (they change amounts, collection status, payment approval, loan closure), every
+# *.delete, and user/role/permission admin. Those fixes stay with the business roles.
+IT_SUPPORT_EXCLUDED_VIEWS = frozenset({"user.view", "role.view", "permission.view"})
+
+IT_SUPPORT = [code for code in VIEW_ONLY_PERMISSIONS if code not in IT_SUPPORT_EXCLUDED_VIEWS] + [
+    "ticket.create",
     "ticket.assign",
     "ticket.resolve",
     "ticket.export",
-    "lead.view",
-    "call_log.view",
-    "customer.view",
-    "application.view",
-    "sanction.view",
-    "disbursal.view",
-    "loan.view",
-    "collection.view",
-    "document.view",
+    "call_log.update",
+    "lead.update",
+    "customer.update",
+    "address.update",
+    "company.update",
+    "reference.update",
+    "document.download",
+    "lead.export",
+    "sanction.export",
+    "disbursal.export",
+    "collection.export",
+    "report.export",
 ]
 
 

@@ -10,6 +10,7 @@ from apps.accounts.services.role_helpers import (
     is_admin_user,
     is_collection_officer,
     is_credit_manager,
+    is_it_support,
     is_relationship_manager,
     is_senior_credit_manager,
     is_senior_relationship_manager,
@@ -193,7 +194,7 @@ def visible_loans_for(user):
         )
         .order_by("-created_at")
     )
-    if is_super_admin(user) or is_admin_user(user):
+    if is_super_admin(user) or is_admin_user(user) or is_it_support(user):
         return qs
     if is_collection_officer(user):
         return qs.filter(disbursed_at__isnull=False)

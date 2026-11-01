@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.db.models import Count
@@ -63,6 +64,14 @@ from apps.loans.services.loan_service import LoanService, LoanServiceError
 from apps.products.models import LoanProduct
 from apps.repayments.models import RepaymentStatus
 from apps.repayments.services.collection_status_service import collection_row_for_repayment
+
+
+def _is_uuid(value) -> bool:
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return True
 
 
 class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.ModelViewSet):
@@ -547,6 +556,23 @@ class LeadViewSet(RBACActionPermissionMixin, LeadDetailActionsMixin, viewsets.Mo
             message="Call logged",
             status_code=status.HTTP_201_CREATED,
         )
+
+    @rbac_permission("call_log.update")
+    @action(detail=True, methods=["patch"], url_path=r"call-logs/(?P<call_log_id>[^/.]+)")
+    def call_log_detail(self, request, pk=None, call_log_id=None):
+        lead = self.get_object()
+        call_log = lead.call_logs.filter(pk=call_log_id).first() if _is_uuid(call_log_id) else None
+        if call_log is None:
+            return error_response(message="Call log not found.", status_code=404)
+        serializer = CallLogSerializer(call_log, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        call_log = CallLogService.correct(
+            user=request.user,
+            call_log=call_log,
+            disposition=serializer.validated_data.get("disposition"),
+            remarks=serializer.validated_data.get("remarks"),
+        )
+        return success_response(data=CallLogSerializer(call_log).data, message="Call log updated")
 
     @rbac_any_permission("lead.view", "collection.view")
     @action(detail=True, methods=["get"], url_path="collections")

@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from apps.accounts.services.role_helpers import (
     is_account_finance,
     is_admin_user,
+    is_it_support,
     is_super_admin,
     user_has_permission,
 )
@@ -72,7 +73,12 @@ def _hydrate_audit_log_users(rows):
 
 
 def _can_view_all_activity(user) -> bool:
-    return is_super_admin(user) or is_admin_user(user) or is_account_finance(user)
+    return (
+        is_super_admin(user)
+        or is_admin_user(user)
+        or is_it_support(user)
+        or is_account_finance(user)
+    )
 
 
 class ActivityReportingService:
