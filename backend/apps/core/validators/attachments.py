@@ -82,3 +82,43 @@ def safe_attachment_display_name(name: str) -> str:
     base = os.path.basename((name or "").replace("\\", "/"))
     base = re.sub(r"[\x00-\x1f\x7f]", "", base).strip()
     return base[:255] or "attachment"
+
+
+TICKET_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024
+TICKET_ATTACHMENT_EXTENSIONS = (".pdf", ".png", ".jpg", ".jpeg", ".xlsx", ".csv")
+_ZIP_SIGNATURE = b"PK\x03\x04"  # .xlsx is a zip container
+_CSV_SNIFF_BYTES = 16 * 1024
+
+
+def _looks_like_csv(head: bytes) -> bool:
+    if b"\x00" in head:
+        return False
+    return not re.search(rb"<\s*(script|html|iframe|svg)\b", head, re.IGNORECASE)
+
+
+def validate_ticket_attachment(file) -> None:
+    """Help desk evidence: screenshots, PDFs and the export files that went wrong."""
+    if not file:
+        raise serializers.ValidationError("A file is required.")
+
+    name = getattr(file, "name", "") or ""
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in TICKET_ATTACHMENT_EXTENSIONS:
+        raise serializers.ValidationError("Only PDF, PNG, JPG, XLSX or CSV files are allowed.")
+
+    size = getattr(file, "size", None) or 0
+    if size <= 0:
+        raise serializers.ValidationError("The attachment is empty.")
+    if size > TICKET_ATTACHMENT_MAX_BYTES:
+        raise serializers.ValidationError("The attachment must be 5 MB or smaller.")
+
+    if ext == ".csv":
+        valid = _looks_like_csv(_read_head(file, _CSV_SNIFF_BYTES))
+    else:
+        head = _read_head(file, 16)
+        signatures = (_ZIP_SIGNATURE,) if ext == ".xlsx" else _SIGNATURES[ext]
+        valid = any(head.startswith(signature) for signature in signatures)
+    if not valid:
+        raise serializers.ValidationError(
+            f"The file content does not match its {ext[1:].upper()} extension."
+        )

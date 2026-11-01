@@ -158,6 +158,14 @@ PERMISSION_MATRIX = {
         PermissionAction.UPDATE,
         PermissionAction.DELETE,
     ],
+    # Help desk: everyone raises (create); IT Support resolves; assign = IT lead.
+    PermissionModule.TICKET: [
+        PermissionAction.VIEW,
+        PermissionAction.CREATE,
+        PermissionAction.ASSIGN,
+        PermissionAction.RESOLVE,
+        PermissionAction.EXPORT,
+    ],
 }
 
 
@@ -168,7 +176,7 @@ VIEW_ONLY_PERMISSIONS = [
 ]
 
 
-BASE = ["dashboard.view"]
+BASE = ["dashboard.view", "ticket.view", "ticket.create"]
 
 
 RM = BASE + [
@@ -242,6 +250,24 @@ FIELD_INVESTIGATOR = BASE + [
     "application.view",
     "field_investigation.view",
     "field_investigation.verify",
+    "document.view",
+]
+
+
+# IT Support investigates with read access; edit grants for corrections are
+# given per user, not baked into the role.
+IT_SUPPORT = BASE + [
+    "ticket.assign",
+    "ticket.resolve",
+    "ticket.export",
+    "lead.view",
+    "call_log.view",
+    "customer.view",
+    "application.view",
+    "sanction.view",
+    "disbursal.view",
+    "loan.view",
+    "collection.view",
     "document.view",
 ]
 
@@ -328,6 +354,11 @@ DEFAULT_ROLES = {
         "name": "Auditor",
         "display_name": "Auditor",
         "permissions": VIEW_ONLY_PERMISSIONS,
+    },
+    "it-support": {
+        "name": "IT Support",
+        "display_name": "IT",
+        "permissions": IT_SUPPORT,
     },
 }
 

@@ -17,6 +17,7 @@ export const SYSTEM_ROLES: SystemRole[] = [
   { slug: 'account-finance', name: 'Account & Finance', display_name: 'Finance' },
   { slug: 'collection-manager', name: 'Collection Manager', display_name: 'Collection' },
   { slug: 'auditor', name: 'Auditor', display_name: 'Auditor' },
+  { slug: 'it-support', name: 'IT Support', display_name: 'IT' },
 ];
 
 export const ROLE_HIERARCHY_LABEL = `Super Admin
@@ -29,7 +30,8 @@ export const ROLE_HIERARCHY_LABEL = `Super Admin
 ├── Field Investigator (FI)
 ├── Finance
 ├── Collection Manager
-└── Auditor`;
+├── Auditor
+└── IT Support`;
 
 export function getRoleDisplayName(slug: string): string {
   const role = SYSTEM_ROLES.find((r) => r.slug === slug);

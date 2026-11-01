@@ -18,6 +18,7 @@ CREDIT_MANAGER_SLUG = "credit-manager"
 ACCOUNT_FINANCE_SLUG = "account-finance"
 COLLECTION_OFFICER_SLUG = "collection-manager"
 COLLECTION_OFFICER_SLUGS = frozenset({COLLECTION_OFFICER_SLUG})
+IT_SUPPORT_SLUG = "it-support"
 
 DELETE_ACTION_SUFFIX = ".delete"
 
@@ -45,6 +46,7 @@ ADMIN_ASSIGNABLE_ROLE_SLUGS = frozenset(
         "account-finance",
         "collection-manager",
         "auditor",
+        IT_SUPPORT_SLUG,
     }
 )
 

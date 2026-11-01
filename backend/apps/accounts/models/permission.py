@@ -48,6 +48,8 @@ class PermissionModule(models.TextChoices):
 
     BRANCH_TARGET = "branch_target", "Branch Target"
 
+    TICKET = "ticket", "Ticket"
+
 
 class PermissionAction(models.TextChoices):
     VIEW = "view", "View"
@@ -87,6 +89,8 @@ class PermissionAction(models.TextChoices):
     GRANT = "grant", "Grant"
 
     REVOKE = "revoke", "Revoke"
+
+    RESOLVE = "resolve", "Resolve"
 
 
 class PermissionStatus(models.TextChoices):

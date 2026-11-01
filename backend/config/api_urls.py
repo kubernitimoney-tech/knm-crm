@@ -19,5 +19,6 @@ urlpatterns = [
     path("dashboard/", include("apps.dashboard.urls")),
     path("organization/", include("apps.organization.urls")),
     path("reports/", include("apps.reports.urls")),
+    path("helpdesk/", include("apps.helpdesk.urls")),
     path("webhooks/", include("apps.integrations.urls")),
 ]
