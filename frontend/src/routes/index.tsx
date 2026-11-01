@@ -42,6 +42,8 @@ import { ESignPage } from '../features/kyc/ESignPage';
 import { PublicEsignPage } from '../features/kyc/PublicEsignPage';
 import { PublicVideoKycPage } from '../features/kyc/PublicVideoKycPage';
 import { VideoKycDetailPage } from '../features/kyc/VideoKycDetailPage';
+import { HelpdeskTicketsPage } from '../features/helpdesk/HelpdeskTicketsPage';
+import { TicketDetailPage } from '../features/helpdesk/TicketDetailPage';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RecoverPasswordPage } from '../features/auth/RecoverPasswordPage';
 import { PlaceholderPage } from '../components/common/PlaceholderPage';
@@ -125,6 +127,10 @@ const router = createBrowserRouter([
       // Marketing
       { path: 'marketing/branch', element: <PlaceholderPage title="Branch-Wise Marketing Reports" /> },
       { path: 'marketing/utm', element: <PlaceholderPage title="UTM-Wise Marketing Reports" /> },
+      // Help Desk
+      { path: 'helpdesk/my', element: <HelpdeskTicketsPage mode="mine" /> },
+      { path: 'helpdesk/queue', element: <HelpdeskTicketsPage mode="queue" /> },
+      { path: 'helpdesk/tickets/:id', element: <TicketDetailPage /> },
       // Master
       { path: 'master/users', element: <UsersPage /> },
       { path: 'master/users/:id', element: <UserDetailsPage /> },

@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Bell, CheckCircle2, AlertCircle, Info, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   fetchNotifications,
@@ -22,6 +23,7 @@ interface Notification {
   time: string;
   type: 'info' | 'success' | 'warning' | 'error';
   read: boolean;
+  link: string | null;
 }
 
 interface NotificationDialogProps {
@@ -39,6 +41,7 @@ export const NotificationDialog = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const syncUnreadCount = useCallback(
     (items: Notification[]) => {
@@ -58,6 +61,7 @@ export const NotificationDialog = ({
         time: formatDistanceToNow(new Date(n.created_at), { addSuffix: true }),
         type: 'info' as const,
         read: n.is_read,
+        link: n.link ?? null,
       }));
       setNotifications(mapped);
       onUnreadCountChange?.(unread_count);
@@ -91,6 +95,16 @@ export const NotificationDialog = ({
     } finally {
       setMarkingId(null);
     }
+  };
+
+  const handleOpen = (notif: Notification) => {
+    if (notif.link) {
+      void handleMarkRead(notif.id);
+      onOpenChange(false);
+      navigate(notif.link);
+      return;
+    }
+    void handleMarkRead(notif.id);
   };
 
   const handleMarkAllRead = async () => {
@@ -143,12 +157,12 @@ export const NotificationDialog = ({
             <button
               key={notif.id}
               type="button"
-              disabled={notif.read || markingId === notif.id}
-              onClick={() => void handleMarkRead(notif.id)}
+              disabled={(notif.read && !notif.link) || markingId === notif.id}
+              onClick={() => handleOpen(notif)}
               className={cn(
                 'w-full text-left p-4 rounded-2xl transition-all group hover:bg-slate-50 border border-transparent hover:border-slate-100 flex gap-4',
                 !notif.read && 'bg-primary-deep/[0.02] cursor-pointer',
-                notif.read && 'cursor-default',
+                notif.read && (notif.link ? 'cursor-pointer' : 'cursor-default'),
               )}
             >
               <div className={cn(

@@ -119,6 +119,14 @@ export function getAnyPermissionsForPath(pathname: string): string[] {
     return ['permission.view', 'role.view', 'user.view'];
   }
 
+  if (path === '/helpdesk/queue') {
+    return ['ticket.resolve', 'ticket.assign'];
+  }
+
+  if (path.startsWith('/helpdesk')) {
+    return ['ticket.view'];
+  }
+
   return [];
 }
 

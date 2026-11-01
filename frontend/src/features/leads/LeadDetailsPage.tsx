@@ -22,7 +22,8 @@ import {
   Sparkles,
   ShieldAlert,
   BellRing,
-  Video
+  Video,
+  LifeBuoy
 } from 'lucide-react';
 import { formatAppDateOrFallback, formatAppDateTimeOrFallback } from '@/lib/dateUtils';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
@@ -107,6 +108,10 @@ import { LeadStatusHistoryDrawer } from '@/features/leads/components/LeadStatusH
 import { FormFieldLabel, FormSelect } from '@/features/leads/components/leadDetailSectionShared';
 import { toast, sentEmailSuccessTitle } from '@/components/ui/toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import {
+  RaiseTicketDialog,
+  type RaiseTicketPrefill,
+} from '@/features/helpdesk/components/RaiseTicketDialog';
 
 /** Application statuses where rejection is not allowed. */
 const REJECTION_BLOCKED_APPLICATION_STATUSES = new Set(['disbursed', 'cancelled']);
@@ -776,6 +781,27 @@ export const LeadDetailsPage = () => {
     return { [id]: leadData.leadId };
   }, [id, leadData.leadId]);
 
+  const [isRaiseTicketOpen, setIsRaiseTicketOpen] = useState(false);
+  const canRaiseTicket = hasPermission('ticket.create');
+  const raiseTicketPrefill = useMemo<RaiseTicketPrefill>(() => {
+    const department = hasRole('relationship-manager') || hasRole('senior-relationship-manager')
+      ? 'relationship'
+      : hasRole('credit-manager') || hasRole('senior-credit-manager')
+        ? 'credit'
+        : hasRole('collection-manager')
+          ? 'collection'
+          : hasRole('account-finance')
+            ? 'accounts'
+            : undefined;
+    return {
+      department,
+      linkedType: 'lead',
+      linkedId: id,
+      linkedLabel: `${leadData.leadId} · ${leadData.name}`,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hasRole is recreated each render
+  }, [id, leadData.leadId, leadData.name]);
+
   useTitle(`Lead: ${leadData.name}`);
 
   if (loading) {
@@ -830,6 +856,17 @@ export const LeadDetailsPage = () => {
             >
               <Clock className="w-4 h-4 mr-1" />
               Status History
+            </Button>
+          ) : null}
+          {canRaiseTicket ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 px-4 text-xs font-semibold rounded-md dark:border-slate-800 dark:hover:bg-slate-900"
+              onClick={() => setIsRaiseTicketOpen(true)}
+            >
+              <LifeBuoy className="w-4 h-4 mr-1" />
+              Raise Ticket
             </Button>
           ) : null}
         </div>
@@ -1462,6 +1499,14 @@ export const LeadDetailsPage = () => {
           leadName={leadData.name}
           open={isStatusHistoryOpen}
           onClose={() => setIsStatusHistoryOpen(false)}
+        />
+      ) : null}
+
+      {canRaiseTicket ? (
+        <RaiseTicketDialog
+          open={isRaiseTicketOpen}
+          onOpenChange={setIsRaiseTicketOpen}
+          prefill={raiseTicketPrefill}
         />
       ) : null}
         </>

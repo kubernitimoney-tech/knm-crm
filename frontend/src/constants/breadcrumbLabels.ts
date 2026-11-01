@@ -50,6 +50,10 @@ export const BREADCRUMB_PATH_LABELS: Record<string, string> = {
   '/master/permission-matrix': 'Permission Matrix',
   '/master/category/permission-matrix': 'Permission Matrix',
   '/red-flag': 'Red Flag',
+  '/helpdesk': 'Help Desk',
+  '/helpdesk/my': 'My Tickets',
+  '/helpdesk/queue': 'IT Queue',
+  '/helpdesk/tickets': 'Tickets',
 };
 
 /**

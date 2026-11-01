@@ -11,6 +11,7 @@ import {
   Fingerprint,
   PieChart,
   Settings,
+  LifeBuoy,
 } from 'lucide-react';
 import type { NavSection } from './permissions';
 
@@ -118,6 +119,15 @@ export const NAVIGATION_ITEMS: NavItem[] = [
     submenu: [
       { title: 'Branch-Wise Reports', path: '/marketing/branch', section: 'marketing' },
       { title: 'UTM-Wise Reports', path: '/marketing/utm', section: 'marketing' },
+    ],
+  },
+  {
+    // No section: visibility is permission-driven (ticket.view / ticket.resolve), every role raises.
+    title: 'Help Desk',
+    icon: LifeBuoy,
+    submenu: [
+      { title: 'My Tickets', path: '/helpdesk/my' },
+      { title: 'IT Queue', path: '/helpdesk/queue' },
     ],
   },
   {

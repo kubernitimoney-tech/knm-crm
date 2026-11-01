@@ -274,6 +274,7 @@ export interface NotificationItem {
   title: string;
   body: string;
   is_read: boolean;
+  link: string | null;
   created_at: string;
 }
 

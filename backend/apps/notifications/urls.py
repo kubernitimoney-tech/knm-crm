@@ -6,12 +6,21 @@ from apps.core.responses import success_response
 from apps.notifications.models import Notification
 
 
+def _notification_link(notification: Notification) -> str | None:
+    """In-app route the notification opens, when it points at a page."""
+    metadata = notification.metadata or {}
+    if metadata.get("event") == "helpdesk_ticket" and metadata.get("ticket_id"):
+        return f"/helpdesk/tickets/{metadata['ticket_id']}"
+    return None
+
+
 def _serialize_notification(notification: Notification) -> dict:
     return {
         "id": str(notification.id),
         "title": notification.title,
         "body": notification.body,
         "is_read": notification.is_read,
+        "link": _notification_link(notification),
         "created_at": notification.created_at.isoformat(),
     }
 
