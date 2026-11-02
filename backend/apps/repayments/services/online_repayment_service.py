@@ -140,6 +140,31 @@ def gateway_payment_time(payment: dict):
     return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
 
 
+def webhook_success_order_id(payload: dict) -> str | None:
+    """Order id of a successful repayment-page payment, or None.
+
+    Cashfree success webhooks usually carry ``order_tags: null``, so the loan id
+    must not be required here. The caller re-reads the order (tags, amount)
+    from the Cashfree API before recording anything.
+    """
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    order = data.get("order") if isinstance(data.get("order"), dict) else {}
+    payment = data.get("payment") if isinstance(data.get("payment"), dict) else {}
+    status = str(
+        payment.get("payment_status")
+        or order.get("transaction_status")
+        or data.get("payment_status")
+        or ""
+    ).upper()
+    event = str(payload.get("type") or payload.get("event") or "").upper()
+    if status != "SUCCESS" and "SUCCESS" not in event:
+        return None
+    order_id = str(order.get("order_id") or data.get("order_id") or "").strip()
+    return order_id or None
+
+
 def payment_success_from_webhook(payload: dict) -> dict | None:
     """Return loan id, order id, amount, and utr when Cashfree reports a success."""
     if not isinstance(payload, dict):
@@ -200,7 +225,8 @@ def record_online_payment(
         logger.info("Cashfree payment for unknown loan %s", loan_id)
         return None
     if loan.status not in OPEN_LOAN_STATUSES:
-        logger.info("Cashfree payment ignored for closed loan %s", loan_id)
+        # Money was taken but nothing is recorded: make it visible in the logs.
+        logger.warning("Cashfree payment %s ignored: loan %s is %s", order_id, loan_id, loan.status)
         return None
     existing = (
         LoanRepayment.objects.select_for_update()
@@ -253,11 +279,13 @@ def record_verified_order(order_id: str) -> LoanRepayment | None:
     order = fetch_order(order_id)
     payment = fetch_successful_payment(order_id)
     if payment is None:
+        logger.info("Cashfree order %s has no successful payment yet", order_id)
         return None
     tags = order.get("order_tags") if isinstance(order.get("order_tags"), dict) else {}
     loan_id = str(tags.get("loan_id") or "").strip()
     amount = loan_payment_amount(order=order, payment=payment)
     if not loan_id or amount is None:
+        logger.warning("Cashfree order %s is missing its loan id or amount", order_id)
         return None
     return record_online_payment(
         loan_id=loan_id,
