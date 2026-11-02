@@ -8,8 +8,8 @@ from apps.core.responses import error_response, success_response
 from apps.integrations.cashfree.orders import CashfreeOrderError
 from apps.integrations.cashfree.webhooks import verify_webhook_signature, webhook_secrets
 from apps.repayments.services.online_repayment_service import (
-    payment_success_from_webhook,
     record_verified_order,
+    webhook_success_order_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,16 +41,17 @@ class CashfreeWebhookAPIView(APIView):
             payload = json.loads(raw_body.decode("utf-8") or "{}")
         except (UnicodeDecodeError, json.JSONDecodeError):
             payload = None
-        if isinstance(payload, dict):
-            success = payment_success_from_webhook(payload)
-            if success:
-                # Never trust amounts or loan ids from the webhook body alone:
-                # re-read the order and payment from Cashfree before recording.
-                try:
-                    record_verified_order(success["order_id"])
-                except CashfreeOrderError:
-                    logger.exception("Cashfree order %s could not be verified", success["order_id"])
-                    return error_response(
-                        message="Payment could not be verified yet.", status_code=502
-                    )
+        order_id = webhook_success_order_id(payload) if isinstance(payload, dict) else None
+        if order_id and order_id.startswith("rp-"):
+            # Never trust amounts or loan ids from the webhook body: Cashfree
+            # sends order_tags as null, so re-read the order from the API.
+            try:
+                recorded = record_verified_order(order_id)
+            except CashfreeOrderError:
+                logger.exception("Cashfree order %s could not be verified", order_id)
+                return error_response(message="Payment could not be verified yet.", status_code=502)
+            if recorded is None:
+                logger.warning("Cashfree success webhook for %s recorded nothing", order_id)
+        elif order_id:
+            logger.info("Cashfree success webhook for unrelated order %s ignored", order_id)
         return success_response(message="Webhook accepted")

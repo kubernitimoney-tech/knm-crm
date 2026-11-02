@@ -155,3 +155,72 @@ def test_record_verified_order_uses_cashfree_amount_not_webhook_amount():
     kwargs = record.call_args.kwargs
     assert kwargs["loan_id"] == "loan-1"
     assert str(kwargs["amount"]) == "1000.00"
+
+
+def _post_signed(body: bytes):
+    return APIClient().generic(
+        "POST",
+        "/api/v1/webhooks/cashfree",
+        data=body,
+        content_type="application/json",
+        HTTP_X_WEBHOOK_SIGNATURE=_signature(body),
+        HTTP_X_WEBHOOK_TIMESTAMP="1710000000",
+    )
+
+
+@override_settings(CASHFREE_WEBHOOK_SECRET=SECRET, CASHFREE_CLIENT_SECRET="")
+def test_cashfree_webhook_records_payment_when_order_tags_are_null():
+    # Cashfree's documented success payload sends order_tags as null; the loan id
+    # must come from the order API, not the webhook body.
+    body = json.dumps(
+        {
+            "type": "PAYMENT_SUCCESS_WEBHOOK",
+            "data": {
+                "order": {"order_id": "rp-real", "order_amount": 1000, "order_tags": None},
+                "payment": {"payment_status": "SUCCESS", "payment_amount": 1000},
+            },
+        }
+    ).encode()
+    with patch("apps.integrations.cashfree.views.record_verified_order") as record:
+        response = _post_signed(body)
+    assert response.status_code == status.HTTP_200_OK
+    record.assert_called_once_with("rp-real")
+
+
+@override_settings(CASHFREE_WEBHOOK_SECRET=SECRET, CASHFREE_CLIENT_SECRET="")
+def test_cashfree_webhook_ignores_failed_and_unrelated_orders():
+    failed = json.dumps(
+        {
+            "type": "PAYMENT_FAILED_WEBHOOK",
+            "data": {
+                "order": {"order_id": "rp-x"},
+                "payment": {"payment_status": "FAILED"},
+            },
+        }
+    ).encode()
+    other = json.dumps(
+        {
+            "type": "PAYMENT_SUCCESS_WEBHOOK",
+            "data": {
+                "order": {"order_id": "CFPay_abc"},
+                "payment": {"payment_status": "SUCCESS"},
+            },
+        }
+    ).encode()
+    with patch("apps.integrations.cashfree.views.record_verified_order") as record:
+        assert _post_signed(failed).status_code == status.HTTP_200_OK
+        assert _post_signed(other).status_code == status.HTTP_200_OK
+    record.assert_not_called()
+
+
+def test_record_cashfree_order_command_reports_missing_orders():
+    import pytest
+    from django.core.management import CommandError, call_command
+
+    with patch(
+        "apps.repayments.management.commands.record_cashfree_order.record_verified_order",
+        return_value=None,
+    ) as record:
+        with pytest.raises(CommandError):
+            call_command("record_cashfree_order", "rp-missing")
+    record.assert_called_once_with("rp-missing")
