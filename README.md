@@ -1101,6 +1101,20 @@ If `FIELD_ENCRYPTION_KEY` is already set, change nothing. Never change it withou
 
 **Cashfree.** Webhooks are processed only when `CASHFREE_CLIENT_SECRET` (or `CASHFREE_WEBHOOK_SECRET`) is set and the signature matches. Each payment is then re-checked against the Cashfree API before a pending collection is recorded.
 
+**Recording a missed Cashfree payment.** If a customer paid through the repayment link but the payment is not in the lead's collection table, copy the **Order ID** (starts with `rp-`) from the Cashfree dashboard and run this on the server from the repo root:
+
+```bash
+# Single order
+docker compose -p knm-crm -f docker-compose.prod.yml exec django \
+  python manage.py record_cashfree_order rp-3f9a1c2e7b4d8e0f1a2b-1730520000
+
+# Multiple orders (separate with spaces)
+docker compose -p knm-crm -f docker-compose.prod.yml exec django \
+  python manage.py record_cashfree_order rp-3f9a1c2e7b4d8e0f1a2b-1730520000 rp-8b2c4d6e1f3a5b7c9d0e-1730523600
+```
+
+Each recorded order prints `<order id>: Pending collection <amount> on loan <loan id>` and appears in the collection table as **Pending approval** for accounts to approve. `not recorded` means the id is not an `rp-` order, Cashfree shows no successful payment, or the loan is already closed. Running the same order again is safe: it updates the existing row instead of adding a second one.
+
 **Rate limits.** Unauthenticated requests are throttled (`THROTTLE_ANON_RATE`, default `120/min`). The public repayment lookup/checkout (`THROTTLE_PUBLIC_LOOKUP_RATE`, `30/hour`) and e-sign OTP endpoints (`THROTTLE_OTP_RATE`, `10/hour`) are stricter, and an OTP is destroyed after 5 wrong attempts. Behind Caddy, `NUM_PROXIES=1` (the default in deployed settings) makes rate limits and audit logs use the real client IP.
 
 **Seed users.** `seed_sample_data` uses the demo passwords below only in local development. On test, staging and production it generates a random password per new account and prints it once.
